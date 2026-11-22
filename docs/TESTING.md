@@ -63,8 +63,8 @@ that changes it.
 - `ptxc conformance` runs every case through the chosen backend and writes:
   - `report.json`: per test, one of `pass`, `fail { worst mismatch }` or
     `unsupported { reason }`, where the reason is `Op(name)`,
-    `DType(dtype)`, `Attribute(op, name)`, `ControlFlow` or
-    `DynamicShape`;
+    `DType(dtype)`, `Attribute(op, name)`, `Opset(version)`,
+    `ControlFlow` or `DynamicShape`;
   - `report.md`: totals by status and by op family.
 - The tolerance is the suite's own: rtol 1e-3, atol 1e-7, compared as
   `|actual - expected| <= atol + rtol * |expected|`.

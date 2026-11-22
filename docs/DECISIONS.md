@@ -308,11 +308,30 @@ the old one.
 - GPU suites run locally. A local pre-merge GPU check, or a self-hosted
   runner, can be added if GPU-only bugs start getting through.
 
----
+## D28. ONNX pin and minimum opset
 
-## Open questions
+- **Options:** for the pin, the latest ONNX release or an older one that
+  more exporters target; for the minimum opset, 7 (the oldest ORT still
+  runs), 13, or 17.
+- **Choice:**
+  - pin the latest ONNX release at the time the `onnx-proto` task (M1
+    task 3) starts. `onnx.proto` and the node tests come from the same
+    tag, recorded in `xtask` with the archive's SHA-256;
+  - accept models whose default-domain opset is 13 or later. Older models
+    are rejected at import with a typed error, and the conformance report
+    counts them as unsupported (`Opset`).
+- **Reason:**
+  - opset 13 moved `axes` and `split` from attributes to inputs (`Squeeze`,
+    `Unsqueeze`, `ReduceSum`, `Split`), added per-axis
+    `QuantizeLinear`/`DequantizeLinear`, and added bf16 to most ops.
+    Starting there means one canonical form per op, with fewer per-version
+    import paths;
+  - current PyTorch exporters and ONNX Runtime's quantizer emit opset 13 or
+    later, so none of the target models is lost.
 
-1. **ONNX pin:** which ONNX release to pin, and the minimum opset to accept.
-   Recommendation: the latest release when M1 starts, and opset ≥ 13.
-2. **TVM/Ansor baseline:** whether the tuning-time comparison is worth
-   building TVM. Decided at M5.
+## D29. TVM/Ansor comparison deferred to M5
+
+- **Choice:** whether to build TVM for the tuning-time comparison is
+  decided at M5, when the autotuner exists to compare.
+- **Reason:** the comparison only means something against a working
+  tuner, and building TVM costs time that M1 to M4 don't need to spend.
