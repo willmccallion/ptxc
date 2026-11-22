@@ -3,6 +3,8 @@
 
 mod download;
 mod extract;
+#[cfg(test)]
+mod test_archive;
 
 use crate::pin::{ONNX_SDIST, ONNX_TAG, PinnedArchive};
 use std::path::{Path, PathBuf};
@@ -95,6 +97,46 @@ mod tests {
         assert_eq!(expected, PIN.sha256);
         assert_eq!(actual, download::sha256_hex(b"abd"));
         assert_ne!(actual, expected);
+    }
+
+    #[test]
+    fn unpacking_creates_the_destination_with_the_files() {
+        let workspace = tempfile::tempdir().unwrap();
+        let destination = workspace.path().join("node");
+        let archive = test_archive::tarball(&[("pkg/node/test_abs/model.onnx", "model")]);
+
+        unpack_atomically(&archive, "pkg/node", &destination).unwrap();
+
+        let model = std::fs::read_to_string(destination.join("test_abs/model.onnx")).unwrap();
+        assert_eq!(model, "model");
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn unpacking_replaces_a_leftover_staging_directory() {
+        let workspace = tempfile::tempdir().unwrap();
+        let destination = workspace.path().join("node");
+        let staging = destination.with_extension("partial");
+        std::fs::create_dir(&staging).unwrap();
+        std::fs::write(staging.join("leftover"), "stale").unwrap();
+        let archive = test_archive::tarball(&[("pkg/node/test_abs/model.onnx", "model")]);
+
+        unpack_atomically(&archive, "pkg/node", &destination).unwrap();
+
+        assert!(destination.join("test_abs/model.onnx").exists());
+        assert!(!destination.join("leftover").exists());
+    }
+
+    #[test]
+    fn a_failed_unpack_leaves_no_destination() {
+        let workspace = tempfile::tempdir().unwrap();
+        let destination = workspace.path().join("node");
+        let archive = test_archive::tarball(&[("pkg/other/file", "x")]);
+
+        let error = unpack_atomically(&archive, "pkg/node", &destination).unwrap_err();
+
+        assert!(matches!(error, FetchError::NothingUnderPrefix { .. }), "{error}");
+        assert!(!destination.exists());
     }
 
     #[test]
