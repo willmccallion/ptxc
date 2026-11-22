@@ -34,6 +34,11 @@ impl GraphBuilder {
         self.graph.push_node(op, operands)
     }
 
+    /// The type of `value`, a value of this graph.
+    pub(crate) fn value_type(&self, value: ValueId) -> &TensorType {
+        &self.graph.values[value].ty
+    }
+
     /// Records the source model's name for `value`, a value of this graph.
     pub fn set_name(&mut self, value: ValueId, name: ValueName) {
         self.graph.values[value].name = Some(name);
