@@ -353,3 +353,29 @@ the old one.
     `.proto` itself;
   - protox and prost-build are both locked in `Cargo.lock`, so local and CI
     regeneration produce the same bytes, and CI installs nothing.
+
+## D31. ONNX pinned at v1.22.0, the last release with node-test files
+
+- **Supersedes:** D28's "the latest ONNX release", and the version in D30.
+  The minimum opset of 13 stands.
+- **Context:** ONNX v1.23.0 deleted the node-test files from its repository
+  and its packages (ONNX PR #7959). They are now generated in Python at test
+  time, so v1.23 has no archive of fixed test data to pin and checksum.
+- **Options:**
+  - pin v1.22.0 for `onnx.proto` and the node tests;
+  - pin `onnx.proto` at v1.23.2 and the node tests at v1.22.0;
+  - keep v1.23.2 and generate the node tests with `baselines/`.
+- **Choice:** v1.22.0 for both, from ONNX's source distribution on PyPI.
+  `cargo xtask fetch onnx-tests` downloads it, checks its SHA-256 before
+  unpacking anything, and unpacks the 1,765 node tests into
+  `data/onnx/v1.22.0/node/`.
+- **Reason:**
+  - the node tests stay fixed data from outside, checked by hash, rather
+    than files we generate. ONNX seeds its generators, but the expected
+    outputs come from numpy, so regenerated files need not be bit-identical
+    across machines;
+  - one tag for the proto and the tests, as D28 intended;
+  - PyPI never replaces a published file and publishes its SHA-256.
+    GitHub's tag archives are generated on demand and changed once (2023);
+  - v1.22.0 covers default-domain opsets up to 27. v1.23 adds opset 28, so
+    only operator versions introduced in opset 28 lack node tests here.

@@ -20,6 +20,13 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
+flate2.workspace = true
 prost-build.workspace = true
 protox.workspace = true
+sha2.workspace = true
+tar.workspace = true
 thiserror.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

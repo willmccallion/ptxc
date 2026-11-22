@@ -36,10 +36,16 @@ keywords = ["compiler", "deep-learning", "gpu", "onnx", "ptx"]
 categories = ["compilers", "science"]
 
 [workspace.dependencies]
+flate2 = "1.1.11"
 prost = "0.14.6"
 prost-build = "0.14.6"
 protox = "0.10.0"
+sha2 = "0.11.1"
+tar = "0.4.46"
+tempfile = "3.27.0"
 thiserror = "2.0.21"
+# Without the default `gzip` feature, so the server sends the archive's own bytes.
+ureq = { version = "3.5.2", default-features = false, features = ["rustls"] }
 
 ptxc-core = { path = "crates/core" }
 ptxc-target = { path = "crates/target" }
