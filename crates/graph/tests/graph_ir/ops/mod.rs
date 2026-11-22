@@ -5,3 +5,4 @@ mod conv;
 mod elementwise;
 mod matmul;
 mod pool;
+mod reduce;
