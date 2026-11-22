@@ -14,7 +14,7 @@
 )]
 
 /// What a finite value too large for the format, or an infinity, becomes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Overflow {
     /// The largest finite value of the same sign, as ONNX `Cast` with
     /// `saturate = 1`.

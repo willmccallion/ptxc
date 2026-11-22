@@ -5,6 +5,6 @@
 
 mod builder;
 mod common;
-mod elementwise;
+mod ops;
 mod rewrite;
 mod traverse;

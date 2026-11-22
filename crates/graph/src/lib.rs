@@ -16,7 +16,10 @@ mod verify;
 pub use builder::GraphBuilder;
 pub use graph::{Graph, NodeError};
 pub use node::{Node, NodeId, NodeOutputIndex, OperandIndex};
-pub use ops::{BinaryOp, Op, OperandCount, TypeError, TypeRule, UnaryOp};
+pub use ops::{
+    BinaryOp, CastAttrs, InfDetection, ModKind, Op, OperandCount, TypeError, TypeRule, UnaryOp,
+    VariadicOp,
+};
 pub use rewrite::{RewriteError, Rewriter};
 pub use tensor_type::{Layout, TensorType};
 pub use traverse::CycleError;

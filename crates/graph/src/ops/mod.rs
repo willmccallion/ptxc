@@ -3,6 +3,7 @@
 //! Type rules define what ptxc's graph IR accepts, independent of opset: the
 //! importer maps each ONNX opset's version of an op onto these.
 
+mod accepts;
 mod activation;
 mod attention;
 mod conv;
@@ -15,7 +16,7 @@ mod quant;
 mod reduce;
 mod shape;
 
-pub use elementwise::{BinaryOp, UnaryOp};
+pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
 
 use crate::tensor_type::TensorType;
 use ptxc_core::{DType, Shape, ShapeError};
@@ -30,6 +31,12 @@ pub enum Op {
     /// An elementwise op on two tensors, with ONNX's multidirectional
     /// broadcasting.
     Binary(BinaryOp),
+    /// An elementwise op on one or more tensors, broadcast together.
+    Variadic(VariadicOp),
+    /// `Where(condition, x, y)`, broadcast together.
+    Where,
+    /// Conversion to another element type.
+    Cast(CastAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -43,6 +50,9 @@ impl TypeRule for Op {
         match self {
             Self::Unary(op) => op.infer(operands),
             Self::Binary(op) => op.infer(operands),
+            Self::Variadic(op) => op.infer(operands),
+            Self::Where => elementwise::infer_where(operands),
+            Self::Cast(attrs) => attrs.infer(operands),
         }
     }
 }
@@ -69,6 +79,9 @@ pub enum TypeError {
         /// What it was given.
         actual: OperandCount,
     },
+    /// An op that needs at least one operand was given none.
+    #[error("expected at least one operand")]
+    NoOperands,
     /// Operands that must share an element type do not.
     #[error("operands have different element types: {lhs:?} and {rhs:?}")]
     MixedDTypes {
