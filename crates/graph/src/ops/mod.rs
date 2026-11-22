@@ -20,9 +20,10 @@ mod shape;
 pub use activation::{Activation, GeluApproximation};
 pub use attr::F32Attr;
 pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
+pub use matmul::{GemmAttrs, Orientation};
 
 use crate::tensor_type::TensorType;
-use ptxc_core::{DType, Shape, ShapeError};
+use ptxc_core::{DType, Dim, Rank, Shape, ShapeError};
 use thiserror::Error;
 
 /// An operation on tensors. Attribute payloads are `Eq + Hash` (D2), so
@@ -46,6 +47,10 @@ pub enum Op {
     Clip,
     /// `PRelu(x, slope)`, the slope broadcasting to `x`.
     PRelu,
+    /// Batched matrix multiplication, as numpy's `matmul`.
+    MatMul,
+    /// `alpha * A' * B' + beta * C` on matrices.
+    Gemm(GemmAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -65,6 +70,8 @@ impl TypeRule for Op {
             Self::Activation(op) => op.infer(operands),
             Self::Clip => activation::infer_clip(operands),
             Self::PRelu => activation::infer_prelu(operands),
+            Self::MatMul => matmul::infer_matmul(operands),
+            Self::Gemm(attrs) => attrs.infer(operands),
         }
     }
 }
@@ -90,6 +97,40 @@ pub enum TypeError {
         expected: OperandCount,
         /// What it was given.
         actual: OperandCount,
+    },
+    /// A number of operands outside the op's range.
+    #[error("expected {} to {} operands, got {}", .min.get(), .max.get(), .actual.get())]
+    ArityBetween {
+        /// The fewest the op takes.
+        min: OperandCount,
+        /// The most the op takes.
+        max: OperandCount,
+        /// What it was given.
+        actual: OperandCount,
+    },
+    /// An operand of the wrong rank.
+    #[error("expected rank {}, got rank {}", .expected.get(), .actual.get())]
+    Rank {
+        /// The rank the op needs.
+        expected: Rank,
+        /// The operand's rank.
+        actual: Rank,
+    },
+    /// An operand of too low a rank.
+    #[error("expected rank at least {}, got rank {}", .minimum.get(), .actual.get())]
+    RankBelow {
+        /// The lowest rank the op takes.
+        minimum: Rank,
+        /// The operand's rank.
+        actual: Rank,
+    },
+    /// The dims a matrix product contracts differ.
+    #[error("contracted dims differ: {} and {}", .lhs.get(), .rhs.get())]
+    ContractedDims {
+        /// The left operand's contracted dim.
+        lhs: Dim,
+        /// The right operand's contracted dim.
+        rhs: Dim,
     },
     /// An op that needs at least one operand was given none.
     #[error("expected at least one operand")]

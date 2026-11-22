@@ -2,3 +2,4 @@
 
 mod activation;
 mod elementwise;
+mod matmul;

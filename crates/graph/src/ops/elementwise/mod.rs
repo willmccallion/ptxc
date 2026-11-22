@@ -46,6 +46,16 @@ pub(in crate::ops) fn broadcast(lhs: &Shape, rhs: &Shape) -> Result<Shape, TypeE
     Ok(Shape::new(dims)?)
 }
 
+/// Checks that `from` broadcasts to `to` without changing it (ONNX's
+/// unidirectional broadcasting).
+pub(in crate::ops) fn broadcast_to(from: &Shape, to: &Shape) -> Result<(), TypeError> {
+    if broadcast(to, from).as_ref() == Ok(to) {
+        Ok(())
+    } else {
+        Err(TypeError::NotUnidirectional { from: from.clone(), to: to.clone() })
+    }
+}
+
 /// The dims innermost first, then 1s forever, so a lower-rank shape lines up
 /// with a higher-rank one.
 fn padded_from_innermost(shape: &Shape) -> impl Iterator<Item = Dim> + '_ {
