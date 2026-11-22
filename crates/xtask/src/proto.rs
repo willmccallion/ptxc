@@ -1,12 +1,10 @@
 //! `cargo xtask proto`: regenerates the ONNX protobuf types from the
 //! committed `onnx.proto` (D7, D30).
 
+use crate::pin::ONNX_TAG;
 use prost_build::Module;
 use std::path::Path;
 use thiserror::Error;
-
-/// The ONNX release the committed `onnx.proto` comes from (D28).
-const ONNX_TAG: &str = "v1.23.2";
 
 const PROTO_DIR: &str = "crates/onnx-proto/proto";
 const PROTO_FILE: &str = "onnx.proto";
