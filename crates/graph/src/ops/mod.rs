@@ -1,4 +1,7 @@
 //! The `Op` enum and the `TypeRule` trait every op implements.
+//!
+//! Type rules define what ptxc's graph IR accepts, independent of opset: the
+//! importer maps each ONNX opset's version of an op onto these.
 
 mod activation;
 mod attention;
@@ -11,3 +14,91 @@ mod pool;
 mod quant;
 mod reduce;
 mod shape;
+
+pub use elementwise::{BinaryOp, UnaryOp};
+
+use crate::tensor_type::TensorType;
+use ptxc_core::{DType, Shape, ShapeError};
+use thiserror::Error;
+
+/// An operation on tensors. Attribute payloads are `Eq + Hash` (D2), so
+/// structurally equal nodes can be found by hashing.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Op {
+    /// An elementwise op on one tensor.
+    Unary(UnaryOp),
+    /// An elementwise op on two tensors, with ONNX's multidirectional
+    /// broadcasting.
+    Binary(BinaryOp),
+}
+
+/// Infers an op's output types from its operand types.
+pub trait TypeRule {
+    /// The output types, or why the operands are not accepted.
+    fn infer(&self, operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError>;
+}
+
+impl TypeRule for Op {
+    fn infer(&self, operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError> {
+        match self {
+            Self::Unary(op) => op.infer(operands),
+            Self::Binary(op) => op.infer(operands),
+        }
+    }
+}
+
+/// A number of operands.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct OperandCount(usize);
+
+impl OperandCount {
+    /// The count.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// Operands an op's type rule rejects.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum TypeError {
+    /// The wrong number of operands.
+    #[error("expected {} operands, got {}", .expected.get(), .actual.get())]
+    Arity {
+        /// What the op takes.
+        expected: OperandCount,
+        /// What it was given.
+        actual: OperandCount,
+    },
+    /// Operands that must share an element type do not.
+    #[error("operands have different element types: {lhs:?} and {rhs:?}")]
+    MixedDTypes {
+        /// The first operand's element type.
+        lhs: DType,
+        /// The second operand's element type.
+        rhs: DType,
+    },
+    /// An element type the op does not accept.
+    #[error("element type {0:?} is not accepted")]
+    UnsupportedDType(DType),
+    /// Shapes that do not broadcast together.
+    #[error("shapes {:?} and {:?} do not broadcast", .lhs.dims(), .rhs.dims())]
+    NotBroadcastable {
+        /// The first operand's shape.
+        lhs: Shape,
+        /// The second operand's shape.
+        rhs: Shape,
+    },
+    /// An output shape that cannot exist.
+    #[error(transparent)]
+    Shape(#[from] ShapeError),
+}
+
+/// The operands as an array of exactly `N`.
+fn exact_operands<'a, const N: usize>(
+    operands: &[&'a TensorType],
+) -> Result<[&'a TensorType; N], TypeError> {
+    operands.try_into().map_err(|_| TypeError::Arity {
+        expected: OperandCount(N),
+        actual: OperandCount(operands.len()),
+    })
+}

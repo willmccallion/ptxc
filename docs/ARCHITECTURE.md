@@ -96,22 +96,27 @@ pub struct Graph {
     nodes: IndexVec<NodeId, NodeSlot>,     // NodeSlot::{Live(Node), Erased}; compact() renumbers
     values: IndexVec<ValueId, Value>,
     constants: IndexVec<ConstantId, HostTensor>,
-    uses: IndexVec<ValueId, Vec<Use>>,     // maintained only by Rewriter
-    inputs: Vec<ValueId>,
-    outputs: Vec<ValueId>,
+    uses: IndexVec<ValueId, Vec<Use>>,     // maintained only by GraphBuilder and Rewriter
+    inputs: IndexVec<GraphInputIndex, ValueId>,
+    outputs: IndexVec<GraphOutputIndex, ValueId>,
 }
 
-pub struct Node { op: Op, inputs: Vec<ValueId>, outputs: Vec<ValueId> }
+pub struct Node { op: Op, operands: IndexVec<OperandIndex, ValueId>, outputs: IndexVec<NodeOutputIndex, ValueId> }
 
 pub struct Value { ty: TensorType, def: ValueDef, name: Option<ValueName> }
 
 pub enum ValueDef {
-    Input(InputIndex),
+    Input(GraphInputIndex),
     Constant(ConstantId),
-    Output { node: NodeId, index: OutputIndex },
+    Output { node: NodeId, index: NodeOutputIndex },
 }
 
-pub struct TensorType { dtype: DType, shape: Shape, layout: Layout }
+pub enum Use {                             // graph outputs are uses, so "no uses" means dead
+    Operand { node: NodeId, index: OperandIndex },
+    GraphOutput(GraphOutputIndex),
+}
+
+pub struct TensorType { dtype: DType, shape: Shape, layout: Layout }   // Layout::RowMajor until M4's layout pass
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Op {

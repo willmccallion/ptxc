@@ -16,3 +16,4 @@ workspace = true
 
 [dependencies]
 ptxc-core.workspace = true
+thiserror.workspace = true
