@@ -65,6 +65,12 @@ impl Rank {
 pub struct Axis(usize);
 
 impl Axis {
+    /// The axis at position `index`. Ops hold axes without a rank, so their
+    /// type rules check each against the operand it applies to.
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+
     /// Resolves an ONNX axis in `[-rank, rank)`, where `-1` is the innermost.
     pub fn from_signed(axis: i64, rank: Rank) -> Result<Self, ShapeError> {
         let out_of_range = || ShapeError::AxisOutOfRange { axis, rank };

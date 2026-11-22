@@ -96,3 +96,8 @@ fn rank_get_returns_its_number_of_dimensions() {
 fn dims_lists_the_extents_outermost_first() {
     assert_eq!(shape(&[2, 5]).dims(), [Dim::new(2), Dim::new(5)]);
 }
+
+#[test]
+fn axis_new_keeps_its_index() {
+    assert_eq!(Axis::new(5).index(), 5);
+}
