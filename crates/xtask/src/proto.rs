@@ -47,3 +47,18 @@ fn generate(workspace: &Path) -> Result<String, ProtoError> {
         "// From onnx.proto at ONNX {ONNX_TAG}. Regenerate with `cargo xtask proto`.\n{code}"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn committed_generated_code_is_what_the_generator_produces() {
+        let workspace = crate::workspace_root();
+        let committed = std::fs::read_to_string(workspace.join(GENERATED_FILE)).unwrap();
+
+        let regenerated = generate(&workspace).unwrap();
+
+        assert!(regenerated == committed, "{GENERATED_FILE} is stale; run `cargo xtask proto`");
+    }
+}
