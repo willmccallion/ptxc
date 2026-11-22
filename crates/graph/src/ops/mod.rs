@@ -101,6 +101,10 @@ pub enum Op {
     Pad(PadAttrs),
     /// The upper or lower triangle of the last two axes.
     Trilu(TriluAttrs),
+    /// Slices of data selected along an axis by an index tensor.
+    Gather(Axis),
+    /// Single elements of data selected along an axis by an index tensor.
+    GatherElements(Axis),
 }
 
 /// Infers an op's output types from its operand types.
@@ -140,6 +144,8 @@ impl TypeRule for Op {
             Self::Split(attrs) => attrs.infer(operands),
             Self::Pad(attrs) => attrs.infer(operands),
             Self::Trilu(attrs) => attrs.infer(operands),
+            Self::Gather(axis) => gather::infer_gather(*axis, operands),
+            Self::GatherElements(axis) => gather::infer_gather_elements(*axis, operands),
         }
     }
 }
