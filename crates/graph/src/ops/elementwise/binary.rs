@@ -71,7 +71,7 @@ impl BinaryOp {
             | Self::Greater
             | Self::GreaterOrEqual => Accepts::Numeric,
             Self::Mod(ModKind::Integer) => Accepts::Integer,
-            Self::Pow => Accepts::PowBase,
+            Self::Pow => Accepts::FloatOrWideInt,
             Self::Equal => Accepts::NumericOrBool,
             Self::And | Self::Or | Self::Xor => Accepts::Bool,
         }

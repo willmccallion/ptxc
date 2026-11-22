@@ -6,6 +6,7 @@
 mod accepts;
 mod activation;
 mod attention;
+mod attr;
 mod conv;
 mod elementwise;
 mod gather;
@@ -16,6 +17,8 @@ mod quant;
 mod reduce;
 mod shape;
 
+pub use activation::{Activation, GeluApproximation};
+pub use attr::F32Attr;
 pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
 
 use crate::tensor_type::TensorType;
@@ -37,6 +40,12 @@ pub enum Op {
     Where,
     /// Conversion to another element type.
     Cast(CastAttrs),
+    /// An activation on one tensor.
+    Activation(Activation),
+    /// `Clip(x, min, max)` with scalar bounds.
+    Clip,
+    /// `PRelu(x, slope)`, the slope broadcasting to `x`.
+    PRelu,
 }
 
 /// Infers an op's output types from its operand types.
@@ -53,6 +62,9 @@ impl TypeRule for Op {
             Self::Variadic(op) => op.infer(operands),
             Self::Where => elementwise::infer_where(operands),
             Self::Cast(attrs) => attrs.infer(operands),
+            Self::Activation(op) => op.infer(operands),
+            Self::Clip => activation::infer_clip(operands),
+            Self::PRelu => activation::infer_prelu(operands),
         }
     }
 }
@@ -100,6 +112,17 @@ pub enum TypeError {
         lhs: Shape,
         /// The second operand's shape.
         rhs: Shape,
+    },
+    /// An operand that must be a scalar has a shape.
+    #[error("expected a scalar, got shape {:?}", .0.dims())]
+    NotScalar(Shape),
+    /// A shape that must broadcast to another, without changing it, does not.
+    #[error("shape {:?} does not broadcast to {:?}", .from.dims(), .to.dims())]
+    NotUnidirectional {
+        /// The shape being broadcast.
+        from: Shape,
+        /// The shape it must broadcast to.
+        to: Shape,
     },
     /// An output shape that cannot exist.
     #[error(transparent)]
