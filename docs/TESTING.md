@@ -147,6 +147,9 @@ show what they don't check.
   - Every surviving mutant is either killed by a new test, or excluded in
     `.cargo/mutants.toml` with a comment saying why no test can see it (for
     example, code that needs the network).
+  - A mutant that makes the tests hang (a lexer that stops advancing, say)
+    is reported as a timeout. That counts as caught, but `--iterate` tests
+    it again on every run, so the run exits non-zero for timeouts alone.
 - **Coverage** (`p quality cover`, which runs cargo llvm-cov) lists lines no
   test runs, worst file first. It is a map of untested code, not a target to
   reach: a line can run without anything checking its result, which is what
