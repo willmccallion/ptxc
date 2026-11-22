@@ -1,0 +1,25 @@
+[package]
+name = "ptxc-runtime"
+description = "Runtime: loads a Program onto a device and executes it eagerly or as a CUDA graph."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true
+ptxc-program.workspace = true
+ptxc-cuda.workspace = true
+
+[features]
+# Compiles the tests that need a GPU; without a GPU they fail rather than skip.
+gpu = []

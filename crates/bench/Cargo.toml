@@ -1,0 +1,28 @@
+[package]
+name = "ptxc-bench"
+description = "Benchmark harness: times ptxc against cuBLAS and records results as JSON. The only crate that may load cuBLAS."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "ptxc-bench"
+path = "src/main.rs"
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true
+ptxc-compiler.workspace = true
+ptxc-program.workspace = true
+ptxc-runtime.workspace = true
+ptxc-cuda.workspace = true

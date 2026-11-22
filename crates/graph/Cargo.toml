@@ -1,0 +1,18 @@
+[package]
+name = "ptxc-graph"
+description = "Graph IR: an SSA dataflow graph in typed arenas, with op type rules, a verifier and a text format."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true

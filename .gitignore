@@ -1,0 +1,18 @@
+# Build output
+/target
+result
+result-*
+.direnv
+
+# Downloaded models, datasets, ONNX test data and cached reference outputs
+/data/
+
+# TensorRT engines, tuning logs and benchmark scratch output
+*.engine
+*.plan
+/bench/results/scratch/
+
+# Python baselines
+/baselines/.venv/
+__pycache__/
+.ruff_cache/

@@ -1,0 +1,30 @@
+[package]
+name = "ptxc-autotune"
+description = "Ansor-style autotuner: sketch generation, search, measurement and the tuning-record database."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true
+ptxc-loop.workspace = true
+ptxc-schedule.workspace = true
+ptxc-codegen.workspace = true
+ptxc-cost-model.workspace = true
+ptxc-program.workspace = true
+ptxc-compiler.workspace = true
+ptxc-runtime.workspace = true
+
+[features]
+# Compiles the tests that need a GPU; without a GPU they fail rather than skip.
+gpu = []

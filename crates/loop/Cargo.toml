@@ -1,0 +1,19 @@
+[package]
+name = "ptxc-loop"
+description = "Loop IR: compute definitions, schedules as replayable traces, lowered loop nests and a CPU interpreter for them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true

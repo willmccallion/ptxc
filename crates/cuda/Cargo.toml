@@ -1,0 +1,22 @@
+[package]
+name = "ptxc-cuda"
+description = "Safe bindings to the CUDA driver API, loaded at runtime with dlopen. The only crate with FFI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true
+
+[features]
+# Compiles the tests that need a GPU; without a GPU they fail rather than skip.
+gpu = []

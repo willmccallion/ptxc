@@ -1,0 +1,9 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+# A hard ceiling; most functions should be well under it.
+too-many-lines-threshold = 60
+
+# Product names that are spelled in mixed case; ".." keeps clippy's defaults.
+doc-valid-idents = ["..", "cuBLAS", "cuBLASLt", "cuDNN", "PyTorch"]

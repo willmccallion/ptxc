@@ -1,0 +1,27 @@
+[package]
+name = "ptxc-compiler"
+description = "Compiler driver: runs the pipeline from ONNX bytes to a Program, including static memory planning."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true
+ptxc-graph.workspace = true
+ptxc-onnx.workspace = true
+ptxc-graph-opt.workspace = true
+ptxc-loop.workspace = true
+ptxc-lower.workspace = true
+ptxc-schedule.workspace = true
+ptxc-codegen.workspace = true
+ptxc-program.workspace = true

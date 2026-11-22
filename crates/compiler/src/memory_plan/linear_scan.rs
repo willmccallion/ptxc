@@ -1,0 +1,1 @@
+//! Linear-scan offset assignment.

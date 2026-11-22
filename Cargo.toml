@@ -1,0 +1,98 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/target",
+    "crates/onnx-proto",
+    "crates/onnx",
+    "crates/graph",
+    "crates/interp",
+    "crates/graph-opt",
+    "crates/loop",
+    "crates/lower",
+    "crates/schedule",
+    "crates/codegen",
+    "crates/cost-model",
+    "crates/program",
+    "crates/compiler",
+    "crates/cuda",
+    "crates/runtime",
+    "crates/autotune",
+    "crates/testkit",
+    "crates/cli",
+    "crates/bench",
+    "crates/xtask",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+authors = ["Will McCallion"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/willmccallion/ptxc"
+readme = "README.md"
+keywords = ["compiler", "deep-learning", "gpu", "onnx", "ptx"]
+categories = ["compilers", "science"]
+
+[workspace.dependencies]
+ptxc-core = { path = "crates/core" }
+ptxc-target = { path = "crates/target" }
+ptxc-onnx-proto = { path = "crates/onnx-proto" }
+ptxc-onnx = { path = "crates/onnx" }
+ptxc-graph = { path = "crates/graph" }
+ptxc-interp = { path = "crates/interp" }
+ptxc-graph-opt = { path = "crates/graph-opt" }
+ptxc-loop = { path = "crates/loop" }
+ptxc-lower = { path = "crates/lower" }
+ptxc-schedule = { path = "crates/schedule" }
+ptxc-codegen = { path = "crates/codegen" }
+ptxc-cost-model = { path = "crates/cost-model" }
+ptxc-program = { path = "crates/program" }
+ptxc-compiler = { path = "crates/compiler" }
+ptxc-cuda = { path = "crates/cuda" }
+ptxc-runtime = { path = "crates/runtime" }
+ptxc-autotune = { path = "crates/autotune" }
+ptxc-testkit = { path = "crates/testkit" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+debug = 1 # Line tables for perf and flamegraphs.
+
+[workspace.lints.rust]
+missing_docs = "deny"
+missing_debug_implementations = "deny"
+unreachable_pub = "deny"
+unused_results = "deny"
+unnameable_types = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unsafe_op_in_unsafe_fn = "deny"
+# Only ptxc-cuda may allow this, at its crate root; check-deps enforces that.
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+
+# Casts stay denied: conversions between units belong on the newtypes.
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+similar_names = "allow"
+
+[workspace.lints.rustdoc]
+all = "deny"
+missing_crate_level_docs = "deny"
+broken_intra_doc_links = "deny"

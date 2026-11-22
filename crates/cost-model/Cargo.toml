@@ -1,0 +1,20 @@
+[package]
+name = "ptxc-cost-model"
+description = "Cost models that predict kernel latency from loop IR features."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true
+ptxc-loop.workspace = true

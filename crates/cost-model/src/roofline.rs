@@ -1,0 +1,1 @@
+//! An analytical roofline model.

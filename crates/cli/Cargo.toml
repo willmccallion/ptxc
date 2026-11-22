@@ -1,0 +1,30 @@
+[package]
+name = "ptxc-cli"
+description = "The ptxc command: compile, run, tune, conformance, fuzz, check-model and inspect."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "ptxc"
+path = "src/main.rs"
+
+[dependencies]
+ptxc-core.workspace = true
+ptxc-target.workspace = true
+ptxc-onnx.workspace = true
+ptxc-interp.workspace = true
+ptxc-compiler.workspace = true
+ptxc-program.workspace = true
+ptxc-runtime.workspace = true
+ptxc-autotune.workspace = true
+ptxc-testkit.workspace = true

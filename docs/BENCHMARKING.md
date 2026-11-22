@@ -1,0 +1,162 @@
+# Benchmarking
+
+Every published number is reproducible from committed code, a recorded
+environment, and one command. Baselines get their best documented
+configuration. Where ptxc loses, the table says so.
+
+## Machine
+
+Recorded 2026-11-22:
+
+| | |
+|---|---|
+| GPU | NVIDIA GeForce RTX 4060 Ti, compute capability 8.9 (Ada) |
+| Memory | 8188 MiB |
+| Max clocks | SM 3105 MHz, memory 9001 MHz |
+| Power limit | 160 W |
+| PCIe | gen 4 ×8 |
+| Driver | 595.112.07 (CUDA 13.2 driver API) |
+| CUDA toolkit | none installed system-wide; ptxas 13.5.37 comes from the flake, test-only |
+| Rust | rustc 1.99.1, cargo 1.99.0 |
+
+Each results file records these values again at run time, so a driver
+upgrade shows up in the data.
+
+## Methodology
+
+- **Clocks.** Locked by hand around a published series (see Clock
+  locking below). The harness records the actual SM and memory clocks,
+  temperature and throttle reasons (`nvidia-smi --query-gpu`) before and
+  after each series, and marks a series invalid if the clocks moved.
+- **Timing.**
+  - CUDA events around each iteration on one stream, after a warmup of at
+    least 20 iterations and 1 s.
+  - Then at least 100 timed iterations, or 2 s, whichever is longer.
+  - Reported as the median, with p10 and p90 alongside. Raw samples are kept
+    in the JSON.
+- **Whole models.** All frameworks are timed the same way:
+  - from inputs already on the device to outputs on the device;
+  - one stream, with CUDA graphs where the framework supports them (ptxc
+    `Executor<Graphed>`, torch.compile `mode="max-autotune"`, ORT with CUDA
+    graphs enabled, TensorRT enqueue);
+  - with host-to-device and device-to-host copies reported separately.
+- **Fairness.**
+  - The same ONNX file feeds ptxc, ORT and TensorRT. PyTorch runs the module
+    the ONNX file was exported from.
+  - Same precision: f16 means f16 storage with f32 accumulation everywhere.
+    TF32 is off for f32 baselines unless a row says otherwise.
+  - Quantized rows use the same QDQ model for ptxc and TensorRT's explicit
+    quantization.
+  - Every library version is recorded.
+- **Noise.** Desktop processes are idle. No other GPU work runs during a
+  series; the harness checks `nvidia-smi` for other compute processes and
+  refuses to start if there are any.
+
+## Clock locking
+
+Run these by hand before and after a published series. They need root.
+
+```sh
+nvidia-smi -q -d SUPPORTED_CLOCKS | head -40            # no sudo: list supported clocks
+sudo nvidia-smi --persistence-mode=1                    # keep the driver loaded between runs
+sudo nvidia-smi --lock-gpu-clocks=<MHz>,<MHz>           # pin the SM clock (min = max)
+sudo nvidia-smi --lock-memory-clocks=<MHz>,<MHz>        # may be unsupported on GeForce; the harness records it either way
+
+# afterwards
+sudo nvidia-smi --reset-gpu-clocks
+sudo nvidia-smi --reset-memory-clocks
+sudo nvidia-smi --persistence-mode=0
+```
+
+The SM frequency is chosen once at M3: the highest clock this card holds
+through a 60 s tensor-core GEMM without power or thermal throttling. It is
+recorded here.
+
+## Suites
+
+### GEMM against cuBLAS (`ptxc-bench gemm`, M3)
+
+- **Shapes:**
+  - squares M = N = K in {256, 512, 1024, 2048, 4096, 8192};
+  - the transformer shapes of BERT-base and GPT-2 (M = batch × sequence
+    length; (N, K) in {(768, 768), (3072, 768), (768, 3072), (2304, 768)});
+  - skinny shapes with M in {1, 4, 16}, as in decoding;
+  - non-multiples of 128.
+- **Data types:** f16→f32, bf16→f32, E4M3→f32, int8→i32, f32 (SIMT).
+- **Layouts:** NN, NT, TN.
+- **Baseline:** cuBLAS (cuBLASLt for FP8 and int8), loaded with dlopen by
+  `ptxc-bench` only, with its default heuristic algorithm. The best of its
+  top 8 algorithms is also recorded, as an upper bound.
+- **Metrics:** TFLOP/s (or TOP/s) and the percentage of cuBLAS. Every result
+  is checked against a reference before it is timed.
+
+### Convolution (`ptxc-bench conv`, M3)
+
+ResNet-50's distinct convolution layers at batch sizes 1, 8 and 32, against
+PyTorch with cuDNN, with `cudnn.benchmark = True`.
+
+### Whole models (`ptxc-bench models`, M4 to M6)
+
+| Model | Batch sizes | Baselines |
+|---|---|---|
+| MLP | 1, 64, 1024 | PyTorch eager, torch.compile, ORT CUDA EP, TensorRT |
+| ResNet-50 | 1, 8, 32, 64 | same |
+| BERT-base, sequence length 128 | 1, 8, 32 | same |
+| GPT-2 124M, prefill at 128 and 512 tokens | 1, 8 | same |
+| Later: ViT-B/16, SD UNet | | |
+
+Reported: latency (median, p10, p90) and throughput (samples per second).
+
+### Tuning time and build time (M5, M6)
+
+- **Tuning:** ptxc against TVM/Ansor on the same models, each given the same
+  trial budget (1,000, 5,000 and 20,000 trials). Reported: wall-clock tuning
+  time and the latency reached.
+- **Build:** `ptxc compile` (with an existing tuning database) against
+  TensorRT's engine build (`trtexec`), as wall-clock time.
+
+## Layout and commands
+
+```
+crates/bench/                    Rust harness (ptxc and cuBLAS)
+baselines/ptxc_baselines/        PyTorch, torch.compile, ORT, TensorRT runners; render_tables.py
+bench/results/<date>-<commit>/   committed at milestones: one JSON file per suite and framework
+bench/results/scratch/           gitignored, for runs during development
+```
+
+```sh
+ptxc-bench gemm --out bench/results/scratch/gemm.json
+ptxc-bench models --model resnet50 --batch 1,8,32 --out bench/results/scratch/
+uv run --project baselines ptxc-baselines bench --framework trt --model resnet50 --batch 1,8,32 --out bench/results/scratch/
+uv run --project baselines ptxc-baselines render --results bench/results/<run>/ --readme README.md
+```
+
+## Results schema
+
+One file per suite and framework:
+
+```json
+{
+  "schema": 1,
+  "suite": "gemm",
+  "framework": { "name": "ptxc", "version": "0.1.0", "commit": "abc1234" },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4060 Ti", "driver": "595.112.07",
+    "clocks_mhz": { "sm": 2520, "mem": 9001 }, "locked": true
+  },
+  "cases": [
+    {
+      "id": "gemm/f16/NN/4096x4096x4096",
+      "params": { "m": 4096, "n": 4096, "k": 4096, "dtype": "f16", "layout": "NN" },
+      "verified": true,
+      "samples_us": [...],
+      "median_us": 0.0, "p10_us": 0.0, "p90_us": 0.0
+    }
+  ]
+}
+```
+
+`render_tables.py` joins the files on `id`. It rewrites the README tables
+between `<!-- bench:<suite>:begin -->` and `<!-- bench:<suite>:end -->`
+markers, and refuses to render a case that is unverified, or that comes from
+a series whose clocks moved.

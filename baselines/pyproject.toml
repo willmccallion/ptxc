@@ -1,0 +1,14 @@
+[project]
+name = "ptxc-baselines"
+version = "0.1.0"
+description = "Reference outputs and baseline benchmarks for ptxc: PyTorch, torch.compile, ONNX Runtime and TensorRT."
+requires-python = ">=3.12"
+# Dependencies are added, pinned and locked with uv at M1 (reference outputs) and M3 (benchmarks).
+dependencies = []
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

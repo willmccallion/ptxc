@@ -1,0 +1,22 @@
+[package]
+name = "ptxc-xtask"
+description = "Repository tasks: regenerate protobuf code, fetch pinned test data, check crate dependency rules."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]

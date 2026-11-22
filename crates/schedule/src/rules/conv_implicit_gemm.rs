@@ -1,0 +1,1 @@
+//! Convolution as implicit GEMM.
