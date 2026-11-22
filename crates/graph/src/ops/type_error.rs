@@ -71,6 +71,38 @@ pub enum TypeError {
     /// An axis listed twice.
     #[error("axis {} is listed twice", .0.index())]
     RepeatedAxis(Axis),
+    /// A reshape to a shape with a different element count.
+    #[error("cannot reshape {:?} to {:?}", .from.dims(), .to.dims())]
+    ElementCountMismatch {
+        /// The input shape.
+        from: Shape,
+        /// The target shape.
+        to: Shape,
+    },
+    /// Operands that must agree on an axis do not.
+    #[error("axis {} has extent {} where {} was expected", .axis.index(), .actual.get(), .expected.get())]
+    DimMismatch {
+        /// The axis.
+        axis: Axis,
+        /// The extent the first operand has.
+        expected: Dim,
+        /// The extent this operand has.
+        actual: Dim,
+    },
+    /// A slice that takes an element outside its axis.
+    #[error("the slice of axis {} goes out of bounds", .0.index())]
+    SliceOutOfBounds(Axis),
+    /// Split sizes that do not add up to the axis's extent.
+    #[error("split sizes {sizes:?} do not add up to {}", .extent.get())]
+    SplitSizes {
+        /// The axis's extent.
+        extent: Dim,
+        /// The sizes given.
+        sizes: Vec<Dim>,
+    },
+    /// Copy-based padding of an axis with no elements to copy.
+    #[error("axis {} is empty, so only constant padding can grow it", .0.index())]
+    PaddedEmptyAxis(Axis),
     /// A window with a zero-length kernel.
     #[error("the kernel has a zero-length axis")]
     EmptyKernel,
