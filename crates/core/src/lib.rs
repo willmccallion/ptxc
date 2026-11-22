@@ -8,3 +8,10 @@ mod quant;
 mod shape;
 mod size;
 mod tensor;
+
+pub use dtype::DType;
+pub use index::{Idx, IndexVec};
+pub use quant::{Affine, Granularity, QuantDType, QuantError, QuantParams, Scale, ZeroPoint};
+pub use shape::{Axis, Dim, Rank, Shape, ShapeError};
+pub use size::{Alignment, ByteOffset, ByteSize, ElementCount, SizeError};
+pub use tensor::{HostTensor, TensorData, TensorError};
