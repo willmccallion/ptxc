@@ -22,7 +22,7 @@ pub enum ShapeError {
     },
 }
 
-/// The extent of one tensor dimension. Static in v1 (D3).
+/// The extent of one tensor dimension. Static in v0.1.0 (D3).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Dim(u64);
 

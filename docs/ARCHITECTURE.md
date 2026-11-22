@@ -151,7 +151,7 @@ newtype. This gives CSE structural hashing for free. It is also the property
 an e-graph needs, so a future e-graph engine can treat `Op` as its e-node
 label without changing `Op`.
 
-Shapes are static in v1 (D3). `Dim` is a newtype over `u64`. Adding a
+Shapes are static in v0.1.0 (D3). `Dim` is a newtype over `u64`. Adding a
 symbolic variant later turns it into an enum without changing its users'
 signatures.
 
@@ -189,7 +189,7 @@ they become buffer aliases in the memory plan.
 - **Rewrite rules are data:**
   `RewriteRule { name, lhs: Pattern, rhs: Template, guard: Guard }`.
   `RewriteEngine` is a trait. `GreedyEngine` (a worklist, as in MLIR's
-  greedy pattern driver) is the v1 implementation. An `EGraphEngine`
+  greedy pattern driver) is the v0.1.0 implementation. An `EGraphEngine`
   (equality saturation in the style of `egg`, plus cost-based extraction)
   can be added in `rewrite/egraph.rs` and consume the same rule sets. Rules
   are never closures, so no rule needs rewriting to switch engines.

@@ -34,7 +34,7 @@ the old one.
   - an e-graph engine can be added beside the greedy one without touching
     `Op` or any rule.
 
-## D3. Static shapes in v1
+## D3. Static shapes in v0.1.0
 
 - **Options:** static only; symbolic dimensions with shape functions;
   bucketed specialisation.
@@ -63,7 +63,7 @@ the old one.
   - hash-consing makes the simplifier and CSE on index arithmetic cheap.
 - Index expressions and value expressions are separate types.
 
-## D5. Data types in v1
+## D5. Data types in v0.1.0
 
 - **Choice:** f32, f16, bf16, FP8 E4M3FN and E5M2, i8, u8, i32, i64 and
   bool.
@@ -226,7 +226,7 @@ the old one.
 - **Reason:** the task scripts stay in the same language and lints as the
   code, and Python stays confined to baselines (D16).
 
-## D18. No control flow in v1
+## D18. No control flow in v0.1.0
 
 - **Choice:** `If`, `Loop` and `Scan` are rejected at import. The
   conformance report counts them as unsupported (`ControlFlow`).
