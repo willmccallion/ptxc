@@ -1,5 +1,9 @@
 # cargo-mutants configuration; see "Test quality" in docs/TESTING.md.
 
+# The whole test suite runs in about a second; a mutant that makes the lexer
+# or parser loop forever is caught by this timeout, so keep it short.
+minimum_test_timeout = 5.0
+
 # prost's output; xtask's tests check it matches the generator.
 exclude_globs = ["crates/onnx-proto/src/generated.rs"]
 
