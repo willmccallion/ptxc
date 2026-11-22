@@ -17,10 +17,10 @@ pub use builder::GraphBuilder;
 pub use graph::{Graph, NodeError};
 pub use node::{Node, NodeId, NodeOutputIndex, OperandIndex};
 pub use ops::{
-    Activation, BinaryOp, CastAttrs, ConvAttrs, Dilation, F32Attr, GeluApproximation, GemmAttrs,
-    GlobalPoolKind, Groups, InfDetection, ModKind, Op, OperandCount, Orientation, PadCounting,
-    Padding, PoolAttrs, PoolAxis, PoolKind, Rounding, Stride, TypeError, TypeRule, UnaryOp,
-    VariadicOp, WindowAxis,
+    Activation, ArgKind, ArgReduceAttrs, BinaryOp, CastAttrs, ConvAttrs, Dilation, F32Attr,
+    GeluApproximation, GemmAttrs, GlobalPoolKind, Groups, InfDetection, KeepDims, ModKind, Op,
+    OperandCount, Orientation, PadCounting, Padding, PoolAttrs, PoolAxis, PoolKind, ReduceAttrs,
+    ReduceOp, Rounding, Stride, TieBreak, TypeError, TypeRule, UnaryOp, VariadicOp, WindowAxis,
 };
 pub use rewrite::{RewriteError, Rewriter};
 pub use tensor_type::{Layout, TensorType};
