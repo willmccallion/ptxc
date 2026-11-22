@@ -3,6 +3,7 @@
 mod activation;
 mod conv;
 mod elementwise;
+mod gather;
 mod matmul;
 mod norm;
 mod pool;

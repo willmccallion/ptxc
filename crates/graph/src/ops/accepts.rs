@@ -19,6 +19,8 @@ pub(super) enum Accepts {
     Integer,
     /// Floats, i32 and i64: what ONNX `Pow` bases and `PRelu` take.
     FloatOrWideInt,
+    /// i32 and i64: what ONNX's indexing ops take as indices.
+    Index,
     /// Bool only.
     Bool,
     /// Numeric types and bool.
@@ -38,6 +40,7 @@ impl Accepts {
             Self::FloatOrInt8 => float || matches!(dtype, DType::I8 | DType::U8),
             Self::Integer => signed || unsigned,
             Self::FloatOrWideInt => float || matches!(dtype, DType::I32 | DType::I64),
+            Self::Index => matches!(dtype, DType::I32 | DType::I64),
             Self::Bool => boolean,
             Self::NumericOrBool => float || signed || unsigned || boolean,
         }
