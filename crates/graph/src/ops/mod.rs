@@ -21,6 +21,9 @@ mod type_error;
 mod window;
 
 pub use activation::{Activation, GeluApproximation};
+pub use attention::{
+    AttentionAttrs, AttentionLayout, AttentionMask, Causality, HeadCount, Presence, QkOutput,
+};
 pub use attr::F32Attr;
 pub use conv::{ConvAttrs, Groups};
 pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
@@ -121,6 +124,8 @@ pub enum Op {
     QConv(QConvAttrs),
     /// Interpolation to new sizes.
     Resize(ResizeAttrs),
+    /// Fused scaled dot-product attention.
+    Attention(AttentionAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -167,6 +172,7 @@ impl TypeRule for Op {
             Self::QMatMul(attrs) => attrs.infer(operands),
             Self::QConv(attrs) => attrs.infer(operands),
             Self::Resize(attrs) => attrs.infer(operands),
+            Self::Attention(attrs) => attrs.infer(operands),
         }
     }
 }

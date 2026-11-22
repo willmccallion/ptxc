@@ -1,6 +1,7 @@
 //! One module per op family, mirroring `src/ops`.
 
 mod activation;
+mod attention;
 mod conv;
 mod elementwise;
 mod gather;
