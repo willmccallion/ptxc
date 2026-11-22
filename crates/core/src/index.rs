@@ -111,6 +111,15 @@ impl<I: Idx, T> FromIterator<T> for IndexVec<I, T> {
     }
 }
 
+impl<I: Idx, T> IntoIterator for IndexVec<I, T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.raw.into_iter()
+    }
+}
+
 impl<'a, I: Idx, T> IntoIterator for &'a IndexVec<I, T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
