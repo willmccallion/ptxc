@@ -1,6 +1,7 @@
 use ptxc_core::{
     Affine, Axis, Granularity, QuantDType, QuantError, QuantParams, Rank, Scale, ZeroPoint,
 };
+use std::hash::{Hash, Hasher};
 
 const fn affine(zero_point: i32) -> Affine {
     Affine { scale: Scale::new(0.5), zero_point: ZeroPoint::new(zero_point) }
@@ -76,4 +77,28 @@ fn scales_compare_by_bits() {
     assert_eq!(Scale::new(f32::NAN), Scale::new(f32::NAN));
     assert_ne!(Scale::new(0.0), Scale::new(-0.0));
     assert_eq!(Scale::new(0.25), Scale::new(0.25));
+}
+
+#[test]
+fn scale_get_returns_the_wrapped_scale() {
+    assert_eq!(Scale::new(0.375).get(), 0.375);
+}
+
+#[test]
+fn zero_point_get_returns_the_wrapped_value() {
+    assert_eq!(ZeroPoint::new(-7).get(), -7);
+}
+
+/// Ops holding scales are keyed in hash maps (CSE), so the hash must depend
+/// on the scale, not just agree with equality.
+#[test]
+fn different_scales_hash_differently() {
+    let hash = |scale: Scale| {
+        let mut hasher = std::hash::DefaultHasher::new();
+        scale.hash(&mut hasher);
+        hasher.finish()
+    };
+
+    assert_ne!(hash(Scale::new(0.25)), hash(Scale::new(0.5)));
+    assert_eq!(hash(Scale::new(0.25)), hash(Scale::new(0.25)));
 }

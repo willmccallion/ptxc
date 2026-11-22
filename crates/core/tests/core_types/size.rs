@@ -66,3 +66,8 @@ fn align_up_past_u64_max_is_rejected() {
     assert!(align_up(u64::MAX - 2, 4).is_err());
     assert_eq!(align_up(u64::MAX - 3, 4).unwrap(), u64::MAX - 3);
 }
+
+#[test]
+fn alignment_get_returns_its_bytes() {
+    assert_eq!(Alignment::new(64).unwrap().get(), 64);
+}

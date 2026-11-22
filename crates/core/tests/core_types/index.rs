@@ -74,3 +74,39 @@ fn into_iter_yields_the_elements_in_id_order() {
 fn new_vector_is_empty() {
     assert!(IndexVec::<TestId, char>::new().is_empty());
 }
+
+#[test]
+fn get_returns_the_element_under_an_id_in_range() {
+    let elements: IndexVec<TestId, char> = "ab".chars().collect();
+
+    assert_eq!(elements.get(TestId::new(1)), Some(&'b'));
+}
+
+#[test]
+fn get_mut_changes_the_element_in_place() {
+    let mut elements: IndexVec<TestId, char> = "ab".chars().collect();
+
+    *elements.get_mut(TestId::new(0)).unwrap() = 'z';
+
+    assert_eq!(elements[TestId::new(0)], 'z');
+    assert_eq!(elements.get_mut(TestId::new(2)), None);
+}
+
+#[test]
+fn a_vector_with_elements_is_not_empty() {
+    let elements: IndexVec<TestId, char> = "a".chars().collect();
+
+    assert!(!elements.is_empty());
+}
+
+#[test]
+fn iterating_by_reference_visits_each_element_in_id_order() {
+    let elements: IndexVec<TestId, char> = "abc".chars().collect();
+
+    let mut visited = String::new();
+    for &element in &elements {
+        visited.push(element);
+    }
+
+    assert_eq!(visited, "abc");
+}

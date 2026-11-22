@@ -81,3 +81,18 @@ fn rank_axes_lists_each_axis_outermost_first() {
 
     assert_eq!(indices, [0, 1, 2]);
 }
+
+#[test]
+fn dim_get_returns_its_extent() {
+    assert_eq!(Dim::new(7).get(), 7);
+}
+
+#[test]
+fn rank_get_returns_its_number_of_dimensions() {
+    assert_eq!(Rank::new(3).get(), 3);
+}
+
+#[test]
+fn dims_lists_the_extents_outermost_first() {
+    assert_eq!(shape(&[2, 5]).dims(), [Dim::new(2), Dim::new(5)]);
+}
