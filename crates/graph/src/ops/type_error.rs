@@ -101,9 +101,9 @@ pub enum TypeError {
         /// The groups.
         groups: Groups,
     },
-    /// A bias whose length is not the number of outputs it is added to.
-    #[error("expected a bias of length {}, got {}", .expected.get(), .actual.get())]
-    BiasLength {
+    /// A per-channel or per-filter parameter of the wrong length.
+    #[error("expected a parameter of length {}, got {}", .expected.get(), .actual.get())]
+    ParameterLength {
         /// The required length.
         expected: Dim,
         /// The bias's length.

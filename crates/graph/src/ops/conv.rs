@@ -88,7 +88,7 @@ fn check_bias(bias: &TensorType, dtype: DType, filters: Dim) -> Result<(), TypeE
     require_dtype(dtype, bias)?;
     match *bias.shape().dims() {
         [length] if length == filters => Ok(()),
-        [length] => Err(TypeError::BiasLength { expected: filters, actual: length }),
+        [length] => Err(TypeError::ParameterLength { expected: filters, actual: length }),
         _ => Err(TypeError::Rank { expected: Rank::new(1), actual: bias.shape().rank() }),
     }
 }

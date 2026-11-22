@@ -90,7 +90,7 @@ fn bias_has_one_entry_per_filter() {
     assert!(attrs.infer(&[&x, &w, &f32_type(&[8])]).is_ok());
     assert_eq!(
         attrs.infer(&[&x, &w, &f32_type(&[7])]),
-        Err(TypeError::BiasLength { expected: Dim::new(8), actual: Dim::new(7) })
+        Err(TypeError::ParameterLength { expected: Dim::new(8), actual: Dim::new(7) })
     );
     assert_eq!(
         attrs.infer(&[&x, &w, &f32_type(&[1, 8])]),
