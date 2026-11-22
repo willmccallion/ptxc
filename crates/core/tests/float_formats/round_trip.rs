@@ -42,3 +42,15 @@ fn nan_encoding_counts_match_the_format_definitions() {
         assert_eq!(nans, count, "{} NaN encodings", codec.name);
     }
 }
+
+#[test]
+fn to_f32_is_the_exact_value_of_every_encoding() {
+    for codec in ALL {
+        for bits in all_encodings(codec) {
+            let exact = (codec.decode)(bits);
+            let as_f32 = f64::from((codec.decode_f32)(bits));
+            let agrees = as_f32 == exact || (as_f32.is_nan() && exact.is_nan());
+            assert!(agrees, "{} {bits:#x}: to_f32 gives {as_f32}, exact is {exact}", codec.name);
+        }
+    }
+}
