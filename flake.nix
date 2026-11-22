@@ -22,8 +22,6 @@
           rust-analyzer
           clippy
           rustfmt
-          # protoc, for `cargo xtask proto` only; normal builds use the committed bindings.
-          protobuf
           # Python baselines in baselines/.
           uv
           # ptxas, as a test-only checker of emitted PTX; never on the compiler path.
