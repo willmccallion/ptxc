@@ -24,6 +24,10 @@ pub use attr::F32Attr;
 pub use conv::{ConvAttrs, Groups};
 pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
 pub use matmul::{GemmAttrs, Orientation};
+pub use norm::{
+    BatchNormAttrs, InstanceNormAttrs, LayerNormAttrs, LayerNormKind, NormOutputs, SoftmaxAttrs,
+    SoftmaxKind, StashType,
+};
 pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
 pub use reduce::{ArgKind, ArgReduceAttrs, KeepDims, ReduceAttrs, ReduceOp, TieBreak};
 pub use type_error::{OperandCount, TypeError};
@@ -67,6 +71,14 @@ pub enum Op {
     Reduce(ReduceAttrs),
     /// `ArgMax` or `ArgMin` along one axis.
     ArgReduce(ArgReduceAttrs),
+    /// `Softmax` or `LogSoftmax` along one axis.
+    Softmax(SoftmaxAttrs),
+    /// Layer or RMS normalisation over the trailing axes.
+    LayerNorm(LayerNormAttrs),
+    /// Inference-mode batch normalisation.
+    BatchNorm(BatchNormAttrs),
+    /// Instance normalisation.
+    InstanceNorm(InstanceNormAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -93,6 +105,10 @@ impl TypeRule for Op {
             Self::GlobalPool(kind) => kind.infer(operands),
             Self::Reduce(attrs) => attrs.infer(operands),
             Self::ArgReduce(attrs) => attrs.infer(operands),
+            Self::Softmax(attrs) => attrs.infer(operands),
+            Self::LayerNorm(attrs) => attrs.infer(operands),
+            Self::BatchNorm(attrs) => attrs.infer(operands),
+            Self::InstanceNorm(attrs) => attrs.infer(operands),
         }
     }
 }
