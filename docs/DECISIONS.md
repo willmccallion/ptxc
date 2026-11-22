@@ -379,3 +379,35 @@ the old one.
     GitHub's tag archives are generated on demand and changed once (2023);
   - v1.22.0 covers default-domain opsets up to 27. v1.23 adds opset 28, so
     only operator versions introduced in opset 28 lack node tests here.
+
+## D32. Canonical forms in the graph IR
+
+- **Context:** ONNX often has several ways to say one thing: optional
+  operands, defaulted attributes, tensors that are constants in practice,
+  and ops that differ only in how they compute a shape. Every pass, the
+  interpreter and lowering would otherwise handle each variant.
+- **Choice:** the importer (M1 task 8) resolves each op to one form, and
+  type rules accept only that form:
+  - shape-like operands become attributes, since static shapes (D3) make
+    them constants: `Reshape` and `Expand` targets, `Slice` bounds, `Pad`
+    widths, `Tile` repeats, `Split` sizes, `Trilu`'s `k`, `Resize` scales
+    and sizes, and quantization scales and zero points;
+  - `Squeeze`, `Unsqueeze` and `Flatten` become `Reshape`, as XLA's HLO has
+    only reshape;
+  - derived values are resolved once:
+    - `auto_pad` into explicit pads;
+    - reduction axes into an explicit list;
+    - `Slice` into a start, step and length per axis;
+    - `Split`'s `num_outputs` into sizes;
+    - negative `Pad` widths into a `Slice`;
+  - optional operands get their defaults: `Clip` always has both bounds, and
+    constant `Pad` always has its value;
+  - attributes that only matter in one case are normalised elsewhere, so
+    equal ops compare equal (`Cast` and `Quantize` keep `saturate` for FP8
+    targets only);
+  - `Attention` follows ONNX's `Attention` op, which the M6 matcher also
+    produces, rather than a separate ptxc op.
+- **Reason:** one form per op means the interpreter, lowering and every
+  rewrite rule handle one case, and structural equality (CSE) sees equal
+  ops as equal.
+

@@ -119,16 +119,19 @@ pub enum Use {                             // graph outputs are uses, so "no use
 pub struct TensorType { dtype: DType, shape: Shape, layout: Layout }   // Layout::RowMajor until M4's layout pass
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub enum Op {
-    Unary(UnaryOp), Binary(BinaryOp), Cast(DType), Where,
-    Activation(Activation),
-    MatMul(MatMulAttrs), Gemm(GemmAttrs),
-    Conv(ConvAttrs), Pool(PoolAttrs),
-    Reduce(ReduceAttrs), Softmax(SoftmaxAttrs), Norm(NormAttrs),
-    Reshape(Shape), Transpose(Permutation), Concat(Axis), Slice(SliceAttrs), /* ... */
-    Gather(GatherAttrs),
-    Quantize(QuantParams), Dequantize(QuantParams), QMatMul(QMatMulAttrs), QConv(QConvAttrs),
-    Attention(AttentionAttrs),             // produced only by the matcher (M6)
+pub enum Op {                              // canonical forms: D32
+    Unary(UnaryOp), Binary(BinaryOp), Variadic(VariadicOp), Where, Cast(CastAttrs),
+    Activation(Activation), Clip, PRelu,
+    MatMul, Gemm(GemmAttrs),
+    Conv(ConvAttrs), Pool(PoolAttrs), GlobalPool(GlobalPoolKind),
+    Reduce(ReduceAttrs), ArgReduce(ArgReduceAttrs),
+    Softmax(SoftmaxAttrs), LayerNorm(LayerNormAttrs), BatchNorm(BatchNormAttrs), InstanceNorm(InstanceNormAttrs),
+    Reshape(Shape), Expand(Shape), Transpose(TransposeAttrs), Tile(TileAttrs), Concat(Axis),
+    Slice(SliceAttrs), Split(SplitAttrs), Pad(PadAttrs), Trilu(TriluAttrs),
+    Gather(Axis), GatherElements(Axis),
+    Quantize(QuantizeAttrs), Dequantize(DequantizeAttrs), QMatMul(QMatMulAttrs), QConv(QConvAttrs),
+    Resize(ResizeAttrs),
+    Attention(AttentionAttrs),             // ONNX's Attention; the M6 matcher produces it too
 }
 
 pub trait TypeRule {
