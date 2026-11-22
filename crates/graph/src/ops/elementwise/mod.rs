@@ -9,7 +9,7 @@ pub use binary::{BinaryOp, ModKind};
 pub use cast::CastAttrs;
 pub use unary::{InfDetection, UnaryOp};
 pub use variadic::VariadicOp;
-pub(super) use variadic::infer_where;
+pub(in crate::ops) use variadic::infer_where;
 
 use super::TypeError;
 use crate::tensor_type::TensorType;
@@ -32,7 +32,7 @@ fn broadcast_same_dtype(operands: &[&TensorType]) -> Result<(DType, Shape), Type
 
 /// ONNX multidirectional broadcasting, as numpy: shapes are aligned at the
 /// innermost axis, and each pair of dims must be equal or include a 1.
-fn broadcast(lhs: &Shape, rhs: &Shape) -> Result<Shape, TypeError> {
+pub(in crate::ops) fn broadcast(lhs: &Shape, rhs: &Shape) -> Result<Shape, TypeError> {
     let rank = lhs.rank().max(rhs.rank()).get();
     let innermost_first: Option<Vec<Dim>> = padded_from_innermost(lhs)
         .zip(padded_from_innermost(rhs))

@@ -15,8 +15,8 @@ pub(super) enum Accepts {
     Float,
     /// Signed and unsigned integers.
     Integer,
-    /// Floats, i32 and i64: the bases ONNX `Pow` takes.
-    PowBase,
+    /// Floats, i32 and i64: what ONNX `Pow` bases and `PRelu` take.
+    FloatOrWideInt,
     /// Bool only.
     Bool,
     /// Numeric types and bool.
@@ -34,7 +34,7 @@ impl Accepts {
             Self::SignedNumeric => float || signed,
             Self::Float => float,
             Self::Integer => signed || unsigned,
-            Self::PowBase => float || matches!(dtype, DType::I32 | DType::I64),
+            Self::FloatOrWideInt => float || matches!(dtype, DType::I32 | DType::I64),
             Self::Bool => boolean,
             Self::NumericOrBool => float || signed || unsigned || boolean,
         }
