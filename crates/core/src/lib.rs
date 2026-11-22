@@ -2,7 +2,7 @@
 
 mod dtype;
 mod evaluate;
-mod float8;
+pub mod float;
 mod index;
 mod quant;
 mod shape;
