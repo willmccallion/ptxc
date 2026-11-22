@@ -2,7 +2,7 @@
 
 use super::accepts::Accepts;
 use super::attr::F32Attr;
-use super::elementwise::broadcast;
+use super::elementwise::broadcast_to;
 use super::{TypeError, TypeRule, exact_operands};
 use crate::tensor_type::{Layout, TensorType};
 
@@ -113,9 +113,6 @@ pub(super) fn infer_prelu(operands: &[&TensorType]) -> Result<Vec<TensorType>, T
     if slope.dtype() != input.dtype() {
         return Err(TypeError::MixedDTypes { lhs: input.dtype(), rhs: slope.dtype() });
     }
-    if broadcast(input.shape(), slope.shape()).as_ref() != Ok(input.shape()) {
-        let (from, to) = (slope.shape().clone(), input.shape().clone());
-        return Err(TypeError::NotUnidirectional { from, to });
-    }
+    broadcast_to(slope.shape(), input.shape())?;
     Ok(vec![TensorType::new(input.dtype(), input.shape().clone(), Layout::RowMajor)])
 }
