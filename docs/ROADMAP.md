@@ -2,7 +2,8 @@
 
 Each milestone ends with a demo that can be run and exit criteria that are
 measured, not asserted. README numbers change only at milestones, from
-committed code.
+committed code. The first release, v0.1.0, follows M6; M7 and everything
+under Later come after it.
 
 The percentage targets for M3 to M6 are goals to calibrate against once M2
 gives us real measurements. They will be revised in DECISIONS.md, with the
@@ -40,7 +41,7 @@ opset, control flow).
    `data/onnx/<tag>/node/`, and check a recorded SHA-256 of the archive.
 5. **graph: IR.** Arenas, `Value`/`Node`, `Rewriter`, the verifier, and
    topological traversal.
-6. **graph: ops.** The `Op` enum and `TypeRule` for the v1 op families:
+6. **graph: ops.** The `Op` enum and `TypeRule` for the v0.1.0 op families:
    elementwise, activation, matmul, conv, pool, reduce, norm, shape, gather,
    quant.
 7. **graph: text format.** Printer and parser, with round-trip tests.
@@ -58,7 +59,7 @@ opset, control flow).
 
 **Exit criteria**
 
-- Every node test whose ops and dtypes are in the v1 set passes on the
+- Every node test whose ops and dtypes are in the v0.1.0 set passes on the
   interpreter, at the suite's own tolerance (rtol 1e-3, atol 1e-7).
 - Every test outside the set is reported as unsupported with a specific
   reason. The list of unsupported tests is reviewed and recorded in
@@ -100,7 +101,7 @@ runs end to end on the GPU from the CLI.
    `Compilation<S>` pipeline with no graph optimisation yet, and a trivial
    memory plan (one allocation per buffer).
 10. **runtime.** Load, `Executor<Eager>`, and `Evaluate`.
-11. **testkit: generator.** The seeded random graph generator over the v1 op
+11. **testkit: generator.** The seeded random graph generator over the v0.1.0 op
     set and the shrinker.
 12. **cli.** `ptxc compile`, `ptxc run`, `ptxc fuzz` and
     `ptxc conformance --backend gpu`.
