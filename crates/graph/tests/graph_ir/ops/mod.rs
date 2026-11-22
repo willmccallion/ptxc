@@ -9,4 +9,5 @@ mod norm;
 mod pool;
 mod quant;
 mod reduce;
+mod resize;
 mod shape;
