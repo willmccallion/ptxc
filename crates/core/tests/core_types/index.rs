@@ -62,6 +62,15 @@ fn ids_lists_every_id_in_order() {
 }
 
 #[test]
+fn into_iter_yields_the_elements_in_id_order() {
+    let elements: IndexVec<TestId, char> = "abc".chars().collect();
+
+    let owned: String = elements.into_iter().collect();
+
+    assert_eq!(owned, "abc");
+}
+
+#[test]
 fn new_vector_is_empty() {
     assert!(IndexVec::<TestId, char>::new().is_empty());
 }
