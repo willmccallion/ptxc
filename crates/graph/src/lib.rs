@@ -18,13 +18,13 @@ pub use graph::{Graph, NodeError};
 pub use node::{Node, NodeId, NodeOutputIndex, OperandIndex};
 pub use ops::{
     Activation, ArgKind, ArgReduceAttrs, AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs,
-    ConvAttrs, DiagonalOffset, Dilation, F32Attr, GeluApproximation, GemmAttrs, GlobalPoolKind,
-    Groups, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs, LayerNormKind, ModKind,
-    NormOutputs, Op, OperandCount, Orientation, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs,
-    PoolAxis, PoolKind, ReduceAttrs, ReduceOp, RepeatCount, Rounding, SliceAttrs, SliceAxis,
-    SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak, TileAttrs,
-    TransposeAttrs, TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp, VariadicOp,
-    WindowAxis,
+    ConvAttrs, DequantizeAttrs, DiagonalOffset, Dilation, F32Attr, GeluApproximation, GemmAttrs,
+    GlobalPoolKind, Groups, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs,
+    LayerNormKind, ModKind, NormOutputs, Op, OperandCount, Orientation, PadAttrs, PadCounting,
+    PadMode, Padding, PoolAttrs, PoolAxis, PoolKind, QConvAttrs, QMatMulAttrs, QuantizeAttrs,
+    ReduceAttrs, ReduceOp, RepeatCount, Rounding, SliceAttrs, SliceAxis, SliceStep, SoftmaxAttrs,
+    SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak, TileAttrs, TransposeAttrs,
+    TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp, VariadicOp, WindowAxis,
 };
 pub use rewrite::{RewriteError, Rewriter};
 pub use tensor_type::{Layout, TensorType};

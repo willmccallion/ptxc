@@ -29,6 +29,7 @@ pub use norm::{
     SoftmaxKind, StashType,
 };
 pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
+pub use quant::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QuantizeAttrs};
 pub use reduce::{ArgKind, ArgReduceAttrs, KeepDims, ReduceAttrs, ReduceOp, TieBreak};
 pub use shape::{
     AxisPadding, DiagonalOffset, PadAttrs, PadMode, RepeatCount, SliceAttrs, SliceAxis, SliceStep,
@@ -105,6 +106,14 @@ pub enum Op {
     Gather(Axis),
     /// Single elements of data selected along an axis by an index tensor.
     GatherElements(Axis),
+    /// A float tensor rounded onto a quantization grid.
+    Quantize(QuantizeAttrs),
+    /// A quantized tensor mapped back to floats.
+    Dequantize(DequantizeAttrs),
+    /// A matrix product on quantized tensors.
+    QMatMul(QMatMulAttrs),
+    /// A convolution on quantized tensors.
+    QConv(QConvAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -146,6 +155,10 @@ impl TypeRule for Op {
             Self::Trilu(attrs) => attrs.infer(operands),
             Self::Gather(axis) => gather::infer_gather(*axis, operands),
             Self::GatherElements(axis) => gather::infer_gather_elements(*axis, operands),
+            Self::Quantize(attrs) => attrs.infer(operands),
+            Self::Dequantize(attrs) => attrs.infer(operands),
+            Self::QMatMul(attrs) => attrs.infer(operands),
+            Self::QConv(attrs) => attrs.infer(operands),
         }
     }
 }

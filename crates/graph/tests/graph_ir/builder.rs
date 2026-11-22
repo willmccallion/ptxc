@@ -70,7 +70,7 @@ fn a_type_error_names_the_op() {
     let error = builder.add_node(unary(UnaryOp::Not), vec![x]).unwrap_err();
 
     let expected = NodeError::Type {
-        op: unary(UnaryOp::Not),
+        op: Box::new(unary(UnaryOp::Not)),
         source: TypeError::UnsupportedDType(DType::F32),
     };
     assert_eq!(error, expected);

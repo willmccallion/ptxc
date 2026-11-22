@@ -103,6 +103,17 @@ pub enum TypeError {
     /// Copy-based padding of an axis with no elements to copy.
     #[error("axis {} is empty, so only constant padding can grow it", .0.index())]
     PaddedEmptyAxis(Axis),
+    /// Per-axis quantization parameters without one map per element along
+    /// their axis.
+    #[error("axis {} has {} elements but {maps} quantization maps", .axis.index(), .dim.get())]
+    QuantMapCount {
+        /// The quantized axis.
+        axis: Axis,
+        /// Its extent.
+        dim: Dim,
+        /// The number of maps.
+        maps: usize,
+    },
     /// A window with a zero-length kernel.
     #[error("the kernel has a zero-length axis")]
     EmptyKernel,
