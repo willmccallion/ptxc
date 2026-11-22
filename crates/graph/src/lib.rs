@@ -17,13 +17,14 @@ pub use builder::GraphBuilder;
 pub use graph::{Graph, NodeError};
 pub use node::{Node, NodeId, NodeOutputIndex, OperandIndex};
 pub use ops::{
-    Activation, ArgKind, ArgReduceAttrs, AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs,
-    ConvAttrs, DequantizeAttrs, DiagonalOffset, Dilation, F32Attr, GeluApproximation, GemmAttrs,
-    GlobalPoolKind, Groups, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs,
-    LayerNormKind, ModKind, NormOutputs, Op, OperandCount, Orientation, PadAttrs, PadCounting,
-    PadMode, Padding, PoolAttrs, PoolAxis, PoolKind, QConvAttrs, QMatMulAttrs, QuantizeAttrs,
-    ReduceAttrs, ReduceOp, RepeatCount, Rounding, SliceAttrs, SliceAxis, SliceStep, SoftmaxAttrs,
-    SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak, TileAttrs, TransposeAttrs,
+    Activation, Antialias, ArgKind, ArgReduceAttrs, AxisPadding, BatchNormAttrs, BinaryOp,
+    CastAttrs, ConvAttrs, CoordinateTransform, DequantizeAttrs, DiagonalOffset, Dilation, F32Attr,
+    GeluApproximation, GemmAttrs, GlobalPoolKind, Groups, InfDetection, InstanceNormAttrs,
+    KeepDims, LayerNormAttrs, LayerNormKind, ModKind, NearestRounding, NormOutputs, Op,
+    OperandCount, Orientation, OutsideWeights, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs,
+    PoolAxis, PoolKind, QConvAttrs, QMatMulAttrs, QuantizeAttrs, ReduceAttrs, ReduceOp,
+    RepeatCount, ResizeAttrs, ResizeAxis, ResizeMode, Rounding, SliceAttrs, SliceAxis, SliceStep,
+    SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak, TileAttrs, TransposeAttrs,
     TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp, VariadicOp, WindowAxis,
 };
 pub use rewrite::{RewriteError, Rewriter};

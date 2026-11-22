@@ -15,6 +15,7 @@ mod norm;
 mod pool;
 mod quant;
 mod reduce;
+mod resize;
 mod shape;
 mod type_error;
 mod window;
@@ -31,6 +32,10 @@ pub use norm::{
 pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
 pub use quant::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QuantizeAttrs};
 pub use reduce::{ArgKind, ArgReduceAttrs, KeepDims, ReduceAttrs, ReduceOp, TieBreak};
+pub use resize::{
+    Antialias, CoordinateTransform, NearestRounding, OutsideWeights, ResizeAttrs, ResizeAxis,
+    ResizeMode,
+};
 pub use shape::{
     AxisPadding, DiagonalOffset, PadAttrs, PadMode, RepeatCount, SliceAttrs, SliceAxis, SliceStep,
     SplitAttrs, TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs,
@@ -114,6 +119,8 @@ pub enum Op {
     QMatMul(QMatMulAttrs),
     /// A convolution on quantized tensors.
     QConv(QConvAttrs),
+    /// Interpolation to new sizes.
+    Resize(ResizeAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -159,6 +166,7 @@ impl TypeRule for Op {
             Self::Dequantize(attrs) => attrs.infer(operands),
             Self::QMatMul(attrs) => attrs.infer(operands),
             Self::QConv(attrs) => attrs.infer(operands),
+            Self::Resize(attrs) => attrs.infer(operands),
         }
     }
 }
