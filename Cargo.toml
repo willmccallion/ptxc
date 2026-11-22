@@ -91,6 +91,8 @@ module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
 similar_names = "allow"
+# Conflicts with the `unreachable_pub` lint, which asks for pub(crate) in private modules.
+redundant_pub_crate = "allow"
 
 [workspace.lints.rustdoc]
 all = "deny"
