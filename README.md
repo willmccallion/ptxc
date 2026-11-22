@@ -52,7 +52,7 @@ structures and the crate boundaries.
 ## Development
 
 The dev shell (`direnv allow`, or `nix develop`) provides the pinned Rust
-toolchain, protoc, uv and ptxas.
+toolchain, uv and ptxas.
 
 ```sh
 cargo build

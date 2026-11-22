@@ -335,3 +335,21 @@ the old one.
   decided at M5, when the autotuner exists to compare.
 - **Reason:** the comparison only means something against a working
   tuner, and building TVM costs time that M1 to M4 don't need to spend.
+
+## D30. onnx.proto committed and parsed by protox
+
+- **Refines:** D7, which stays otherwise: prost-build generates the code,
+  and `generated.rs` is committed and checked by CI.
+- **Options:** for the source, download `onnx.proto` at the pinned tag or
+  commit a copy; for the parser, protoc or protox, a protobuf compiler
+  written in Rust.
+- **Choice:**
+  - `crates/onnx-proto/proto/onnx.proto` is ONNX v1.23.2's file, committed
+    unchanged. An ONNX upgrade replaces it and the tag in `xtask`;
+  - `cargo xtask proto` parses it with protox and passes the descriptors to
+    prost-build. protoc is no longer in the flake.
+- **Reason:**
+  - regenerating needs no network, and an upgrade shows up as a diff of the
+    `.proto` itself;
+  - protox and prost-build are both locked in `Cargo.lock`, so local and CI
+    regeneration produce the same bytes, and CI installs nothing.
