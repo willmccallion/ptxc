@@ -7,3 +7,4 @@ mod matmul;
 mod norm;
 mod pool;
 mod reduce;
+mod shape;

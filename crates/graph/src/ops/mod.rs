@@ -30,11 +30,15 @@ pub use norm::{
 };
 pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
 pub use reduce::{ArgKind, ArgReduceAttrs, KeepDims, ReduceAttrs, ReduceOp, TieBreak};
+pub use shape::{
+    AxisPadding, DiagonalOffset, PadAttrs, PadMode, RepeatCount, SliceAttrs, SliceAxis, SliceStep,
+    SplitAttrs, TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs,
+};
 pub use type_error::{OperandCount, TypeError};
 pub use window::{Dilation, Padding, Rounding, Stride, WindowAxis};
 
 use crate::tensor_type::TensorType;
-use ptxc_core::{Axis, DType, Shape};
+use ptxc_core::{Axis, DType, Rank, Shape};
 
 /// An operation on tensors. Attribute payloads are `Eq + Hash` (D2), so
 /// structurally equal nodes can be found by hashing.
@@ -79,6 +83,24 @@ pub enum Op {
     BatchNorm(BatchNormAttrs),
     /// Instance normalisation.
     InstanceNorm(InstanceNormAttrs),
+    /// The same elements in a new shape.
+    Reshape(Shape),
+    /// Broadcast with a target shape.
+    Expand(Shape),
+    /// A permutation of the axes.
+    Transpose(TransposeAttrs),
+    /// Each axis repeated.
+    Tile(TileAttrs),
+    /// Operands joined along an axis.
+    Concat(Axis),
+    /// A strided sub-range of some axes.
+    Slice(SliceAttrs),
+    /// Consecutive pieces of an axis, one output each.
+    Split(SplitAttrs),
+    /// Elements added at the ends of each axis.
+    Pad(PadAttrs),
+    /// The upper or lower triangle of the last two axes.
+    Trilu(TriluAttrs),
 }
 
 /// Infers an op's output types from its operand types.
@@ -109,6 +131,15 @@ impl TypeRule for Op {
             Self::LayerNorm(attrs) => attrs.infer(operands),
             Self::BatchNorm(attrs) => attrs.infer(operands),
             Self::InstanceNorm(attrs) => attrs.infer(operands),
+            Self::Reshape(target) => shape::infer_reshape(target, operands),
+            Self::Expand(target) => shape::infer_expand(target, operands),
+            Self::Transpose(attrs) => attrs.infer(operands),
+            Self::Tile(attrs) => attrs.infer(operands),
+            Self::Concat(axis) => shape::infer_concat(*axis, operands),
+            Self::Slice(attrs) => attrs.infer(operands),
+            Self::Split(attrs) => attrs.infer(operands),
+            Self::Pad(attrs) => attrs.infer(operands),
+            Self::Trilu(attrs) => attrs.infer(operands),
         }
     }
 }
@@ -137,6 +168,15 @@ const fn check_axis(shape: &Shape, axis: Axis) -> Result<(), TypeError> {
         Ok(())
     } else {
         Err(TypeError::AxisOutOfRange { axis, rank: shape.rank() })
+    }
+}
+
+/// Checks that `shape` has rank `expected`.
+fn require_rank(shape: &Shape, expected: Rank) -> Result<(), TypeError> {
+    if shape.rank() == expected {
+        Ok(())
+    } else {
+        Err(TypeError::Rank { expected, actual: shape.rank() })
     }
 }
 
