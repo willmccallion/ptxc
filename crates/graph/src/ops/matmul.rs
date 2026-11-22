@@ -65,7 +65,7 @@ fn matmul_dtype(a: &TensorType, b: &TensorType) -> Result<DType, TypeError> {
     Ok(a.dtype())
 }
 
-fn matmul_shape(a: &Shape, b: &Shape) -> Result<Shape, TypeError> {
+pub(super) fn matmul_shape(a: &Shape, b: &Shape) -> Result<Shape, TypeError> {
     let (a_batch, [m, k_a]) = split_matrix(a, Side::Left)?;
     let (b_batch, [k_b, n]) = split_matrix(b, Side::Right)?;
     if k_a != k_b {

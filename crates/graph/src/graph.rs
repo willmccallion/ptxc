@@ -16,8 +16,8 @@ pub enum NodeError {
     /// Operands the op's type rule rejects.
     #[error("{op:?}: {source}")]
     Type {
-        /// The op.
-        op: Op,
+        /// The op, boxed so the error stays small.
+        op: Box<Op>,
         /// Why its type rule rejected the operands.
         source: TypeError,
     },
@@ -131,7 +131,7 @@ impl Graph {
                 if self.is_live(id) { Ok(&self.values[id].ty) } else { Err(NodeError::NotLive(id)) }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        op.infer(&types).map_err(|source| NodeError::Type { op: op.clone(), source })
+        op.infer(&types).map_err(|source| NodeError::Type { op: Box::new(op.clone()), source })
     }
 
     fn push_value(&mut self, ty: TensorType, def: ValueDef) -> ValueId {

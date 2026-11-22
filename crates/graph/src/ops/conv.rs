@@ -44,22 +44,29 @@ impl TypeRule for ConvAttrs {
         let ([input, weights], bias) = operands_with_optional(operands)?;
         Accepts::Float.check(input.dtype())?;
         require_dtype(input.dtype(), weights)?;
-        let rank = Rank::new(self.axes.len() + 2);
-        let (batch, channels, spatial) = split_leading_two(input.shape(), rank)?;
-        let (filters, group_channels, kernel) = split_leading_two(weights.shape(), rank)?;
-        self.check_channels(channels, filters, group_channels)?;
+        let shape = self.output_shape(input.shape(), weights.shape())?;
         if let Some(bias) = bias {
-            check_bias(bias, input.dtype(), filters)?;
+            check_bias(bias, input.dtype(), shape.dims()[1])?;
         }
-        let mut dims = vec![batch, filters];
-        for ((&extent, &kernel), &axis) in spatial.iter().zip(kernel).zip(&self.axes) {
-            dims.push(output_extent(extent, kernel, axis, Rounding::Floor)?);
-        }
-        Ok(vec![TensorType::new(input.dtype(), Shape::new(dims)?, Layout::RowMajor)])
+        Ok(vec![TensorType::new(input.dtype(), shape, Layout::RowMajor)])
     }
 }
 
 impl ConvAttrs {
+    /// The output shape for an input and weights of these shapes, whatever
+    /// their element types.
+    pub(super) fn output_shape(&self, input: &Shape, weights: &Shape) -> Result<Shape, TypeError> {
+        let rank = Rank::new(self.axes.len() + 2);
+        let (batch, channels, spatial) = split_leading_two(input, rank)?;
+        let (filters, group_channels, kernel) = split_leading_two(weights, rank)?;
+        self.check_channels(channels, filters, group_channels)?;
+        let mut dims = vec![batch, filters];
+        for ((&extent, &kernel), &axis) in spatial.iter().zip(kernel).zip(&self.axes) {
+            dims.push(output_extent(extent, kernel, axis, Rounding::Floor)?);
+        }
+        Ok(Shape::new(dims)?)
+    }
+
     /// `C` must be `W`'s channels times the groups, and the groups must
     /// divide `M`.
     fn check_channels(
@@ -84,7 +91,7 @@ impl ConvAttrs {
     }
 }
 
-fn check_bias(bias: &TensorType, dtype: DType, filters: Dim) -> Result<(), TypeError> {
+pub(super) fn check_bias(bias: &TensorType, dtype: DType, filters: Dim) -> Result<(), TypeError> {
     require_dtype(dtype, bias)?;
     match *bias.shape().dims() {
         [length] if length == filters => Ok(()),
