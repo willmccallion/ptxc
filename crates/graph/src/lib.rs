@@ -8,7 +8,7 @@ mod ops;
 mod partition;
 mod rewrite;
 mod tensor_type;
-mod text;
+pub mod text;
 mod traverse;
 mod value;
 mod verify;

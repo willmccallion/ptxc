@@ -7,4 +7,5 @@ mod builder;
 mod common;
 mod ops;
 mod rewrite;
+mod text;
 mod traverse;
