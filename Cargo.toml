@@ -36,6 +36,8 @@ keywords = ["compiler", "deep-learning", "gpu", "onnx", "ptx"]
 categories = ["compilers", "science"]
 
 [workspace.dependencies]
+thiserror = "2.0.21"
+
 ptxc-core = { path = "crates/core" }
 ptxc-target = { path = "crates/target" }
 ptxc-onnx-proto = { path = "crates/onnx-proto" }
