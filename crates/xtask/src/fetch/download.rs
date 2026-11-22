@@ -2,9 +2,9 @@
 
 use sha2::{Digest, Sha256};
 
-/// Larger than any archive we pin; a response past it is an error, not a
-/// truncated archive.
-const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024;
+/// 64 MiB, larger than any archive we pin; a response past it is an error,
+/// not a truncated archive.
+const MAX_ARCHIVE_BYTES: u64 = 67_108_864;
 
 /// The body of a GET of `url`; HTTP error statuses are errors.
 pub(super) fn download(url: &str) -> Result<Vec<u8>, ureq::Error> {

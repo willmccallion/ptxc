@@ -133,6 +133,26 @@ Accuracy budgets for the quantized models are set when QDQ models land (M6).
 - Rust never runs Python. If a cached reference is missing, the Rust side
   fails with the exact `uv run` command that produces it.
 
+## Test quality
+
+Passing tests show only that the code does what the tests check. Two tools
+show what they don't check.
+
+- **Mutation testing** (`p quality mutants`, which runs cargo-mutants) makes
+  small edits to the code, such as replacing a function body, flipping a
+  comparison or deleting a statement. It then lists every edit that all the
+  tests still pass.
+  - Run it before opening each pull request. After the first run it tests only
+    the previous survivors and changed code.
+  - Every surviving mutant is either killed by a new test, or excluded in
+    `.cargo/mutants.toml` with a comment saying why no test can see it (for
+    example, code that needs the network).
+- **Coverage** (`p quality cover`, which runs cargo llvm-cov) lists lines no
+  test runs, worst file first. It is a map of untested code, not a target to
+  reach: a line can run without anything checking its result, which is what
+  mutation testing catches. The flake points cargo llvm-cov at the LLVM tools
+  of rustc's own LLVM version.
+
 ## Rules
 
 - Every bug fix comes with a test that fails without it: a fixture from the
@@ -141,3 +161,5 @@ Accuracy budgets for the quantized models are set when QDQ models land (M6).
   network in `cargo test`.
 - Before refactoring a path, pin its behaviour with golden tests first and
   commit them.
+- No mutant survives a pull request unless `.cargo/mutants.toml` excludes it
+  with a reason.
