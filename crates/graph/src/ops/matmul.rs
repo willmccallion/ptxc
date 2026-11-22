@@ -3,7 +3,7 @@
 use super::accepts::Accepts;
 use super::attr::F32Attr;
 use super::elementwise::{broadcast, broadcast_to};
-use super::{OperandCount, TypeError, TypeRule, exact_operands};
+use super::{TypeError, TypeRule, exact_operands, operands_with_optional, require_dtype};
 use crate::tensor_type::{Layout, TensorType};
 use ptxc_core::{DType, Dim, Rank, Shape};
 
@@ -34,17 +34,7 @@ pub struct GemmAttrs {
 
 impl TypeRule for GemmAttrs {
     fn infer(&self, operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError> {
-        let (a, b, bias) = match *operands {
-            [a, b] => (a, b, None),
-            [a, b, c] => (a, b, Some(c)),
-            _ => {
-                return Err(TypeError::ArityBetween {
-                    min: OperandCount(2),
-                    max: OperandCount(3),
-                    actual: OperandCount(operands.len()),
-                });
-            }
-        };
+        let ([a, b], bias) = operands_with_optional(operands)?;
         let dtype = matmul_dtype(a, b)?;
         let [m, k_a] = oriented(a.shape(), self.a)?;
         let [k_b, n] = oriented(b.shape(), self.b)?;
@@ -71,9 +61,7 @@ pub(super) fn infer_matmul(operands: &[&TensorType]) -> Result<Vec<TensorType>, 
 
 fn matmul_dtype(a: &TensorType, b: &TensorType) -> Result<DType, TypeError> {
     Accepts::FloatOrWideInt.check(a.dtype())?;
-    if a.dtype() != b.dtype() {
-        return Err(TypeError::MixedDTypes { lhs: a.dtype(), rhs: b.dtype() });
-    }
+    require_dtype(a.dtype(), b)?;
     Ok(a.dtype())
 }
 
@@ -125,8 +113,6 @@ fn oriented(shape: &Shape, orientation: Orientation) -> Result<[Dim; 2], TypeErr
 }
 
 fn check_bias(bias: &TensorType, dtype: DType, product: &Shape) -> Result<(), TypeError> {
-    if bias.dtype() != dtype {
-        return Err(TypeError::MixedDTypes { lhs: dtype, rhs: bias.dtype() });
-    }
+    require_dtype(dtype, bias)?;
     broadcast_to(bias.shape(), product)
 }

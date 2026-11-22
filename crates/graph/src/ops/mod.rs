@@ -16,11 +16,15 @@ mod pool;
 mod quant;
 mod reduce;
 mod shape;
+mod window;
 
 pub use activation::{Activation, GeluApproximation};
 pub use attr::F32Attr;
+pub use conv::{ConvAttrs, Groups};
 pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
 pub use matmul::{GemmAttrs, Orientation};
+pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
+pub use window::{Dilation, Padding, Rounding, Stride, WindowAxis};
 
 use crate::tensor_type::TensorType;
 use ptxc_core::{DType, Dim, Rank, Shape, ShapeError};
@@ -51,6 +55,12 @@ pub enum Op {
     MatMul,
     /// `alpha * A' * B' + beta * C` on matrices.
     Gemm(GemmAttrs),
+    /// Grouped N-d convolution with an optional bias.
+    Conv(ConvAttrs),
+    /// Max or average pooling over sliding windows.
+    Pool(PoolAttrs),
+    /// Max or average over all spatial axes.
+    GlobalPool(GlobalPoolKind),
 }
 
 /// Infers an op's output types from its operand types.
@@ -72,6 +82,9 @@ impl TypeRule for Op {
             Self::PRelu => activation::infer_prelu(operands),
             Self::MatMul => matmul::infer_matmul(operands),
             Self::Gemm(attrs) => attrs.infer(operands),
+            Self::Conv(attrs) => attrs.infer(operands),
+            Self::Pool(attrs) => attrs.infer(operands),
+            Self::GlobalPool(kind) => kind.infer(operands),
         }
     }
 }
@@ -132,6 +145,44 @@ pub enum TypeError {
         /// The right operand's contracted dim.
         rhs: Dim,
     },
+    /// A window with a zero-length kernel.
+    #[error("the kernel has a zero-length axis")]
+    EmptyKernel,
+    /// A window larger than the padded input along an axis.
+    #[error("a kernel of {} does not fit an input of {} with its padding", .kernel.get(), .input.get())]
+    WindowTooLarge {
+        /// The input extent.
+        input: Dim,
+        /// The kernel extent.
+        kernel: Dim,
+    },
+    /// A convolution whose input channels are not the weights' channels
+    /// times the groups.
+    #[error("input has {} channels, but weights have {} per group in {} groups", .input.get(), .weights.get(), .groups.get())]
+    Channels {
+        /// The input's channels.
+        input: Dim,
+        /// The weights' channels per group.
+        weights: Dim,
+        /// The groups.
+        groups: Groups,
+    },
+    /// A convolution whose groups do not divide its filters.
+    #[error("{} groups do not divide {} filters", .groups.get(), .filters.get())]
+    FiltersNotDivisible {
+        /// The filters (output channels).
+        filters: Dim,
+        /// The groups.
+        groups: Groups,
+    },
+    /// A bias whose length is not the number of outputs it is added to.
+    #[error("expected a bias of length {}, got {}", .expected.get(), .actual.get())]
+    BiasLength {
+        /// The required length.
+        expected: Dim,
+        /// The bias's length.
+        actual: Dim,
+    },
     /// An op that needs at least one operand was given none.
     #[error("expected at least one operand")]
     NoOperands,
@@ -168,6 +219,33 @@ pub enum TypeError {
     /// An output shape that cannot exist.
     #[error(transparent)]
     Shape(#[from] ShapeError),
+}
+
+/// The operands as `N` required ones and an optional last one.
+fn operands_with_optional<'a, const N: usize>(
+    operands: &[&'a TensorType],
+) -> Result<([&'a TensorType; N], Option<&'a TensorType>), TypeError> {
+    let arity_error = || TypeError::ArityBetween {
+        min: OperandCount(N),
+        max: OperandCount(N + 1),
+        actual: OperandCount(operands.len()),
+    };
+    match operands.split_at_checked(N) {
+        Some((required, [])) => Ok((required.try_into().map_err(|_| arity_error())?, None)),
+        Some((required, [optional])) => {
+            Ok((required.try_into().map_err(|_| arity_error())?, Some(optional)))
+        }
+        _ => Err(arity_error()),
+    }
+}
+
+/// Checks that `operand` has the element type `expected`.
+fn require_dtype(expected: DType, operand: &TensorType) -> Result<(), TypeError> {
+    if operand.dtype() == expected {
+        Ok(())
+    } else {
+        Err(TypeError::MixedDTypes { lhs: expected, rhs: operand.dtype() })
+    }
 }
 
 /// The operands as an array of exactly `N`.

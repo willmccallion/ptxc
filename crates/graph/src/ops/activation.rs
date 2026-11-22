@@ -3,7 +3,7 @@
 use super::accepts::Accepts;
 use super::attr::F32Attr;
 use super::elementwise::broadcast_to;
-use super::{TypeError, TypeRule, exact_operands};
+use super::{TypeError, TypeRule, exact_operands, require_dtype};
 use crate::tensor_type::{Layout, TensorType};
 
 /// An activation on one tensor, keeping its type. Attributes are ONNX's,
@@ -95,9 +95,7 @@ pub(super) fn infer_clip(operands: &[&TensorType]) -> Result<Vec<TensorType>, Ty
     let [input, min, max] = exact_operands(operands)?;
     Accepts::Numeric.check(input.dtype())?;
     for bound in [min, max] {
-        if bound.dtype() != input.dtype() {
-            return Err(TypeError::MixedDTypes { lhs: input.dtype(), rhs: bound.dtype() });
-        }
+        require_dtype(input.dtype(), bound)?;
         if !bound.shape().dims().is_empty() {
             return Err(TypeError::NotScalar(bound.shape().clone()));
         }
@@ -110,9 +108,7 @@ pub(super) fn infer_clip(operands: &[&TensorType]) -> Result<Vec<TensorType>, Ty
 pub(super) fn infer_prelu(operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError> {
     let [input, slope] = exact_operands(operands)?;
     Accepts::FloatOrWideInt.check(input.dtype())?;
-    if slope.dtype() != input.dtype() {
-        return Err(TypeError::MixedDTypes { lhs: input.dtype(), rhs: slope.dtype() });
-    }
+    require_dtype(input.dtype(), slope)?;
     broadcast_to(slope.shape(), input.shape())?;
     Ok(vec![TensorType::new(input.dtype(), input.shape().clone(), Layout::RowMajor)])
 }

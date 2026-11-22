@@ -13,6 +13,8 @@ pub(super) enum Accepts {
     SignedNumeric,
     /// f32, f16 and bf16.
     Float,
+    /// Floats, i8 and u8: what ONNX `MaxPool` takes.
+    FloatOrInt8,
     /// Signed and unsigned integers.
     Integer,
     /// Floats, i32 and i64: what ONNX `Pow` bases and `PRelu` take.
@@ -33,6 +35,7 @@ impl Accepts {
             Self::Numeric => float || signed || unsigned,
             Self::SignedNumeric => float || signed,
             Self::Float => float,
+            Self::FloatOrInt8 => float || matches!(dtype, DType::I8 | DType::U8),
             Self::Integer => signed || unsigned,
             Self::FloatOrWideInt => float || matches!(dtype, DType::I32 | DType::I64),
             Self::Bool => boolean,
