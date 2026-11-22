@@ -1,5 +1,6 @@
 //! `TypeError`: why an op's type rule rejects its operands.
 
+use super::attention::HeadCount;
 use super::conv::Groups;
 use ptxc_core::{Axis, DType, Dim, Rank, Shape, ShapeError};
 use thiserror::Error;
@@ -113,6 +114,26 @@ pub enum TypeError {
         dim: Dim,
         /// The number of maps.
         maps: usize,
+    },
+    /// Attention's per-sample valid key counts used with a KV cache, which
+    /// ONNX does not allow.
+    #[error("nonpad_kv_seqlen cannot be used with past or present key and value")]
+    NonpadWithCache,
+    /// Key and value heads that do not divide the query heads.
+    #[error("{} key and value heads do not divide {} query heads", .kv_heads.get(), .q_heads.get())]
+    HeadsNotDivisible {
+        /// Query heads.
+        q_heads: Dim,
+        /// Key and value heads.
+        kv_heads: Dim,
+    },
+    /// A packed hidden axis that does not divide into its heads.
+    #[error("hidden size {} does not divide into {} heads", .hidden.get(), .heads.get())]
+    HiddenNotDivisible {
+        /// The hidden axis's extent.
+        hidden: Dim,
+        /// The heads.
+        heads: HeadCount,
     },
     /// A window with a zero-length kernel.
     #[error("the kernel has a zero-length axis")]
