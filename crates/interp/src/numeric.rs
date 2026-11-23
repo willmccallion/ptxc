@@ -4,6 +4,7 @@
 //! wrapping, as NumPy narrows.
 
 use crate::error::{InterpError, Malformed};
+pub(crate) use ptxc_core::convert::{f64_to_f32, int_to_f32, int_to_f64, truncate};
 use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
 use ptxc_core::{DType, TensorData};
 
@@ -123,35 +124,6 @@ pub(crate) fn store_ints(values: &[i64], dtype: DType) -> Result<TensorData, Int
 pub(crate) fn saturate_ints(values: &[i64], dtype: DType) -> Result<TensorData, InterpError> {
     let (low, high) = int_range(dtype)?;
     store_ints(&values.iter().map(|&v| v.clamp(low, high)).collect::<Vec<_>>(), dtype)
-}
-
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "f64 to f32 rounds to nearest-even, as D19 asks"
-)]
-pub(crate) const fn f64_to_f32(value: f64) -> f32 {
-    value as f32
-}
-
-/// `value` truncated toward zero; out of range saturates and NaN gives 0.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "Rust's float-to-int cast truncates and saturates"
-)]
-pub(crate) const fn truncate(value: f64) -> i64 {
-    value as i64
-}
-
-/// An integer as the nearest f64; exact below 2^53.
-#[expect(clippy::cast_precision_loss, reason = "rounds to nearest-even, as ONNX Cast does")]
-pub(crate) const fn int_to_f64(value: i64) -> f64 {
-    value as f64
-}
-
-/// An integer as the nearest f32, rounded once.
-#[expect(clippy::cast_precision_loss, reason = "rounds to nearest-even, as ONNX Cast does")]
-pub(crate) const fn int_to_f32(value: i64) -> f32 {
-    value as f32
 }
 
 #[expect(clippy::cast_possible_truncation, reason = "wrapping is how NumPy narrows integers")]
