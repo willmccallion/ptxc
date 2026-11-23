@@ -3,6 +3,6 @@
 pub mod compare;
 mod data;
 mod generate;
-mod golden;
+pub mod golden;
 mod onnx_tests;
 mod shrink;
