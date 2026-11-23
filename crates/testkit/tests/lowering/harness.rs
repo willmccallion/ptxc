@@ -4,7 +4,7 @@
 use ptxc_core::{DType, Evaluate, HostTensor, Idx};
 use ptxc_graph::{Graph, Partitioned, ValueDef, ValueId};
 use ptxc_interp::Interpreter;
-use ptxc_loop::{RunError, Schedule};
+use ptxc_loop::RunError;
 use ptxc_lower::{Binding, IntermediateId, LoweredGroup};
 use ptxc_target::{SmVersion, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// `graph`'s outputs for `inputs`, each group lowered and each stage run
-/// under its default schedule.
+/// under its default schedule, threads and blocks bound.
 pub(crate) fn run_lowered(
     graph: Graph,
     inputs: &[HostTensor],
@@ -33,8 +33,8 @@ pub(crate) fn run_lowered(
         for stage in group.stages() {
             let arguments: Vec<HostTensor> =
                 stage.inputs().iter().map(|&binding| tensors.read(binding)).collect();
-            let schedule = Schedule::new(Arc::clone(stage.compute()));
-            let kernel = schedule.validate(&target).unwrap().lower();
+            let schedule = ptxc_schedule::default_schedule(Arc::clone(stage.compute()), &target);
+            let kernel = schedule.unwrap().lower();
             let outputs = ptxc_loop::run(&kernel, &arguments)?;
             for (&binding, flat) in stage.outputs().iter().zip(outputs) {
                 tensors.write(group, binding, &flat);

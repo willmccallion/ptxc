@@ -1036,6 +1036,7 @@ dependencies = [
  "ptxc-lower",
  "ptxc-onnx",
  "ptxc-onnx-proto",
+ "ptxc-schedule",
  "ptxc-target",
  "sha2",
  "tempfile",

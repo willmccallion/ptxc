@@ -29,5 +29,6 @@ thiserror.workspace = true
 proptest.workspace = true
 ptxc-loop.workspace = true
 ptxc-lower.workspace = true
+ptxc-schedule.workspace = true
 ptxc-target.workspace = true
 tempfile.workspace = true
