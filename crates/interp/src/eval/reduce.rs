@@ -95,9 +95,10 @@ fn reduce_floats(op: ReduceOp, values: impl Iterator<Item = f64> + Clone) -> f64
     }
 }
 
-/// `ln(sum(e^x))` shifted by the maximum, so large inputs cannot overflow.
+/// `ln(sum(e^x))` shifted by the maximum, so large inputs cannot overflow;
+/// NaN anywhere gives NaN, as the unshifted formula does.
 fn log_sum_exp(values: impl Iterator<Item = f64> + Clone) -> f64 {
-    let max = values.clone().fold(f64::NEG_INFINITY, f64::max);
+    let max = values.clone().fold(f64::NEG_INFINITY, maximum);
     if max.is_infinite() {
         return max;
     }
