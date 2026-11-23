@@ -3,6 +3,7 @@
 
 mod activation;
 mod constant;
+mod conv;
 mod elementwise;
 mod matmul;
 mod reduce;
