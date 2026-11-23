@@ -36,4 +36,7 @@ exclude_re = [
     # Moving the start of the tap range only adds taps outside the kernel's
     # support, whose weights are zero.
     "replace \\+ with [-*] in stretched",
+    # Negating every float's ordinal keeps the distances between them, which
+    # is all the comparison uses.
+    "replace == with != in ordinal",
 ]
