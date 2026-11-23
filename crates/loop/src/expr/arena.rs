@@ -52,6 +52,39 @@ impl ExprArena {
         found
     }
 
+    /// `id` with every read of `var` replaced by `replacement`.
+    pub(crate) fn substitute(&mut self, id: ExprId, var: VarId, replacement: ExprId) -> ExprId {
+        let sub = |arena: &mut Self, operand| arena.substitute(operand, var, replacement);
+        match self.get(id) {
+            Expr::Var(read) if read == var => replacement,
+            Expr::Var(_) | Expr::Const(_) => id,
+            Expr::Add(a, b) => {
+                let (a, b) = (sub(self, a), sub(self, b));
+                self.add(a, b)
+            }
+            Expr::Mul(a, b) => {
+                let (a, b) = (sub(self, a), sub(self, b));
+                self.mul(a, b)
+            }
+            Expr::FloorDiv(a, b) => {
+                let (a, b) = (sub(self, a), sub(self, b));
+                self.floor_div(a, b)
+            }
+            Expr::FloorMod(a, b) => {
+                let (a, b) = (sub(self, a), sub(self, b));
+                self.floor_mod(a, b)
+            }
+            Expr::Min(a, b) => {
+                let (a, b) = (sub(self, a), sub(self, b));
+                self.min(a, b)
+            }
+            Expr::Max(a, b) => {
+                let (a, b) = (sub(self, a), sub(self, b));
+                self.max(a, b)
+            }
+        }
+    }
+
     /// The expression `id` names.
     pub fn get(&self, id: ExprId) -> Expr {
         self.exprs[id]

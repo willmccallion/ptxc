@@ -1,0 +1,20 @@
+schedule reduction
+  for %i.0 in 4 bind(blockIdx.x)
+    for %j.0 in 4 bind(blockIdx.y)
+      for %k.0 in 8 reduce
+        for %i.1 in 16
+          for %j.1 in 8 vectorize
+            for %k.1 in 4 reduce unroll
+  %i = %i.1 + %i.0 * 16
+  %j = %j.1 + %j.0 * 8
+  %k = %k.1 + %k.0 * 4
+  guard %j.1 + %j.0 * 8 < 30
+trace
+  split %i [16]
+  split %j [8]
+  split %k [4]
+  reorder %i.0, %j.0, %k.0, %i.1, %j.1, %k.1
+  bind %i.0 blockIdx.x
+  bind %j.0 blockIdx.y
+  unroll %k.1
+  vectorize %j.1

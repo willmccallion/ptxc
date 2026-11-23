@@ -15,4 +15,8 @@ pub use compute::{
     TensorParamId, TieBreak, UnaryOp, VarName,
 };
 pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
-pub use text::print_compute;
+pub use schedule::{
+    Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Open, Primitive, Schedule,
+    ScheduleError, SplitFactor, ThreadAxis, Trace,
+};
+pub use text::{print_compute, print_schedule};
