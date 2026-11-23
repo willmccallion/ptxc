@@ -915,3 +915,29 @@ the old one.
   themselves, so threading `Result` through roughly forty strategies would
   add noise without catching anything. In test code a panic is already a
   failure with its message.
+
+## D53. The fuzzer splices op-family cases into its graphs
+
+- **Context:** the first graph generator drew only continuous ops, with
+  one element type per graph, so that its graphs could be compared with
+  the reference within tolerance. That left most of the v0.1.0 op set, and
+  every change of element type inside a graph, out of the fuzzer.
+- **Options:**
+  - a second catalogue of every op in the generator, deriving attributes
+    from the operand types;
+  - splicing cases drawn from the op-family generators, which already
+    produce valid attributes and inputs that reach each op's edge cases.
+- **Choice:** splice family cases, drawn through proptest with a ChaCha
+  stream seeded from the fuzz seed. An operand reads an earlier value of
+  the same type half the time one exists. Continuous connectors join the
+  values up, and the reference comparison applies only to graphs of
+  continuous ops on moderate inputs; the GPU is always compared with the
+  loop interpreter exactly.
+- **Reason:** one description of each op's valid cases, kept by the
+  families, serves the op tests, the GPU tests and the fuzzer. Exact
+  comparison needs no tolerance, so the discontinuous ops are fuzzed as
+  thoroughly as the rest.
+- A recipe holds its input tensors rather than a seed for them, so a
+  shrunk case is self-contained. A seed reproduces its recipe only while
+  proptest's sampling stays the same: an upgrade may change which case a
+  seed draws, but never a case written to `data/fuzz/`.

@@ -1,16 +1,21 @@
-//! Proposes a node reading a value already in the recipe, from ops whose
-//! results are continuous in their operands: a last-bit difference between
-//! two executors then stays a last-bit difference, rather than flipping a
-//! floor, a sign or a comparison.
+//! Connectors: ops reading a value already in the recipe, chosen from those
+//! continuous in their operands. A last-bit difference between two
+//! executors then stays a last-bit difference, rather than flipping a
+//! floor, a sign or a comparison, so graphs of them on moderate inputs are
+//! compared with the reference.
 
-use super::graph::{Node, Operand, Recipe};
+use super::inputs::{Input, moderate};
+use super::recipe::{Node, Operand, Recipe, tensor_type};
 use super::shapes::{Rng, dims, extent};
-use ptxc_core::{Axis, Dim, Shape};
+use ptxc_core::{Axis, DType, Dim, Shape};
 use ptxc_graph::{
     Activation, BinaryOp, KeepDims, Op, ReduceAttrs, ReduceOp, SoftmaxAttrs, SoftmaxKind,
     TensorType, TransposeAttrs, UnaryOp, VariadicOp,
 };
 
+/// The element types of the inputs connectors start from, f32 most often.
+const DTYPES: [DType; 6] =
+    [DType::F32, DType::F32, DType::F32, DType::F16, DType::Bf16, DType::I32];
 const UNARY: [UnaryOp; 2] = [UnaryOp::Abs, UnaryOp::Neg];
 const ACTIVATIONS: [Activation; 4] =
     [Activation::Relu, Activation::Sigmoid, Activation::Tanh, Activation::Softsign];
@@ -23,27 +28,65 @@ const BINARY: [Op; 5] = [
 ];
 const REDUCTIONS: [ReduceOp; 4] = [ReduceOp::Sum, ReduceOp::Mean, ReduceOp::Max, ReduceOp::Min];
 
-/// A node reading `operand`, of type `ty`, possibly with a new input added
-/// to `recipe`; `None` if the drawn op needs an axis `ty` lacks. The caller
-/// drops proposals the op's type rule rejects.
-pub(crate) fn propose(
+/// Whether `op` is one the connectors draw, continuous in its operands.
+pub(crate) fn is_continuous(op: &Op) -> bool {
+    match op {
+        Op::Unary(unary) => UNARY.contains(unary),
+        Op::Activation(activation) => ACTIVATIONS.contains(activation),
+        Op::Binary(_) | Op::Variadic(_) => BINARY.contains(op),
+        Op::Reduce(attrs) => REDUCTIONS.contains(&attrs.op),
+        Op::Softmax(attrs) => attrs.kind == SoftmaxKind::Softmax,
+        Op::MatMul | Op::Transpose(_) | Op::Reshape(_) | Op::Concat(_) => true,
+        _ => false,
+    }
+}
+
+/// Adds a connector reading one of `values`, the recipe's values: most
+/// often the last, or a new moderate input if there are none. `None` if the
+/// drawn op needs an axis the value lacks.
+pub(crate) fn connect(
     rng: &mut Rng,
     recipe: &mut Recipe,
-    operand: Operand,
-    ty: &TensorType,
-) -> Option<Node> {
+    values: &[(Operand, TensorType)],
+) -> Option<()> {
+    let (operand, ty) = match values {
+        [] => fresh(rng, recipe),
+        [.., last] if rng.chance(3, 4) => last.clone(),
+        _ => rng.pick(values).clone(),
+    };
+    let node = propose(rng, recipe, operand, &ty)?;
+    recipe.nodes.push(node);
+    Some(())
+}
+
+/// A new moderate input to start from, of rank 0 to 3, rank 2 most often.
+fn fresh(rng: &mut Rng, recipe: &mut Recipe) -> (Operand, TensorType) {
+    let dtype = *rng.pick(&DTYPES);
+    let rank = *rng.pick(&[0, 1, 2, 2, 3]);
+    let extents = dims(rng, rank);
+    let input = moderate(rng, dtype, &extents);
+    let ty = tensor_type(&input.tensor);
+    (push(recipe, input), ty)
+}
+
+/// A connector reading `operand`, of type `ty`, possibly with a new input
+/// added to `recipe`; `None` if the drawn op needs an axis `ty` lacks. The
+/// caller drops proposals the op's type rule rejects.
+fn propose(rng: &mut Rng, recipe: &mut Recipe, operand: Operand, ty: &TensorType) -> Option<Node> {
     let rank = ty.shape().dims().len();
     let node = |op, operands| Node { op, operands };
     Some(match rng.below(9) {
         0 => node(Op::Unary(*rng.pick(&UNARY)), vec![operand]),
         1 => node(Op::Activation(*rng.pick(&ACTIVATIONS)), vec![operand]),
         2 => {
-            let other = new_input(recipe, broadcastable(rng, ty.shape()));
+            let extents = broadcastable(rng, ty.shape());
+            let other = new_input(rng, recipe, ty.dtype(), &extents);
             node(rng.pick(&BINARY).clone(), vec![operand, other])
         }
         3 if rank >= 1 => {
             let k = ty.shape().dims()[rank - 1].get();
-            let weights = new_input(recipe, vec![k, extent(rng)]);
+            let extents = [k, extent(rng)];
+            let weights = new_input(rng, recipe, ty.dtype(), &extents);
             node(Op::MatMul, vec![operand, weights])
         }
         4 if rank >= 1 => node(Op::Reduce(reduction(rng, rank)), vec![operand]),
@@ -57,16 +100,22 @@ pub(crate) fn propose(
             let axis = rng.index(rank);
             let mut extents: Vec<u64> = ty.shape().dims().iter().map(|dim| dim.get()).collect();
             extents[axis] = extent(rng);
-            let other = new_input(recipe, extents);
+            let other = new_input(rng, recipe, ty.dtype(), &extents);
             node(Op::Concat(Axis::new(axis)), vec![operand, other])
         }
         _ => return None,
     })
 }
 
-/// A new input with `extents`.
-fn new_input(recipe: &mut Recipe, extents: Vec<u64>) -> Operand {
-    recipe.inputs.push(extents);
+/// A new moderate input of `dtype` and `extents`.
+fn new_input(rng: &mut Rng, recipe: &mut Recipe, dtype: DType, extents: &[u64]) -> Operand {
+    let input = moderate(rng, dtype, extents);
+    push(recipe, input)
+}
+
+/// `input` added to `recipe`, as an operand.
+pub(crate) fn push(recipe: &mut Recipe, input: Input) -> Operand {
+    recipe.inputs.push(input);
     Operand::Input(recipe.inputs.len() - 1)
 }
 
@@ -99,10 +148,4 @@ fn permutation(rng: &mut Rng, rank: usize) -> TransposeAttrs {
 /// `shape` as one axis of all its elements.
 fn flattened(shape: &Shape) -> Shape {
     Shape::new(vec![Dim::new(shape.element_count().get())]).unwrap()
-}
-
-/// Extents for a first input of rank 0 to 3, rank 2 most often.
-pub(crate) fn first_input(rng: &mut Rng) -> Vec<u64> {
-    let rank = *rng.pick(&[0, 1, 2, 2, 3]);
-    dims(rng, rank)
 }

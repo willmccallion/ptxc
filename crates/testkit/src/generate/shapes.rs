@@ -36,6 +36,12 @@ impl Rng {
         &items[self.index(items.len())]
     }
 
+    /// A whole number from `low` to `high` inclusive, for `low <= high`.
+    pub(crate) fn between(&mut self, low: i64, high: i64) -> i64 {
+        let span = u64::try_from(high - low).unwrap() + 1;
+        low + i64::try_from(self.below(span)).unwrap()
+    }
+
     /// True with probability `numerator / denominator`.
     pub(crate) const fn chance(&mut self, numerator: u64, denominator: u64) -> bool {
         self.below(denominator) < numerator

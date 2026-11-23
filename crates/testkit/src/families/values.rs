@@ -136,7 +136,7 @@ fn moderate_special() -> impl Strategy<Value = f64> {
     prop_oneof![Just(0.0), Just(-0.0), Just(f64::INFINITY), Just(f64::NEG_INFINITY), Just(f64::NAN),]
 }
 
-fn floats(dtype: DType, values: &[f64]) -> TensorData {
+pub(crate) fn floats(dtype: DType, values: &[f64]) -> TensorData {
     let each = values.iter().copied();
     match dtype {
         DType::F32 => each.map(f64_to_f32).collect::<Vec<_>>().into(),
@@ -152,7 +152,7 @@ fn floats(dtype: DType, values: &[f64]) -> TensorData {
     }
 }
 
-fn integers(dtype: DType, values: &[i64]) -> TensorData {
+pub(crate) fn integers(dtype: DType, values: &[i64]) -> TensorData {
     let each = values.iter().copied();
     match dtype {
         DType::I8 => each.map(|x| i8::try_from(x).unwrap()).collect::<Vec<_>>().into(),

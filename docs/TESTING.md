@@ -90,20 +90,25 @@ right value.
 ## Differential fuzzing
 
 - `ptxc_testkit::generate` builds a random well-typed graph from a `Seed`
-  as a `Recipe`, the choices that build it.
-  - It picks ops whose type rules accept the values available, and shapes
-    that favour edge cases: extents 0 and 1, primes, and sizes either side
-    of a power of two.
-  - It draws one element type per graph: f32, f16, bf16 or i32.
-  - Its ops are continuous in their operands (elementwise arithmetic,
-    activations, matmul, reductions, softmax, transposes, reshapes,
-    concatenation), so a last-bit difference between two executors stays
-    one rather than flipping a floor or a comparison. The discontinuous ops
-    are covered exactly by the op-family tests.
-- `ptxc fuzz` compares the lowered graph on the loop interpreter with the
-  reference within each output's tolerance, widened for the longest
-  reduction, and with `--backend gpu` the GPU with the loop interpreter
-  exactly.
+  as a `Recipe`: its input tensors and its nodes (D53). Each node is one
+  of two kinds, half and half:
+  - a case spliced in from an op family, so every op in the v0.1.0 set
+    appears with the attributes and input values its family draws to reach
+    its edge cases. Each operand reads an earlier value of the same type
+    half the time one exists, and the family's own input otherwise;
+  - a connector: a continuous op (elementwise arithmetic, activations,
+    matmul, reductions, softmax, transposes, reshapes, concatenation) on an
+    earlier value, with moderate new inputs whose extents favour edge
+    cases: 0 and 1, primes, and sizes either side of a power of two.
+- `ptxc fuzz` checks each case:
+  - the lowered graph runs on the loop interpreter. A case whose values it
+    refuses, an index out of range or an integer division by zero, is
+    counted as rejected, not compared;
+  - when every input is moderate and every op continuous, the loop
+    interpreter matches the reference within each output's tolerance,
+    widened for the longest reduction. A last-bit difference then stays
+    one rather than flipping a floor or a comparison;
+  - with `--backend gpu`, the GPU matches the loop interpreter exactly.
 - Every case runs on at least two executors through the `Evaluate` trait:
   - the reference interpreter;
   - the loop-IR interpreter;
@@ -112,9 +117,8 @@ right value.
 - On a mismatch, `shrink.rs` tries, until nothing smaller still fails:
   - bypassing a node, its readers reading one of its operands instead;
   - dropping an input nothing reads;
-  - halving an extent everywhere it appears, so extents the inputs share
-    shrink together;
-  - widening f16 and bf16 to f32, the easiest type to debug in.
+  - cutting every input axis of one extent to its first half, so extents
+    the inputs share shrink together.
 - The shrunk case is written to `data/fuzz/` as graph IR text with its seed.
   When fixed, it becomes a fixture and a regression test.
 - Fuzzing is deterministic per seed and runs on stable Rust. It is not
