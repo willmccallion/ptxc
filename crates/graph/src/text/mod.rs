@@ -24,3 +24,12 @@ mod tensor_text;
 pub use error::{ParseError, ParseErrorKind, Position};
 pub use parse::parse;
 pub use print::print;
+
+use crate::tensor_type::TensorType;
+
+/// A tensor type as the text format writes it, such as `f32[2, 3]`.
+pub fn format_type(ty: &TensorType) -> String {
+    let mut out = String::new();
+    tensor_text::write_type(&mut out, ty);
+    out
+}

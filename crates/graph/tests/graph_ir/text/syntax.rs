@@ -2,7 +2,7 @@ use super::assert_round_trips;
 use crate::common::{add_one, binary, f32_type, shape, tensor_type, unary};
 use ptxc_core::float::{F8E4M3Fn, F16};
 use ptxc_core::{Axis, DType, Dim, HostTensor, TensorData};
-use ptxc_graph::text::{parse, print};
+use ptxc_graph::text::{format_type, parse, print};
 use ptxc_graph::{BinaryOp, GraphBuilder, Op, SplitAttrs, UnaryOp, ValueDef, ValueName};
 
 fn tensor(dims: &[u64], data: impl Into<TensorData>) -> HostTensor {
@@ -28,6 +28,12 @@ graph(%x: f32[2, 3]) {
 }
 ";
     assert_eq!(print(&graph), expected);
+}
+
+#[test]
+fn a_type_formats_as_the_text_writes_it() {
+    assert_eq!(format_type(&f32_type(&[2, 3])), "f32[2, 3]");
+    assert_eq!(format_type(&tensor_type(DType::I64, &[])), "i64[]");
 }
 
 #[test]
