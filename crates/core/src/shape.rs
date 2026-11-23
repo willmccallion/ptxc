@@ -103,6 +103,11 @@ impl Shape {
         }
     }
 
+    /// The shape of a vector of `length` elements, which always fits.
+    pub fn vector(length: Dim) -> Self {
+        Self { dims: vec![length], elements: ElementCount::new(length.0) }
+    }
+
     /// The shape of a scalar: rank 0, one element.
     pub const fn scalar() -> Self {
         Self { dims: Vec::new(), elements: ElementCount::new(1) }
