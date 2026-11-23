@@ -3,7 +3,7 @@
 
 use crate::compute::Scalar;
 use ptxc_core::DType;
-use ptxc_core::convert::{f64_to_f32, int_to_f64};
+use ptxc_core::convert::{f64_to_f32, int_to_f32, int_to_f64};
 use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
 
 /// An element: floats as the `f64` of their exact value, integers wrapped
@@ -65,6 +65,21 @@ impl Value {
             Self::Bool(value) => value,
         }
     }
+}
+
+/// The integer `value` rounded once to the float type `dtype`, nearest with
+/// ties to even; FP8 overflow follows `overflow`.
+pub(crate) fn round_int(value: i64, dtype: DType, overflow: Overflow) -> Value {
+    let rounded = match dtype {
+        DType::F32 => f64::from(int_to_f32(value)),
+        DType::F16 => F16::from_i64(value).to_f64(),
+        DType::Bf16 => Bf16::from_i64(value).to_f64(),
+        DType::F8E4M3Fn => F8E4M3Fn::from_i64(value, overflow).to_f64(),
+        DType::F8E5M2 => F8E5M2::from_i64(value, overflow).to_f64(),
+        DType::I8 | DType::U8 | DType::I32 | DType::I64 => return wrap(value.into(), dtype),
+        DType::Bool => return Value::Bool(value != 0),
+    };
+    Value::Float(rounded)
 }
 
 /// `value` rounded to the float type `dtype`, nearest with ties to even;

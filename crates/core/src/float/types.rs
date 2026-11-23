@@ -35,6 +35,10 @@ macro_rules! narrow_float {
             fn encode(value: f64, overflow: Overflow) -> Self {
                 Self(<$storage as NarrowBits>::from_encoding($format.encode(value, overflow)))
             }
+
+            fn encode_int(value: i64, overflow: Overflow) -> Self {
+                Self(<$storage as NarrowBits>::from_encoding($format.encode_int(value, overflow)))
+            }
         }
 
         impl fmt::Debug for $name {
@@ -103,6 +107,12 @@ macro_rules! ieee_constructors {
             pub fn from_f32(value: f32) -> Self {
                 Self::from_f64(value.into())
             }
+
+            /// Rounds once to nearest, ties to even; overflow becomes
+            /// infinity.
+            pub fn from_i64(value: i64) -> Self {
+                Self::encode_int(value, Overflow::NonFinite)
+            }
         }
     )+};
 }
@@ -122,6 +132,12 @@ macro_rules! fp8_constructors {
             /// infinities follow `overflow`.
             pub fn from_f32(value: f32, overflow: Overflow) -> Self {
                 Self::from_f64(value.into(), overflow)
+            }
+
+            /// Rounds once to nearest, ties to even; out-of-range values
+            /// follow `overflow`.
+            pub fn from_i64(value: i64, overflow: Overflow) -> Self {
+                Self::encode_int(value, overflow)
             }
         }
     )+};

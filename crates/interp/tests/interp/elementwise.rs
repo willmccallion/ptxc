@@ -232,6 +232,19 @@ fn integer_casts_wrap_and_bools_become_zero_and_one() {
     assert_exact(&op("cast<to=i64>", "i64[2]", &[bools(&[2], &[true, false])]), &[2], &[1, 0]);
 }
 
+/// 2^62 + 2^38 + 1 and 2^62 + 2^54 + 1 lie just above midpoints of f32
+/// and bf16, but their nearest f64s are the midpoints, which tie to even.
+#[test]
+fn integer_casts_to_floats_round_once() {
+    let x = || i64s(&[2], &[(1 << 62) + (1 << 38) + 1, -((1 << 62) + (1 << 54) + 1)]);
+
+    let as_f32 = op("cast<to=f32>", "f32[2]", &[x()]);
+    let as_bf16 = op("cast<to=bf16>", "bf16[2]", &[x()]);
+
+    assert_eq!(values(&as_f32)[0], 2f64.powi(62) + 2f64.powi(39));
+    assert_eq!(values(&as_bf16)[1], -(2f64.powi(62) + 2f64.powi(55)));
+}
+
 #[test]
 fn float_casts_round_to_nearest_even_and_fp8_honours_saturate() {
     let x = || f32s(&[3], &[1.000_488_3, 500.0, -1e6]);

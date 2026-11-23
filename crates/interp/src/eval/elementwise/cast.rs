@@ -3,7 +3,7 @@
 use crate::error::InterpError;
 use crate::eval::first;
 use crate::numeric::{
-    Elements, int_to_f64, saturate_ints, store_floats, store_ints, store_wide, truncate, widen,
+    Elements, saturate_ints, store_floats, store_ints, store_ints_as_floats, truncate, widen,
 };
 use ptxc_core::float::Overflow;
 use ptxc_core::{DType, HostTensor, TensorData};
@@ -42,8 +42,7 @@ fn from_floats(values: &[f32], to: DType, overflow: Overflow) -> Result<TensorDa
     store_floats(values, to, overflow)
 }
 
-/// Integers into floats round once from their f64 value, which is exact
-/// below 2^53.
+/// Integers into floats round once, from their exact value.
 fn from_ints(values: &[i64], to: DType, overflow: Overflow) -> Result<TensorData, InterpError> {
     if to == DType::Bool {
         return Ok(values.iter().map(|&v| v != 0).collect::<Vec<_>>().into());
@@ -51,5 +50,5 @@ fn from_ints(values: &[i64], to: DType, overflow: Overflow) -> Result<TensorData
     if is_integer(to) {
         return store_ints(values, to);
     }
-    store_wide(&values.iter().map(|&v| int_to_f64(v)).collect::<Vec<_>>(), to, overflow)
+    store_ints_as_floats(values, to, overflow)
 }
