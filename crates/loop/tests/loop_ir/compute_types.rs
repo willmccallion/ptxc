@@ -166,6 +166,9 @@ fn scalars_hold_values_their_type_can_represent() {
     assert_eq!(Scalar::float(DType::Bf16, 0.5).unwrap().as_f64(), Some(0.5));
     assert_eq!(Scalar::f32(0.1), Scalar::float(DType::F32, f64::from(0.1_f32)).unwrap());
     assert_eq!(Scalar::i64(i64::MIN), Scalar::int(DType::I64, i64::MIN).unwrap());
+    assert_eq!(Scalar::f32(0.5).constant(), ptxc_loop::Constant::Float(0.5));
+    assert_eq!(Scalar::i64(-3).constant(), ptxc_loop::Constant::Int(-3));
+    assert_eq!(Scalar::bool(true).constant(), ptxc_loop::Constant::Bool(true));
     assert!(Scalar::int(DType::I8, 128).is_none());
     assert!(Scalar::int(DType::U8, -1).is_none());
     assert_eq!(Scalar::int(DType::U8, 255).unwrap().as_i64(), Some(255));
