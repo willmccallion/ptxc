@@ -570,3 +570,27 @@ the old one.
 - **Reason:** these are TVM's semantics, which the M3 rules are written
   against. The property tests check that any sequence of splits, fuses and
   reorders visits every point of the iteration domain exactly once.
+
+## D40. A compute definition is one stage with at most one reduction
+
+- **Context:** a schedule is one loop nest. It says how one reduction is
+  tiled, reordered and bound to threads, but not how a second reduction
+  nested in the first would be. Softmax, layer norm and log-sum-exp each
+  need several reductions in sequence.
+- **Options:** any number of reductions per definition, each computed
+  where it is used with its own serial loops; or TVM's model, one reduction
+  per definition (a stage), with multi-reduction ops as chains of stages.
+- **Choice:** one reduction per definition, and then exactly one output;
+  `ComputeBuilder::finish` rejects more. Lowering an op family gives a list
+  of stages joined by intermediate buffers. In M2 each stage is a kernel;
+  M3's `compute_at` places stages in one kernel.
+- **Also:** every load whose index does not come from a gather must stay
+  within its tensor over the iteration domain, which `finish` proves with
+  the index simplifier's interval bounds. Schedules visit exactly the
+  domain (D39), so lowered loads are in bounds by construction, and ops
+  that read outside a tensor (padding) must clamp the index rather than
+  rely on a select, whose branches are both evaluated.
+- **Reason:** every reduction stays schedulable, so M3's fast reduction and
+  GEMM schedules apply to each stage, and lowering handles one reduction
+  shape well instead of many shapes slowly. It is TVM's model, which the
+  M3 and M5 rules follow.
