@@ -1,11 +1,11 @@
 //! Lowered kernels as text: parameters, launch shape, thread indices and the
 //! statement tree.
 
+use super::cast::cast_name;
 use super::index::write_index;
 use crate::compute::UnaryOp;
 use crate::expr::{ExprId, VarId};
 use crate::stmt::{Access, BufferId, ForKind, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
-use ptxc_core::float::Overflow;
 use std::fmt::Write;
 
 /// The text of `kernel`:
@@ -160,11 +160,7 @@ impl KernelPrinter<'_> {
                 self.args(out, &[lhs, rhs]);
             }
             ValueExpr::Cast { to, overflow, value } => {
-                let overflow = match overflow {
-                    Overflow::Saturate => "saturate",
-                    Overflow::NonFinite => "nonfinite",
-                };
-                let _infallible = write!(out, "cast<{}, {overflow}>", to.name());
+                out.push_str(&cast_name(*to, *overflow));
                 self.args(out, &[value]);
             }
             ValueExpr::Select { condition, then, otherwise } => {
