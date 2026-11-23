@@ -1,6 +1,6 @@
 use crate::{add_one, stages, tensor_type};
 use ptxc_core::DType;
-use ptxc_graph::{BinaryOp, GraphBuilder, Op, UnaryOp};
+use ptxc_graph::{BinaryOp, GlobalPoolKind, GraphBuilder, Op, UnaryOp};
 use ptxc_lower::{Binding, LowerError};
 
 #[test]
@@ -35,12 +35,11 @@ fn a_node_whose_output_no_one_reads_has_no_stage() {
 #[test]
 fn an_op_without_a_lowering_is_reported_by_name() {
     let mut builder = GraphBuilder::new();
-    let lhs = builder.add_input(tensor_type(DType::F32, &[2, 3]));
-    let rhs = builder.add_input(tensor_type(DType::F32, &[3, 2]));
-    let product = add_one(&mut builder, Op::MatMul, &[lhs, rhs]);
-    let graph = builder.finish(vec![product]).unwrap();
+    let x = builder.add_input(tensor_type(DType::F32, &[1, 2, 3, 3]));
+    let pooled = add_one(&mut builder, Op::GlobalPool(GlobalPoolKind::Average), &[x]);
+    let graph = builder.finish(vec![pooled]).unwrap();
 
     let error = stages(graph).err();
 
-    assert_eq!(error, Some(LowerError::Unsupported { op: "matmul" }));
+    assert_eq!(error, Some(LowerError::Unsupported { op: "global_average_pool" }));
 }

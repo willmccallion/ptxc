@@ -56,6 +56,8 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::Gather(axis) => gather::gather(cx, *axis),
         Op::GatherElements(axis) => gather::gather_elements(cx, *axis),
         Op::GatherNd(batch) => gather::gather_nd(cx, *batch),
+        Op::MatMul => matmul::matmul(cx),
+        Op::Gemm(attrs) => matmul::gemm(cx, *attrs),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }
