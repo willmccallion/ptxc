@@ -1,11 +1,11 @@
-//! `Gather` and `GatherElements`, with negative indices counting from the
-//! end of the indexed axis.
+//! `Gather`, `GatherElements` and `GatherND`, with negative indices counting
+//! from the end of the indexed axis.
 
 use crate::error::{InterpError, Malformed};
 use crate::extents::Extents;
 use crate::movement::take;
 use crate::numeric::{ints, signed};
-use ptxc_core::{Axis, HostTensor, TensorData};
+use ptxc_core::{Axis, HostTensor, Rank, TensorData};
 use ptxc_graph::TensorType;
 
 /// An index into an axis of `extent` elements; negative counts from the end.
@@ -66,5 +66,34 @@ pub(super) fn gather_elements(
             Ok(extents.offset(&index))
         })
         .collect::<Result<Vec<_>, InterpError>>()?;
+    Ok(take(data.data(), &positions))
+}
+
+/// `GatherND`: each tuple along the indices' last axis, after the batch
+/// axes the indices' position gives, selects a contiguous slice of `data`.
+pub(super) fn gather_nd(
+    batch_dims: Rank,
+    operands: &[&HostTensor],
+) -> Result<TensorData, InterpError> {
+    let (data, indices, index_extents) = data_and_indices(operands)?;
+    let extents = Extents::of(data.shape())?;
+    let batch = batch_dims.get();
+    let (&length, outer) = index_extents.dims().split_last().ok_or(Malformed::Operands)?;
+    if length == 0 {
+        return Err(Malformed::Operands.into());
+    }
+    let tuple_axes = extents.dims().get(batch..batch + length).ok_or(Malformed::Operands)?;
+    let slice: usize = extents.dims()[batch + length..].iter().product();
+    let outer = Extents::from_dims(outer.to_vec());
+    let mut positions = Vec::with_capacity(outer.count() * slice);
+    for (row, tuple) in indices.chunks_exact(length).enumerate() {
+        let mut source = outer.index_of(row)[..batch].to_vec();
+        for (&index, &extent) in tuple.iter().zip(tuple_axes) {
+            source.push(resolve(index, extent)?);
+        }
+        source.resize(extents.rank(), 0);
+        let start = extents.offset(&source);
+        positions.extend(start..start + slice);
+    }
     Ok(take(data.data(), &positions))
 }
