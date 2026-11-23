@@ -40,6 +40,10 @@ pub enum ScheduleError {
     /// A thread axis bound twice.
     #[error("{} is already bound", .0.name())]
     AxisTaken(ThreadAxis),
+    /// An empty loop bound to an axis, which would launch no threads or
+    /// blocks, a launch CUDA rejects.
+    #[error("loop {0} is empty and cannot be bound to an axis")]
+    EmptyBound(VarName),
     /// A reduction loop bound to a block axis, which cannot share a sum.
     #[error("reduction loop {0} cannot be bound to a block axis")]
     BlockBoundReduce(VarName),
