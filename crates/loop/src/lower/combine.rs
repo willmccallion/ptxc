@@ -3,7 +3,7 @@
 
 use crate::compute::{ArgKind, BinaryOp, ReduceOp, Scalar, TieBreak, UnaryOp};
 use crate::stmt::ValueExpr;
-use ptxc_core::DType;
+use ptxc_core::{DType, Dim};
 
 /// The value a reduction starts from: 0 for sums, 1 for products, the
 /// type's lowest value for `Max` and highest for `Min`.
@@ -25,9 +25,13 @@ pub(super) const fn arg_start(kind: ArgKind, dtype: DType) -> Scalar {
     }
 }
 
-/// The position an arg-reduction's best starts from, which every real
-/// position beats in a tie.
-pub(super) const fn position_start(tie: TieBreak) -> Scalar {
+/// The position an arg-reduction's best starts from: one every real
+/// position beats in a tie, or 0 over an empty axis, which has no positions
+/// and so gives 0, as `ptxc-interp` does.
+pub(super) const fn position_start(tie: TieBreak, extent: Dim) -> Scalar {
+    if extent.get() == 0 {
+        return Scalar::zero(DType::I64);
+    }
     match tie {
         TieBreak::First => Scalar::highest(DType::I64),
         TieBreak::Last => Scalar::lowest(DType::I64),

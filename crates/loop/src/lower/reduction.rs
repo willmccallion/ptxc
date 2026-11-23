@@ -95,8 +95,9 @@ impl Lowerer<'_> {
         let dtype = self.reduced_dtype(reduction);
         let (start, position) = match reduction {
             TensorExpr::Reduce { op, .. } => (identity(*op, dtype), None),
-            TensorExpr::ArgReduce { kind, tie, .. } => {
-                (arg_start(*kind, dtype), Some(position_start(*tie)))
+            TensorExpr::ArgReduce { kind, tie, axis, .. } => {
+                let extent = self.compute.iter_vars()[*axis].extent;
+                (arg_start(*kind, dtype), Some(position_start(*tie, extent)))
             }
             _ => return Stmt::Seq(Vec::new()),
         };

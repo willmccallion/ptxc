@@ -225,6 +225,18 @@ fn argmax_finds_the_first_or_last_maximum_and_the_first_nan() {
 }
 
 #[test]
+fn an_arg_reduction_over_an_empty_axis_gives_position_zero() {
+    for tie in [TieBreak::First, TieBreak::Last] {
+        let compute = argmax(2, 0, tie);
+        let empty = tensor(&[2, 0], Vec::<f32>::new());
+
+        let outputs = run_default(&compute, &[empty]).unwrap();
+
+        assert_eq!(ints(&outputs[0]), [0, 0]);
+    }
+}
+
+#[test]
 fn integer_division_by_zero_is_an_error() {
     let mut compute = ComputeBuilder::new(ComputeName::new("divide"));
     let left = compute.input(TensorName::new("x"), DType::I32, shape(&[2]));
