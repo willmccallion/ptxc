@@ -6,5 +6,6 @@ mod constant;
 mod conv;
 mod elementwise;
 mod matmul;
+mod norm;
 mod pool;
 mod reduce;
