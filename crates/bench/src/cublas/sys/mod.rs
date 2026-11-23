@@ -3,6 +3,9 @@
 //! its declaration in the cuBLAS 13 headers.
 
 mod cublas;
+mod cublaslt;
 
 pub(super) use cublas::{ComputeType, DataType, GemmCall, Operand, Operation};
 pub(crate) use cublas::{CublasError, Handle};
+pub(crate) use cublaslt::{Candidate, LtHandle, Plan};
+pub(super) use cublaslt::{LtProblem, MatrixLayout};

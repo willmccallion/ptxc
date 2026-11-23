@@ -19,15 +19,17 @@ pub(crate) enum GemmError {
     Small { operand: &'static str, needed: ByteSize, actual: ByteSize },
     #[error("C is the same buffer as A or B")]
     Aliased,
+    #[error("{0:?} runs only on cuBLASLt")]
+    NeedsLt(GemmType),
 }
 
 /// cuBLAS's view of a problem: each operand's operation and leading
 /// dimension, and its m, n and k.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct Mapping {
-    operations: [Operation; 2],
-    extents: [c_int; 3],
-    leading: [c_int; 3],
+pub(super) struct Mapping {
+    pub(super) operations: [Operation; 2],
+    pub(super) extents: [c_int; 3],
+    pub(super) leading: [c_int; 3],
 }
 
 /// Queues `problem` on `handle`'s stream, reading `a` and `b` and writing
@@ -38,12 +40,14 @@ pub(crate) fn gemm(
     [a, b]: [&DeviceBuffer; 2],
     c: &DeviceBuffer,
 ) -> Result<(), GemmError> {
-    if [a, b].iter().any(|input| input.device_address() == c.device_address()) {
-        return Err(GemmError::Aliased);
-    }
-    check_sizes(problem, [a, b, c])?;
+    let data = match problem.dtype {
+        GemmType::F32 => DataType::F32,
+        GemmType::F16 => DataType::F16,
+        GemmType::Bf16 => DataType::Bf16,
+        narrow @ (GemmType::E4m3 | GemmType::I8) => return Err(GemmError::NeedsLt(narrow)),
+    };
+    check_buffers(problem, [a, b, c])?;
     let Mapping { operations, extents, leading } = mapping(problem)?;
-    let data = data_type(problem.dtype);
     let call = GemmCall {
         operations,
         extents,
@@ -58,7 +62,7 @@ pub(crate) fn gemm(
 }
 
 /// cuBLAS's operations, extents and leading dimensions for `problem`.
-fn mapping(problem: GemmProblem) -> Result<Mapping, GemmError> {
+pub(super) fn mapping(problem: GemmProblem) -> Result<Mapping, GemmError> {
     let int = |extent: u32| c_int::try_from(extent).map_err(|_| GemmError::TooLarge(problem.shape));
     let GemmShape { m, n, k } = problem.shape;
     let (m, n, k) = (int(m)?, int(n)?, int(k)?);
@@ -72,12 +76,15 @@ fn mapping(problem: GemmProblem) -> Result<Mapping, GemmError> {
     Ok(Mapping { operations: [b_operation, a_operation], extents: [n, m, k], leading })
 }
 
-const fn data_type(dtype: GemmType) -> DataType {
-    match dtype {
-        GemmType::F32 => DataType::F32,
-        GemmType::F16 => DataType::F16,
-        GemmType::Bf16 => DataType::Bf16,
+/// Fails if `c` is `a` or `b`, or any is smaller than the problem needs.
+pub(super) fn check_buffers(
+    problem: GemmProblem,
+    [a, b, c]: [&DeviceBuffer; 3],
+) -> Result<(), GemmError> {
+    if [a, b].iter().any(|input| input.device_address() == c.device_address()) {
+        return Err(GemmError::Aliased);
     }
+    check_sizes(problem, [a, b, c])
 }
 
 /// Fails unless `a`, `b` and `c` are at least the problem's sizes.
@@ -136,112 +143,37 @@ mod tests {
 }
 
 #[cfg(all(test, feature = "gpu"))]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
+#[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod gpu {
     use super::{GemmError, gemm};
     use crate::cublas::sys::Handle;
+    use crate::cublas::testing::{context, download, expected, inputs};
     use crate::problem::{GemmProblem, GemmShape, GemmType, Layout};
-    use ptxc_core::convert::{f64_to_f32, int_to_f64};
-    use ptxc_core::float::{Bf16, F16};
-    use ptxc_core::{ByteSize, TensorData};
-    use ptxc_cuda::{Context, DeviceBuffer, DeviceOrdinal, Driver};
+    use ptxc_core::ByteSize;
 
     const SHAPE: GemmShape = GemmShape { m: 3, n: 5, k: 7 };
 
-    /// Small integers, so every product and sum is exact in every type.
-    fn entry(row: u32, column: u32, stride: u32) -> f64 {
-        int_to_f64(i64::from((row * stride + column) % 5)) - 2.0
-    }
-
-    /// The `rows` by `columns` matrix of `entry`, row-major, stored
-    /// transposed if `transposed`.
-    fn stored(rows: u32, columns: u32, stride: u32, transposed: bool) -> Vec<f64> {
-        let (outer, inner) = if transposed { (columns, rows) } else { (rows, columns) };
-        (0..outer)
-            .flat_map(|o| {
-                (0..inner).map(
-                    move |i| if transposed { entry(i, o, stride) } else { entry(o, i, stride) },
-                )
-            })
-            .collect()
-    }
-
-    fn encode(dtype: GemmType, values: &[f64]) -> Vec<u8> {
-        let data: TensorData = match dtype {
-            GemmType::F32 => values.iter().map(|&v| f64_to_f32(v)).collect::<Vec<_>>().into(),
-            GemmType::F16 => values.iter().map(|&v| F16::from_f64(v)).collect::<Vec<_>>().into(),
-            GemmType::Bf16 => values.iter().map(|&v| Bf16::from_f64(v)).collect::<Vec<_>>().into(),
-        };
-        data.to_le_bytes()
-    }
-
-    fn decode(dtype: GemmType, bytes: &[u8]) -> Vec<f64> {
-        match TensorData::from_le_bytes(dtype.dtype(), bytes).unwrap() {
-            TensorData::F32(v) => v.into_iter().map(f64::from).collect(),
-            TensorData::F16(v) => v.into_iter().map(F16::to_f64).collect(),
-            TensorData::Bf16(v) => v.into_iter().map(Bf16::to_f64).collect(),
-            other => panic!("{:?}", other.dtype()),
-        }
-    }
-
-    fn upload(context: &Context, bytes: &[u8]) -> DeviceBuffer {
-        let mut buffer = context.alloc(ByteSize::new(u64::try_from(bytes.len()).unwrap())).unwrap();
-        buffer.copy_from_host(bytes).unwrap();
-        buffer
-    }
-
-    /// `C = A B` on the host, row-major.
-    fn expected() -> Vec<f64> {
-        let GemmShape { m, n, k } = SHAPE;
-        (0..m)
-            .flat_map(|i| {
-                (0..n).map(move |j| (0..k).map(|p| entry(i, p, 7) * entry(p, j, 3)).sum())
-            })
-            .collect()
-    }
-
-    fn run(context: &Context, problem: GemmProblem) -> Vec<f64> {
-        let GemmShape { m, n, k } = problem.shape;
-        let a = upload(
-            context,
-            &encode(problem.dtype, &stored(m, k, 7, problem.layout.a_transposed())),
-        );
-        let b = upload(
-            context,
-            &encode(problem.dtype, &stored(k, n, 3, problem.layout.b_transposed())),
-        );
-        let [_, _, c_bytes] = problem.sizes().unwrap();
-        let c = context.alloc(c_bytes).unwrap();
-        let stream = context.stream().unwrap();
-        let mut handle = Handle::new(&stream).unwrap();
-
-        gemm(&mut handle, problem, [&a, &b], &c).unwrap();
-        stream.synchronize().unwrap();
-
-        let mut bytes = vec![0; usize::try_from(c_bytes.get()).unwrap()];
-        c.copy_to_host(&mut bytes).unwrap();
-        decode(problem.dtype, &bytes)
-    }
-
     #[test]
     fn cublas_multiplies_every_type_and_layout_exactly_on_small_integers() {
-        let context =
-            Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context();
+        let context = context();
         for dtype in [GemmType::F32, GemmType::F16, GemmType::Bf16] {
             for layout in [Layout::Nn, Layout::Nt, Layout::Tn] {
                 let problem = GemmProblem { shape: SHAPE, dtype, layout };
+                let ([a, b], c) = inputs(&context, problem);
+                let stream = context.stream().unwrap();
+                let mut handle = Handle::new(&stream).unwrap();
 
-                let product = run(&context, problem);
+                gemm(&mut handle, problem, [&a, &b], &c).unwrap();
+                stream.synchronize().unwrap();
 
-                assert_eq!(product, expected(), "{problem:?}");
+                assert_eq!(download(problem, &c), expected(SHAPE), "{problem:?}");
             }
         }
     }
 
     #[test]
-    fn a_buffer_smaller_than_the_problem_is_refused_before_cublas_runs() {
-        let context =
-            Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context();
+    fn a_buffer_smaller_than_the_problem_or_aliased_is_refused_before_cublas_runs() {
+        let context = context();
         let problem = GemmProblem { shape: SHAPE, dtype: GemmType::F32, layout: Layout::Nn };
         let small = context.alloc(ByteSize::new(4)).unwrap();
         let c = context.alloc(ByteSize::new(60)).unwrap();
@@ -250,8 +182,11 @@ mod gpu {
 
         let too_small = gemm(&mut handle, problem, [&small, &small], &c).unwrap_err();
         let aliased = gemm(&mut handle, problem, [&c, &small], &c).unwrap_err();
+        let narrow = GemmProblem { dtype: GemmType::E4m3, ..problem };
+        let needs_lt = gemm(&mut handle, narrow, [&c, &c], &small).unwrap_err();
 
         assert!(matches!(too_small, GemmError::Small { operand: "A", .. }), "{too_small}");
         assert!(matches!(aliased, GemmError::Aliased), "{aliased}");
+        assert!(matches!(needs_lt, GemmError::NeedsLt(GemmType::E4m3)), "{needs_lt}");
     }
 }

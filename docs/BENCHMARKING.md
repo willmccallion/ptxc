@@ -88,6 +88,8 @@ recorded here.
 - **Baseline:** cuBLAS (cuBLASLt for FP8 and int8), loaded with dlopen by
   `ptxc-bench` only, with its default heuristic algorithm. The best of its
   top 8 algorithms is also recorded, as an upper bound.
+  - On sm_89, cuBLASLt runs E4M3 only as NT: A transposed and B as is, in
+    its column-major terms. The FP8 NN and TN rows have no baseline.
 - **Metrics:** TFLOP/s (or TOP/s) and the percentage of cuBLAS. Every result
   is checked against a reference before it is timed.
 
