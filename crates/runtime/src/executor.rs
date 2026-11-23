@@ -6,7 +6,7 @@ use crate::error::RuntimeError;
 use crate::io::{download, output_buffers, upload};
 use crate::load::LoadedProgram;
 use ptxc_core::HostTensor;
-use ptxc_cuda::{BlockDim, GridDim, Stream};
+use ptxc_cuda::{BlockDim, DeviceBuffer, GridDim, Stream};
 use ptxc_program::Step;
 use ptxc_target::{BlockCount, ThreadsPerBlock};
 use std::marker::PhantomData;
@@ -14,6 +14,33 @@ use std::marker::PhantomData;
 /// Launches each step as it comes.
 #[derive(Debug)]
 pub struct Eager;
+
+/// A program's inputs on the device and its outputs' buffers, ready to run.
+#[derive(Debug)]
+pub struct Bound<'e> {
+    executor: &'e Executor<Eager>,
+    inputs: Vec<DeviceBuffer>,
+    outputs: Vec<DeviceBuffer>,
+}
+
+impl Bound<'_> {
+    /// Queues every step on `stream`, a stream of the program's context,
+    /// without waiting for them.
+    pub fn enqueue(&self, stream: &Stream) -> Result<(), RuntimeError> {
+        let LoadedProgram { program, arena, constants, .. } = &self.executor.loaded;
+        let memory = Memory { arena, constants, inputs: &self.inputs, outputs: &self.outputs };
+        for step in program.steps() {
+            self.executor.step(stream, &memory, step)?;
+        }
+        Ok(())
+    }
+
+    /// The outputs, read back once the queued steps have finished, in the
+    /// program's declared order.
+    pub fn outputs(&self) -> Result<Vec<HostTensor>, RuntimeError> {
+        download(&self.executor.loaded.program, &self.outputs)
+    }
+}
 
 /// A loaded program and the way it runs.
 #[derive(Debug)]
@@ -30,16 +57,21 @@ impl Executor<Eager> {
 
     /// The outputs for `inputs`, in the program's declared orders.
     pub fn run(&self, inputs: &[HostTensor]) -> Result<Vec<HostTensor>, RuntimeError> {
-        let LoadedProgram { program, context, arena, constants, .. } = &self.loaded;
+        let bound = self.bind(inputs)?;
+        let stream = self.loaded.context.stream()?;
+        bound.enqueue(&stream)?;
+        stream.synchronize()?;
+        bound.outputs()
+    }
+
+    /// `inputs` on the device, after checking each against its binding,
+    /// and room for the outputs, so the program can run repeatedly with
+    /// no host copies, as the benchmarks time it.
+    pub fn bind(&self, inputs: &[HostTensor]) -> Result<Bound<'_>, RuntimeError> {
+        let LoadedProgram { program, context, .. } = &self.loaded;
         let inputs = upload(context, program, inputs)?;
         let outputs = output_buffers(context, program)?;
-        let memory = Memory { arena, constants, inputs: &inputs, outputs: &outputs };
-        let stream = context.stream()?;
-        for step in program.steps() {
-            self.step(&stream, &memory, step)?;
-        }
-        stream.synchronize()?;
-        download(program, &outputs)
+        Ok(Bound { executor: self, inputs, outputs })
     }
 
     fn step(&self, stream: &Stream, memory: &Memory<'_>, step: &Step) -> Result<(), RuntimeError> {
