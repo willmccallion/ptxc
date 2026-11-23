@@ -3,9 +3,10 @@
 
 use super::program::{
     Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
-    PredSlot, Step,
+    PredSlot, Side, Step,
 };
 use ptxc_core::Idx;
+use std::marker::PhantomData;
 
 pub(super) struct ProgramBuilder {
     steps: Vec<Step>,
@@ -15,15 +16,24 @@ pub(super) struct ProgramBuilder {
 }
 
 impl ProgramBuilder {
-    /// A builder whose first float is the argument.
+    /// A builder for a unary program, whose first float is the argument.
     pub(super) fn new() -> (Self, FloatSlot) {
         let mut builder = Self { steps: Vec::new(), floats: 0, ints: 0, preds: 0 };
-        let argument = builder.define_float(FloatDef::Argument);
+        let argument = builder.define_float(FloatDef::Argument(Side::Left));
         (builder, argument)
     }
 
-    pub(super) fn finish(self, result: FloatSlot) -> MathProgram {
-        MathProgram { steps: self.steps, result }
+    /// A builder for a binary program, whose first floats are the
+    /// arguments.
+    pub(super) fn new_binary() -> (Self, FloatSlot, FloatSlot) {
+        let (mut builder, left) = Self::new();
+        let right = builder.define_float(FloatDef::Argument(Side::Right));
+        (builder, left, right)
+    }
+
+    /// The program, of the arity the builder was made for.
+    pub(super) fn finish<A>(self, result: FloatSlot) -> MathProgram<A> {
+        MathProgram { steps: self.steps, result, arity: PhantomData }
     }
 
     fn define_float(&mut self, def: FloatDef) -> FloatSlot {

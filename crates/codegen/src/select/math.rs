@@ -8,8 +8,8 @@ use crate::ast::{
 };
 use ptxc_core::IndexVec;
 use ptxc_loop::math::{
-    Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
-    PredSlot, Step,
+    Binary, Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
+    PredSlot, Side, Step, Unary,
 };
 
 /// The registers holding the slots a program has defined so far.
@@ -20,15 +20,30 @@ struct Slots {
 }
 
 impl Selector<'_> {
-    /// `program` applied to `argument`.
-    pub(super) fn math(&mut self, program: &MathProgram, argument: Reg<F32>) -> Reg<F32> {
+    /// `program` applied to `x`.
+    pub(super) fn math(&mut self, program: &MathProgram<Unary>, x: Reg<F32>) -> Reg<F32> {
+        self.emit(program, [x, x])
+    }
+
+    /// `program` applied to `x` and `y`.
+    pub(super) fn math_binary(
+        &mut self,
+        program: &MathProgram<Binary>,
+        arguments: (Reg<F32>, Reg<F32>),
+    ) -> Reg<F32> {
+        self.emit(program, arguments.into())
+    }
+
+    /// `program`'s steps on `arguments`, left then right; a unary program
+    /// reads only the left.
+    fn emit<A>(&mut self, program: &MathProgram<A>, arguments: [Reg<F32>; 2]) -> Reg<F32> {
         let mut slots =
             Slots { floats: IndexVec::new(), ints: IndexVec::new(), preds: IndexVec::new() };
         let code = &mut self.builder;
         for step in program.steps() {
             match *step {
                 Step::Float(def) => {
-                    let reg = slots.float(code, def, argument);
+                    let reg = slots.float(code, def, arguments);
                     let _slot = slots.floats.push(reg);
                 }
                 Step::Int(def) => {
@@ -46,10 +61,16 @@ impl Selector<'_> {
 }
 
 impl Slots {
-    fn float(&self, code: &mut FunctionBuilder, def: FloatDef, argument: Reg<F32>) -> Reg<F32> {
+    fn float(
+        &self,
+        code: &mut FunctionBuilder,
+        def: FloatDef,
+        [left, right]: [Reg<F32>; 2],
+    ) -> Reg<F32> {
         let value = |slot: FloatSlot| Value::from(self.floats[slot]);
         match def {
-            FloatDef::Argument => argument,
+            FloatDef::Argument(Side::Left) => left,
+            FloatDef::Argument(Side::Right) => right,
             FloatDef::Const(bits) => code.mov(PtxType::F32, Value::f32(f32::from_bits(bits))),
             FloatDef::Binary(op, x, y) => code.float(float_op(op), value(x), value(y)),
             FloatDef::Fma(x, y, z) => code.fma(value(x), value(y), value(z)),

@@ -10,6 +10,7 @@ mod erf;
 mod eval;
 mod exp;
 mod expm1;
+mod fmod;
 mod log;
 mod log1p;
 mod program;
@@ -21,8 +22,8 @@ mod tanh;
 mod semantics;
 
 pub use program::{
-    Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
-    PredSlot, Step,
+    Binary, Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
+    PredSlot, Side, Step, Unary,
 };
 
 use std::sync::LazyLock;
@@ -35,6 +36,7 @@ static TANH: LazyLock<MathProgram> = LazyLock::new(tanh::tanh);
 static ERF: LazyLock<MathProgram> = LazyLock::new(erf::erf);
 static SIN: LazyLock<MathProgram> = LazyLock::new(sincos::sin);
 static COS: LazyLock<MathProgram> = LazyLock::new(sincos::cos);
+static FMOD: LazyLock<MathProgram<Binary>> = LazyLock::new(fmod::fmod);
 
 /// `e^x`, within 1.06 ulps.
 pub fn exp() -> &'static MathProgram {
@@ -74,4 +76,9 @@ pub fn sin() -> &'static MathProgram {
 /// The cosine, within 2.26 ulps for every finite f32.
 pub fn cos() -> &'static MathProgram {
     &COS
+}
+
+/// The remainder of `x / y` truncated, exactly, with `x`'s sign.
+pub fn fmod() -> &'static MathProgram<Binary> {
+    &FMOD
 }
