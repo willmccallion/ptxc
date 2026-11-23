@@ -28,13 +28,18 @@ fn atanh_coefficient(n: i32) -> f32 {
 
 pub(super) fn log() -> MathProgram {
     let (mut code, x) = ProgramBuilder::new();
-    let (m, e) = decompose(&mut code, x);
+    let result = log_of(&mut code, x);
+    code.finish(result)
+}
+
+/// The natural logarithm of `x`, IEEE's special cases included.
+pub(super) fn log_of(code: &mut ProgramBuilder, x: FloatSlot) -> FloatSlot {
+    let (m, e) = decompose(code, x);
     let one = code.float(1.0);
     let f = code.sub(m, one);
     let e = code.int_to_float(e);
-    let finite = log_reduced(&mut code, f, e);
-    let result = specials(&mut code, x, finite);
-    code.finish(result)
+    let finite = log_reduced(code, f, e);
+    specials(code, x, finite)
 }
 
 /// `m` and `e` with `x = 2^e m` and `m` in `[sqrt(1/2), sqrt 2)`, for a

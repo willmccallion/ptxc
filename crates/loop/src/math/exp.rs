@@ -22,20 +22,25 @@ fn inverse_factorial(n: u32) -> f32 {
     f64_to_f32(1.0 / (1..=n).map(f64::from).product::<f64>())
 }
 
+/// `x = k ln 2 + r`, with `k` integral and `|r| <= ln 2 / 2`.
+pub(super) struct Reduced {
+    pub(super) k: FloatSlot,
+    pub(super) r: FloatSlot,
+}
+
 pub(super) fn exp() -> MathProgram {
     let (mut code, argument) = ProgramBuilder::new();
     let x = clamp(&mut code, argument, (UNDERFLOW, OVERFLOW));
-    let log2e = code.float(std::f32::consts::LOG2_E);
-    let scaled = code.mul(x, log2e);
-    let k = code.round_to_integer(scaled);
-    let r = reduce(&mut code, x, k);
-    let p = exp_reduced(&mut code, r);
+    let Reduced { k, r } = reduce(&mut code, x);
+    let s = expm1_reduced(&mut code, r);
+    let one = code.float(1.0);
+    let p = code.add(one, s);
     let result = scale(&mut code, p, k);
     code.finish(result)
 }
 
 /// `x` limited to `[low, high]`; NaN stays NaN.
-fn clamp(code: &mut ProgramBuilder, x: FloatSlot, (low, high): (f32, f32)) -> FloatSlot {
+pub(super) fn clamp(code: &mut ProgramBuilder, x: FloatSlot, (low, high): (f32, f32)) -> FloatSlot {
     let low = code.float(low);
     let below = code.compare(Comparison::Lt, x, low);
     let raised = code.select(below, low, x);
@@ -44,28 +49,31 @@ fn clamp(code: &mut ProgramBuilder, x: FloatSlot, (low, high): (f32, f32)) -> Fl
     code.select(above, high, raised)
 }
 
-/// `x - k ln 2`, in two fused steps.
-fn reduce(code: &mut ProgramBuilder, x: FloatSlot, k: FloatSlot) -> FloatSlot {
+/// `k`, the integer nearest `x / ln 2`, and `r = x - k ln 2` in two fused
+/// steps.
+pub(super) fn reduce(code: &mut ProgramBuilder, x: FloatSlot) -> Reduced {
+    let log2e = code.float(std::f32::consts::LOG2_E);
+    let scaled = code.mul(x, log2e);
+    let k = code.round_to_integer(scaled);
     let minus_hi = code.float(-LN2_HI);
     let partial = code.fma(k, minus_hi, x);
     let minus_lo = code.float(-ln2_lo());
-    code.fma(k, minus_lo, partial)
+    let r = code.fma(k, minus_lo, partial);
+    Reduced { k, r }
 }
 
-/// `e^r` for `|r| <= ln 2 / 2`, as `1 + (r + r^2 q(r))` with `q` the
-/// Taylor series from its `r^2` term on.
-fn exp_reduced(code: &mut ProgramBuilder, r: FloatSlot) -> FloatSlot {
+/// `e^r - 1` for `|r| <= ln 2 / 2`, as `r + r^2 q(r)` with `q` the Taylor
+/// series from its `r^2` term on.
+pub(super) fn expm1_reduced(code: &mut ProgramBuilder, r: FloatSlot) -> FloatSlot {
     let higher: Vec<f32> = (3..=DEGREE).map(inverse_factorial).collect();
     let tail = code.polynomial(r, inverse_factorial(2), &higher);
     let square = code.mul(r, r);
-    let sum = code.fma(square, tail, r);
-    let one = code.float(1.0);
-    code.add(one, sum)
+    code.fma(square, tail, r)
 }
 
 /// `p 2^k` for an integral `k` in `[-150, 128]`, as two multiplications by
 /// normal powers of two, of which only the second can round.
-fn scale(code: &mut ProgramBuilder, p: FloatSlot, k: FloatSlot) -> FloatSlot {
+pub(super) fn scale(code: &mut ProgramBuilder, p: FloatSlot, k: FloatSlot) -> FloatSlot {
     let k = code.float_to_int(k);
     let one = code.int(1);
     let half = code.int_op(IntOp::ShrArithmetic, k, one);
@@ -77,7 +85,7 @@ fn scale(code: &mut ProgramBuilder, p: FloatSlot, k: FloatSlot) -> FloatSlot {
 }
 
 /// `2^n` for `n` in the normal exponent range.
-fn power_of_two(code: &mut ProgramBuilder, n: IntSlot) -> FloatSlot {
+pub(super) fn power_of_two(code: &mut ProgramBuilder, n: IntSlot) -> FloatSlot {
     let bias = code.int(BIAS);
     let biased = code.int_op(IntOp::Add, n, bias);
     let shift = code.int(MANTISSA_BITS);
