@@ -53,8 +53,11 @@ impl Batched {
         let aligned = |dims: &[usize], axis: usize| {
             (axis + dims.len()).checked_sub(rank).map_or(1, |position| dims[position])
         };
-        let out_batch =
-            (0..rank).map(|axis| aligned(&lhs_batch, axis).max(aligned(&rhs_batch, axis)));
+        // An extent of 1 broadcasts to the other, even to 0.
+        let out_batch = (0..rank).map(|axis| {
+            let (lhs, rhs) = (aligned(&lhs_batch, axis), aligned(&rhs_batch, axis));
+            if lhs == 1 { rhs } else { lhs }
+        });
         Self {
             out_batch: Extents::from_dims(out_batch.collect()),
             lhs_batch: Extents::from_dims(lhs_batch),

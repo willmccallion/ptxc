@@ -106,3 +106,13 @@ fn every_matrix_of_a_batch_multiplies() {
         &[1.0, 2.0, 3.0, 4.0, 2.0, 1.0, 4.0, 3.0],
     );
 }
+
+#[test]
+fn an_empty_batch_broadcast_against_one_leaves_the_product_empty() {
+    let empty_batch = f32s(&[0, 2, 3], &[]);
+    let one_batch = f32s(&[1, 3, 2], &[1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+
+    let product = op("matmul", "f32[0, 2, 2]", &[empty_batch, one_batch]);
+
+    assert_close(&product, &[0, 2, 2], &[]);
+}
