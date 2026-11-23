@@ -48,6 +48,12 @@ api! {
     device_get_attribute = c"cuDeviceGetAttribute": fn(*mut c_int, c_int, CuDevice);
     /// `cuDevicePrimaryCtxRetain`.
     primary_ctx_retain = c"cuDevicePrimaryCtxRetain": fn(*mut CuContext, CuDevice);
+    /// `cuDevicePrimaryCtxGetState`.
+    #[cfg_attr(
+        not(all(test, feature = "gpu")),
+        expect(dead_code, reason = "only the GPU tests read the state")
+    )]
+    primary_ctx_get_state = c"cuDevicePrimaryCtxGetState": fn(CuDevice, *mut c_uint, *mut c_int);
     /// `cuDevicePrimaryCtxRelease`.
     primary_ctx_release = c"cuDevicePrimaryCtxRelease_v2": fn(CuDevice);
     /// `cuCtxSetCurrent`.

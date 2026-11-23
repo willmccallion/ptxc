@@ -13,7 +13,7 @@ use ptxc_cuda::{Context, DeviceOrdinal, Driver};
 
 /// Device 0's primary context.
 pub(crate) fn context() -> Context {
-    Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context().unwrap()
+    Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context()
 }
 
 /// The hand-written PTX for `vector_add(a, b, out, n)` on f32.

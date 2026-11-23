@@ -24,7 +24,7 @@ pub fn load(program: Program, device: &Device) -> Result<LoadedProgram, RuntimeE
     if (capability.major, capability.minor) != (target.major(), target.minor()) {
         return Err(RuntimeError::Target { program: target, device: capability });
     }
-    let context = device.primary_context()?;
+    let context = device.primary_context();
     let functions = program
         .kernels()
         .iter()
