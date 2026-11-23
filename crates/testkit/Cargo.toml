@@ -28,6 +28,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+ptxc-codegen.workspace = true
 ptxc-loop.workspace = true
 ptxc-lower.workspace = true
 ptxc-schedule.workspace = true

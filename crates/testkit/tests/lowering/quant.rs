@@ -67,7 +67,7 @@ fn overflow() -> impl Strategy<Value = Overflow> {
     prop_oneof![Just(Overflow::Saturate), Just(Overflow::NonFinite)]
 }
 
-fn quantize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn quantize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (select(GRIDS.to_vec()), select(FLOATS.to_vec()), axis_dims(), overflow())
         .prop_flat_map(|(grid, dtype, dims, overflow)| {
             let input = tensor(dtype, dims.clone(), Domain::Any);
@@ -78,7 +78,7 @@ fn quantize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         })
 }
 
-fn dequantize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn dequantize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let grids = [GRIDS.to_vec(), vec![QuantDType::I32]].concat();
     (select(grids), select(FLOATS.to_vec()), axis_dims())
         .prop_flat_map(|(grid, output, dims)| {
@@ -96,7 +96,7 @@ fn integer_grid() -> impl Strategy<Value = QuantDType> {
 
 /// `[rows, inner] x [inner, columns]`, `a`'s maps maybe per row and `b`'s
 /// maybe per column.
-fn qmatmul_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn qmatmul_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let extent = 0_u64..=3;
     (
         integer_grid(),
@@ -128,7 +128,7 @@ const fn window(stride: u64, pad: u64) -> WindowAxis {
 
 /// A 1-D convolution of 1 or 2 channels, weights maybe per output channel,
 /// and an optional `i32` bias.
-fn qconv_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn qconv_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let shape = (1_u64..=2, 1_u64..=2, 2_u64..=5, 1_u64..=2, 1_u64..=2, 0_u64..=1);
     (integer_grid(), integer_grid(), integer_grid(), shape, any::<[bool; 2]>())
         .prop_flat_map(|(x, w, y, (channels, features, length, kernel, stride, pad), flags)| {

@@ -31,14 +31,14 @@ const ACTIVATIONS: [Activation; 17] = [
     Activation::HardSigmoid { alpha: attr(-0.7), beta: attr(0.1) },
 ];
 
-fn activation_cases() -> Vec<Case> {
+pub(crate) fn activation_cases() -> Vec<Case> {
     admitted(ACTIVATIONS.into_iter().flat_map(|activation| {
         DType::ALL.into_iter().map(move |dtype| Case::new(Op::Activation(activation), &[dtype]))
     }))
 }
 
 /// `Clip` on any input with scalar bounds that may cross.
-fn clip_cases() -> Vec<Case> {
+pub(crate) fn clip_cases() -> Vec<Case> {
     admitted(DType::ALL.into_iter().map(|dtype| {
         let bound = OperandSpec::any(dtype).with_extent(Extent::Scalar);
         let x = OperandSpec::any(dtype).with_extent(Extent::Full);
@@ -47,7 +47,7 @@ fn clip_cases() -> Vec<Case> {
 }
 
 /// `PRelu` with a slope broadcasting to the input.
-fn prelu_cases() -> Vec<Case> {
+pub(crate) fn prelu_cases() -> Vec<Case> {
     admitted(DType::ALL.into_iter().map(|dtype| {
         let x = OperandSpec::any(dtype).with_extent(Extent::Full);
         Case { op: Op::PRelu, operands: vec![x, OperandSpec::any(dtype)] }

@@ -45,7 +45,7 @@ fn graph_of(op: Op, inputs: Vec<HostTensor>) -> (Graph, Vec<HostTensor>) {
     (single_node(op, &inputs), inputs)
 }
 
-fn softmax_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn softmax_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     let kind = prop_oneof![Just(SoftmaxKind::Softmax), Just(SoftmaxKind::LogSoftmax)];
     (floats(), axis_dims(), kind)
         .prop_flat_map(|(dtype, dims, kind)| {
@@ -68,7 +68,7 @@ fn layer_norm_kinds() -> impl Strategy<Value = LayerNormKind> {
 /// A layer or RMS normalisation with a scale (of another float type, for
 /// RMS) and, for layer normalisation, sometimes a bias, each broadcasting
 /// to the normalised block.
-fn layer_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn layer_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     let stash = prop_oneof![Just(StashType::F32), Just(StashType::Bf16)];
     (floats(), floats(), axis_dims(), layer_norm_kinds(), stash, any::<bool>())
         .prop_flat_map(|(dtype, rms_scale, dims, kind, stash, has_bias)| {
@@ -97,7 +97,7 @@ const fn channels(dims: &[u64]) -> u64 {
 
 /// Inference batch normalisation with scale and bias of one float type
 /// and mean and variance of another, the variance never negative.
-fn batch_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn batch_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     (floats(), floats(), floats(), axis_dims())
         .prop_flat_map(|(dtype, affine, statistics, dims)| {
             let per_channel = vec![channels(&dims)];
@@ -131,7 +131,7 @@ fn absolute(tensor: &HostTensor) -> HostTensor {
     HostTensor::new(tensor.shape().clone(), data).unwrap()
 }
 
-fn instance_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn instance_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     let dims = proptest::collection::vec(prop_oneof![1 => Just(0_u64), 12 => 1_u64..=3], 3..=4);
     (floats(), dims)
         .prop_flat_map(|(dtype, dims)| {
