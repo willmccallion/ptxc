@@ -74,7 +74,9 @@ impl Selector<'_> {
             UnaryOp::Log1p => self.math(math::log1p(), x),
             UnaryOp::Tanh => self.math(math::tanh(), x),
             UnaryOp::Erf => self.math(math::erf(), x),
-            UnaryOp::Not | UnaryOp::Sin | UnaryOp::Cos => {
+            UnaryOp::Sin => self.math(math::sin(), x),
+            UnaryOp::Cos => self.math(math::cos(), x),
+            UnaryOp::Not => {
                 return Err(unsupported(op.name()));
             }
         };
