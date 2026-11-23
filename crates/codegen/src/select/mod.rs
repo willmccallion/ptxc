@@ -5,6 +5,7 @@ mod cast;
 mod control;
 mod expr;
 mod fp8;
+mod known;
 mod math;
 mod memory;
 mod mma;
@@ -12,6 +13,7 @@ mod ops;
 mod values;
 
 use crate::ast::{B64, FunctionBuilder, PtxModule, Reg};
+use known::Known;
 use memory::Storage;
 use ptxc_loop::{BufferId, LoweredKernel, VarId};
 use ptxc_target::Target;
@@ -46,13 +48,14 @@ pub fn generate(kernel: &LoweredKernel, target: &Target) -> Result<PtxModule, Co
     Ok(PtxModule { version: target.ptx_isa(), target: target.sm(), functions: vec![function] })
 }
 
-/// The state of selection: the function being built, and what each kernel
-/// variable and buffer is bound to.
+/// The state of selection: the function being built, what each kernel
+/// variable and buffer is bound to, and what registers already hold.
 struct Selector<'k> {
     builder: FunctionBuilder,
     kernel: &'k LoweredKernel,
     vars: HashMap<VarId, Reg<B64>>,
     storage: HashMap<BufferId, Storage>,
+    known: Known,
 }
 
 impl<'k> Selector<'k> {
@@ -62,6 +65,7 @@ impl<'k> Selector<'k> {
             kernel,
             vars: HashMap::new(),
             storage: HashMap::new(),
+            known: Known::default(),
         }
     }
 }

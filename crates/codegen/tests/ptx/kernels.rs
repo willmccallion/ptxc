@@ -302,7 +302,7 @@ fn a_row_sum_combines_threads_in_a_shared_memory_tree() {
 }
 
 #[test]
-fn a_row_argmax_assembles() {
+fn a_row_argmax_compares_each_loaded_element_once() {
     let argmax = |axis, body| TensorExpr::ArgReduce {
         kind: ArgKind::Max,
         tie: TieBreak::First,
@@ -310,5 +310,8 @@ fn a_row_argmax_assembles() {
         body: Box::new(body),
     };
 
-    assemble(&emitted(row_reduction(DType::F16, argmax)));
+    let module = emitted(row_reduction(DType::F16, argmax));
+
+    assemble(&module);
+    golden::check("row_argmax.ptx", &module.to_string()).unwrap();
 }
