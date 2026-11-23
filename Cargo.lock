@@ -949,6 +949,7 @@ dependencies = [
 name = "ptxc-loop"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "proptest",
  "ptxc-core",
  "ptxc-target",

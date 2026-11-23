@@ -18,6 +18,7 @@ workspace = true
 ptxc-core.workspace = true
 ptxc-target.workspace = true
 thiserror.workspace = true
+libm.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

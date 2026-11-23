@@ -4,6 +4,8 @@
 
 mod arena;
 mod eval;
+
+pub(crate) use eval::floor_mod;
 mod interval;
 mod linear;
 mod simplify;

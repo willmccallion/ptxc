@@ -32,7 +32,7 @@ pub(super) fn floor_div(a: i64, b: i64) -> Option<i64> {
 
 /// `a - b * floor(a / b)`, which has the sign of `b`, or `None` if `b` is
 /// zero. It never overflows: `i64::MIN mod -1` is 0.
-pub(super) const fn floor_mod(a: i64, b: i64) -> Option<i64> {
+pub(crate) const fn floor_mod(a: i64, b: i64) -> Option<i64> {
     if b == 0 {
         return None;
     }
