@@ -1,5 +1,6 @@
 //! Lowering from graph IR fused groups to loop IR compute definitions.
 
+mod compose;
 mod epilogue;
 mod error;
 mod group;
