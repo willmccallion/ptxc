@@ -1,0 +1,129 @@
+//! One test case's outcome on a backend.
+
+use crate::args::Backend;
+use crate::report::{Failure, Outcome, Reason, Worst};
+use ptxc_core::{Evaluate, HostTensor};
+use ptxc_interp::Interpreter;
+use ptxc_onnx::{ImportError, ImportErrorKind, ImportOptions, Unsupported, import_model};
+use ptxc_testkit::compare::{self, Mismatch, Tolerance};
+use ptxc_testkit::onnx_tests::{DataSet, LoadError, Runnable, TestCase};
+
+/// The node tests' own tolerance.
+pub(super) const TOLERANCE: Tolerance = Tolerance::ONNX_SUITE;
+
+/// The case's outcome: a pass only if every data set matches.
+pub(super) fn of_case(case: &TestCase, backend: Backend) -> Outcome {
+    let data_sets = match case.data_sets() {
+        Ok(data_sets) => data_sets,
+        Err(error) => return model_unsupported(case).unwrap_or_else(|| of_load_error(&error)),
+    };
+    data_sets
+        .iter()
+        .enumerate()
+        .map(|(index, data_set)| of_data_set(case, data_set, index, backend))
+        .find(|outcome| *outcome != Outcome::Pass)
+        .unwrap_or(Outcome::Pass)
+}
+
+fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, backend: Backend) -> Outcome {
+    let runnable = match case.import(data_set) {
+        Ok(runnable) => runnable,
+        Err(error) => return of_import_error(&error),
+    };
+    let actual = match evaluate(backend, &runnable) {
+        Ok(actual) => actual,
+        Err(message) => return Outcome::Fail { failure: Failure::Evaluate { message } },
+    };
+    if actual.len() != data_set.outputs.len() {
+        let failure = Failure::OutputCount {
+            data_set: index,
+            expected: data_set.outputs.len(),
+            actual: actual.len(),
+        };
+        return Outcome::Fail { failure };
+    }
+    for (output, (actual, expected)) in actual.iter().zip(&data_set.outputs).enumerate() {
+        if let Err(mismatch) = compare::compare(actual, expected, TOLERANCE) {
+            return Outcome::Fail { failure: of_mismatch(&mismatch, index, output) };
+        }
+    }
+    Outcome::Pass
+}
+
+fn evaluate(backend: Backend, runnable: &Runnable) -> Result<Vec<HostTensor>, String> {
+    match backend {
+        Backend::Interp => Interpreter::new(&runnable.graph)
+            .evaluate(&runnable.inputs)
+            .map_err(|error| error.to_string()),
+    }
+}
+
+/// Why the model alone is unsupported, if it is: a test of sequences or
+/// optionals stores its data in protobufs other than tensors, which only
+/// matters if ptxc supports the model.
+fn model_unsupported(case: &TestCase) -> Option<Outcome> {
+    let error = import_model(case.model(), &ImportOptions::default()).err()?;
+    error.unsupported().map(|unsupported| Outcome::Unsupported { reason: reason(unsupported) })
+}
+
+/// An unsupported element type in the test data is unsupported; any other
+/// load error is a failure.
+pub(super) fn of_load_error(error: &LoadError) -> Outcome {
+    if let LoadError::Tensor { source, .. } = error
+        && let Some(unsupported) = source.unsupported()
+    {
+        return Outcome::Unsupported { reason: reason(unsupported) };
+    }
+    Outcome::Fail { failure: Failure::Load { message: error.to_string() } }
+}
+
+/// Unsupported constructs and shapes no input fixes are unsupported; any
+/// other import error is a failure.
+fn of_import_error(error: &ImportError) -> Outcome {
+    if let Some(unsupported) = error.unsupported() {
+        return Outcome::Unsupported { reason: reason(unsupported) };
+    }
+    if matches!(error.kind(), ImportErrorKind::NeedsConstant { .. }) {
+        return Outcome::Unsupported { reason: Reason::ValueDependentShape };
+    }
+    Outcome::Fail { failure: Failure::Import { message: error.to_string() } }
+}
+
+fn reason(unsupported: &Unsupported) -> Reason {
+    match unsupported {
+        Unsupported::Op { domain, op } if domain.is_empty() => Reason::Op(op.clone()),
+        Unsupported::Op { domain, op } => Reason::Op(format!("{domain}.{op}")),
+        Unsupported::DType(dtype) => Reason::DType(dtype.clone()),
+        Unsupported::Attribute { op, attribute } => {
+            Reason::Attribute { op: op.clone(), attribute: attribute.clone() }
+        }
+        Unsupported::Opset(version) => Reason::Opset(*version),
+        Unsupported::ControlFlow(op) => Reason::ControlFlow(op.clone()),
+        Unsupported::DynamicShape(dim) => Reason::DynamicShape(dim.clone()),
+    }
+}
+
+fn of_mismatch(mismatch: &Mismatch, data_set: usize, output: usize) -> Failure {
+    let (worst_absolute, worst_relative) = match mismatch {
+        Mismatch::Values(report) => {
+            (Some(worst(&report.worst_absolute)), Some(worst(&report.worst_relative)))
+        }
+        Mismatch::DType { .. } | Mismatch::Shape { .. } => (None, None),
+    };
+    Failure::Mismatch {
+        data_set,
+        output,
+        message: mismatch.to_string(),
+        worst_absolute,
+        worst_relative,
+    }
+}
+
+fn worst(worst: &compare::Worst) -> Worst {
+    Worst {
+        position: worst.position.0.clone(),
+        actual: worst.actual,
+        expected: worst.expected,
+        error: worst.error,
+    }
+}

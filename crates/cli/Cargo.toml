@@ -19,12 +19,24 @@ name = "ptxc"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
+env_logger.workspace = true
+log.workspace = true
 ptxc-core.workspace = true
 ptxc-target.workspace = true
 ptxc-onnx.workspace = true
+ptxc-onnx-proto.workspace = true
 ptxc-interp.workspace = true
 ptxc-compiler.workspace = true
 ptxc-program.workspace = true
 ptxc-runtime.workspace = true
 ptxc-autotune.workspace = true
 ptxc-testkit.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+yansi.workspace = true
+
+[dev-dependencies]
+prost.workspace = true
+tempfile.workspace = true
