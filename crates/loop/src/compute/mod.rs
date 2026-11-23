@@ -16,6 +16,6 @@ pub use compute_def::{ComputeDef, IndexVar, OutputDef, TensorParam};
 pub use error::ComputeError;
 pub use iter_var::{IterKind, IterVar, IterVarId};
 pub use names::{ComputeName, TensorName, VarName};
-pub use scalar::Scalar;
+pub use scalar::{Constant, Scalar};
 pub use scalar_op::{ArgKind, BinaryOp, InfSign, ReduceOp, TieBreak, UnaryOp};
 pub use tensor_expr::{TensorExpr, TensorParamId};

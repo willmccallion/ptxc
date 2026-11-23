@@ -109,6 +109,15 @@ impl Scalar {
         self.dtype
     }
 
+    /// The value, whichever kind it is.
+    pub const fn constant(self) -> Constant {
+        match self.value {
+            ScalarValue::Float(bits) => Constant::Float(f64::from_bits(bits)),
+            ScalarValue::Int(value) => Constant::Int(value),
+            ScalarValue::Bool(value) => Constant::Bool(value),
+        }
+    }
+
     /// The value of a float constant.
     pub const fn as_f64(self) -> Option<f64> {
         match self.value {
@@ -132,6 +141,18 @@ impl Scalar {
             _ => None,
         }
     }
+}
+
+/// A constant's value: a float before it is rounded to its type, an
+/// integer that fits its type, or a boolean.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Constant {
+    /// A float, rounded to its type where it is used.
+    Float(f64),
+    /// An integer.
+    Int(i64),
+    /// A boolean.
+    Bool(bool),
 }
 
 /// Whether `dtype` stores floats, FP8 included.
