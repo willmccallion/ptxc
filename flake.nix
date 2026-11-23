@@ -32,8 +32,12 @@
         LLVM_PROFDATA = "${lib.getBin pkgs.rustc.llvmPackages.llvm}/bin/llvm-profdata";
         LLVM_COV = "${lib.getBin pkgs.rustc.llvmPackages.llvm}/bin/llvm-cov";
         # ptxc-cuda dlopens libcuda.so.1, which NixOS keeps in the driver's directory.
+        # uv's standalone Python looks for CA certificates where NixOS keeps none, so
+        # baselines' downloads (torchvision weights) need SSL_CERT_FILE; stdenv's setup
+        # replaces the variable, so the hook sets it after.
         shellHook = ''
           export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         '';
       };
     };
