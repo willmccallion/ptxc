@@ -22,12 +22,13 @@ type FamilyImporter = fn(&str, &mut NodeContext<'_>) -> Option<Result<Lowered, I
 
 /// The node in canonical form (D32), or why it cannot be imported.
 pub(crate) fn lower(context: &mut NodeContext<'_>) -> Result<Lowered, ImportError> {
-    let families: [FamilyImporter; 6] = [
+    let families: [FamilyImporter; 7] = [
         constant::lower,
         elementwise::lower,
         activation::lower,
         matmul::lower,
         conv::lower,
+        pool::lower,
         reduce::lower,
     ];
     let op = context.op_type();

@@ -172,6 +172,31 @@ fn an_undefined_value_is_reported() {
 }
 
 #[test]
+fn optional_outputs_ptxc_does_not_produce_are_unsupported() {
+    let dropout = model(
+        vec![node("Dropout", &["x"], &["y", "mask"], vec![])],
+        vec![fixed("x", FLOAT, &[2])],
+        vec![],
+        vec![],
+    );
+    let pool = model(
+        vec![node("MaxPool", &["x"], &["y", "i"], vec![ints("kernel_shape", &[1])])],
+        vec![fixed("x", FLOAT, &[1, 1, 2])],
+        vec![],
+        vec![],
+    );
+
+    assert_eq!(
+        unsupported(&dropout),
+        Unsupported::Attribute { op: "Dropout".to_owned(), attribute: "mask".to_owned() }
+    );
+    assert_eq!(
+        unsupported(&pool),
+        Unsupported::Attribute { op: "MaxPool".to_owned(), attribute: "Indices".to_owned() }
+    );
+}
+
+#[test]
 fn range_of_a_type_ptxc_does_not_evaluate_is_unsupported() {
     let scalar = |name: &str| ptxc_onnx_proto::TensorProto {
         name: Some(name.to_owned()),
