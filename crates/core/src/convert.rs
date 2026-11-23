@@ -32,3 +32,18 @@ pub const fn int_to_f64(value: i64) -> f64 {
 pub const fn int_to_f32(value: i64) -> f32 {
     value as f32
 }
+
+/// An element count as the nearest f32, for averages.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "counts are far below 2^24 in practice; rounds to nearest"
+)]
+pub const fn count_to_f32(count: usize) -> f32 {
+    count as f32
+}
+
+/// An element count as the nearest f64, for averages.
+#[expect(clippy::cast_precision_loss, reason = "exact below 2^53")]
+pub const fn count_to_f64(count: usize) -> f64 {
+    count as f64
+}
