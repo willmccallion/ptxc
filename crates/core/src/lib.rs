@@ -10,6 +10,7 @@ mod size;
 mod tensor;
 
 pub use dtype::DType;
+pub use evaluate::Evaluate;
 pub use index::{Idx, IndexVec};
 pub use quant::{Affine, Granularity, QuantDType, QuantError, QuantParams, Scale, ZeroPoint};
 pub use shape::{Axis, Dim, Rank, Shape, ShapeError};
