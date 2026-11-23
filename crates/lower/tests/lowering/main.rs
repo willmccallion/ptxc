@@ -8,6 +8,7 @@ mod elementwise;
 mod groups;
 mod norm;
 mod reduce;
+mod shape;
 
 use ptxc_core::{DType, Dim, Shape};
 use ptxc_graph::{Graph, GraphBuilder, Layout, Op, Partitioned, TensorType, ValueId};

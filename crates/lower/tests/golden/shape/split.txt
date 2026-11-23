@@ -1,0 +1,8 @@
+compute split_0_0(%in0: f32[4]) {
+  %i0 = spatial 1
+  %out0: f32[1] = %in0[%i0]
+}
+compute split_0_1(%in0: f32[4]) {
+  %i0 = spatial 3
+  %out0: f32[3] = %in0[%i0 + 1]
+}

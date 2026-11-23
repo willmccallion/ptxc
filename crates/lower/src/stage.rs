@@ -4,8 +4,8 @@
 use ptxc_core::{DType, Dim, IndexVec, Shape, define_index};
 use ptxc_graph::{Graph, Layout, TensorType, ValueId};
 use ptxc_loop::{
-    ComputeBuilder, ComputeDef, ComputeError, ComputeName, ExprId, IterVarId, TensorExpr,
-    TensorName, TensorParamId, VarName,
+    ComputeBuilder, ComputeDef, ComputeError, ComputeName, ExprArena, ExprId, IterVarId,
+    TensorExpr, TensorName, TensorParamId, VarName,
 };
 use std::sync::Arc;
 
@@ -164,6 +164,11 @@ impl<'g> StageBuilder<'g> {
     /// The index expression `value`.
     pub(crate) fn constant(&mut self, value: i64) -> ExprId {
         self.compute.exprs().constant(value)
+    }
+
+    /// The arena the stage's index expressions are built in.
+    pub(crate) const fn exprs(&mut self) -> &mut ExprArena {
+        self.compute.exprs()
     }
 
     fn type_of(&self, binding: Binding) -> &TensorType {
