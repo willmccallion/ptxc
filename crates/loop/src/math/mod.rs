@@ -8,8 +8,11 @@ mod builder;
 mod constants;
 mod eval;
 mod exp;
+mod expm1;
 mod log;
+mod log1p;
 mod program;
+mod tanh;
 
 #[cfg(test)]
 mod semantics;
@@ -23,6 +26,9 @@ use std::sync::LazyLock;
 
 static EXP: LazyLock<MathProgram> = LazyLock::new(exp::exp);
 static LOG: LazyLock<MathProgram> = LazyLock::new(log::log);
+static EXPM1: LazyLock<MathProgram> = LazyLock::new(expm1::expm1);
+static LOG1P: LazyLock<MathProgram> = LazyLock::new(log1p::log1p);
+static TANH: LazyLock<MathProgram> = LazyLock::new(tanh::tanh);
 
 /// `e^x`, within 1.06 ulps.
 pub fn exp() -> &'static MathProgram {
@@ -32,4 +38,19 @@ pub fn exp() -> &'static MathProgram {
 /// The natural logarithm, within 0.84 ulps.
 pub fn log() -> &'static MathProgram {
     &LOG
+}
+
+/// `e^x - 1`, within 1.65 ulps.
+pub fn expm1() -> &'static MathProgram {
+    &EXPM1
+}
+
+/// `log(1 + x)`, within 1.44 ulps.
+pub fn log1p() -> &'static MathProgram {
+    &LOG1P
+}
+
+/// The hyperbolic tangent, within 2.42 ulps.
+pub fn tanh() -> &'static MathProgram {
+    &TANH
 }
