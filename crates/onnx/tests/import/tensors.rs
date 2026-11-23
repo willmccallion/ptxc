@@ -152,3 +152,42 @@ fn external_data_past_the_end_of_the_file_is_an_error() {
         "{error}"
     );
 }
+
+#[test]
+fn every_type_round_trips_through_a_tensor_proto() {
+    use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
+    use ptxc_core::{Dim, HostTensor, Shape, TensorData};
+    let shape = Shape::new(vec![Dim::new(2), Dim::new(1)]).unwrap();
+    let cases: Vec<TensorData> = vec![
+        vec![1.5_f32, -0.0].into(),
+        vec![F16::from_f32(2.0), F16::from_f32(-3.0)].into(),
+        vec![Bf16::from_f32(4.0), Bf16::from_f32(1e30)].into(),
+        vec![F8E4M3Fn::from_f32(5.0, Overflow::Saturate); 2].into(),
+        vec![F8E5M2::from_f32(6.0, Overflow::Saturate); 2].into(),
+        vec![-7_i8, 8].into(),
+        vec![9_u8, 255].into(),
+        vec![i32::MIN, 10].into(),
+        vec![i64::MAX, -11].into(),
+        vec![true, false].into(),
+    ];
+    for data in cases {
+        let tensor = HostTensor::new(shape.clone(), data).unwrap();
+
+        let back = ptxc_onnx::tensor_from_bytes(&ptxc_onnx::tensor_to_bytes(&tensor, "t").unwrap())
+            .unwrap();
+
+        assert_eq!(back.shape(), tensor.shape());
+        assert_eq!(back.data().to_le_bytes(), tensor.data().to_le_bytes());
+    }
+}
+
+#[test]
+fn an_exported_tensor_proto_keeps_its_name() {
+    use prost::Message;
+    let tensor = ptxc_core::HostTensor::vector(vec![1.0_f32].into());
+
+    let bytes = ptxc_onnx::tensor_to_bytes(&tensor, "logits").unwrap();
+
+    let proto = ptxc_onnx_proto::TensorProto::decode(bytes.as_slice()).unwrap();
+    assert_eq!(proto.name.as_deref(), Some("logits"));
+}
