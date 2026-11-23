@@ -22,7 +22,7 @@ fn matrix_dims(batch: &[u64], is_vector: bool, vector: u64, matrix: [u64; 2]) ->
     if is_vector { vec![vector] } else { [batch, &matrix[..]].concat() }
 }
 
-fn matmul_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn matmul_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let shapes = (vec(extent(), 0..=2), [extent(), extent(), extent()], any::<[bool; 2]>());
     (select(TYPES.to_vec()), shapes)
         .prop_flat_map(|(dtype, (batch, [m, k, n], vectors))| {
@@ -53,7 +53,7 @@ fn stored(orientation: Orientation, [rows, columns]: [u64; 2]) -> Vec<u64> {
 
 /// Integer `Gemm` scales in f32 (see the NOTE in lowering), so its integers
 /// stay small enough to be exact.
-fn gemm_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn gemm_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let attrs = (orientation(), orientation(), factor(), factor())
         .prop_map(|(a, b, alpha, beta)| GemmAttrs { a, b, alpha, beta });
     (select(TYPES.to_vec()), attrs, [extent(), extent(), extent()], any::<bool>())

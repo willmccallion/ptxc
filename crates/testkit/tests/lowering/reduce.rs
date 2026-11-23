@@ -64,7 +64,7 @@ fn reduction_tolerance(input: &HostTensor) -> impl Fn(DType) -> Tolerance {
     move |dtype| Tolerance::for_dtype(dtype).for_reduction(ElementCount::new(length))
 }
 
-fn reduce_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn reduce_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     (select(reduce_dtypes()), output_dims(), keep_dims())
         .prop_flat_map(|((op, dtype), dims, keep_dims)| {
             let rank = dims.len();
@@ -87,7 +87,7 @@ fn input_and_axis(dtypes: Vec<DType>) -> impl Strategy<Value = (HostTensor, Axis
     })
 }
 
-fn arg_reduce_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn arg_reduce_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     let numeric =
         [DType::F32, DType::F16, DType::Bf16, DType::I8, DType::U8, DType::I32, DType::I64];
     let kind = prop_oneof![Just(ArgKind::Max), Just(ArgKind::Min)];
@@ -100,7 +100,7 @@ fn arg_reduce_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     )
 }
 
-fn cum_sum_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub(crate) fn cum_sum_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     let summable = [DType::F32, DType::F16, DType::Bf16, DType::I32, DType::I64];
     let inclusion = prop_oneof![Just(Inclusion::Inclusive), Just(Inclusion::Exclusive)];
     let direction = prop_oneof![Just(ScanDirection::Forward), Just(ScanDirection::Reverse)];

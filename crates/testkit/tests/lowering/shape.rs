@@ -58,13 +58,13 @@ fn regroupings(dims: &[u64]) -> Vec<Vec<u64>> {
     shapes
 }
 
-fn reshape_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn reshape_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), output_dims())
         .prop_flat_map(|(dtype, dims)| (select(regroupings(&dims)), any_tensor(dtype, dims)))
         .prop_map(|(target, input)| (Op::Reshape(shape(&target)), vec![input]))
 }
 
-fn expand_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn expand_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), output_dims())
         .prop_flat_map(|(dtype, dims)| {
             let input = operand_dims(dims.clone()).prop_flat_map(move |d| any_tensor(dtype, d));
@@ -73,7 +73,7 @@ fn expand_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         .prop_map(|(target, input)| (Op::Expand(shape(&target)), vec![input]))
 }
 
-fn transpose_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn transpose_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), output_dims())
         .prop_flat_map(|(dtype, dims)| {
             let permutation = Just((0..dims.len()).collect::<Vec<_>>()).prop_shuffle();
@@ -85,7 +85,7 @@ fn transpose_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         })
 }
 
-fn tile_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn tile_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), output_dims())
         .prop_flat_map(|(dtype, dims)| (vec(0_u64..=3, dims.len()), any_tensor(dtype, dims)))
         .prop_map(|(repeats, input)| {
@@ -96,7 +96,7 @@ fn tile_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
 
 /// One to three operands agreeing on every axis but `axis`, where each has
 /// 0 to 3 elements.
-fn concat_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn concat_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), axis_dims()).prop_flat_map(|(dtype, dims)| {
         let rank = dims.len();
         (0..rank, vec(0_u64..=3, 1..=3)).prop_flat_map(move |(axis, extents)| {
@@ -138,7 +138,7 @@ fn slice_axis(axis: usize, extent: u64) -> BoxedStrategy<Option<SliceAxis>> {
     prop_oneof![1 => Just(None), 3 => sliced].boxed()
 }
 
-fn slice_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn slice_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), output_dims())
         .prop_flat_map(|(dtype, dims)| {
             let axes: Vec<_> =
@@ -152,7 +152,7 @@ fn slice_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
 }
 
 /// An axis cut into one to three consecutive pieces, some maybe empty.
-fn split_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn split_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), axis_dims()).prop_flat_map(|(dtype, dims)| {
         let rank = dims.len();
         (0..rank).prop_flat_map(move |axis| {
@@ -169,7 +169,7 @@ fn split_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     })
 }
 
-fn pad_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn pad_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let mode = prop_oneof![
         Just(PadMode::Constant),
         Just(PadMode::Reflect),
@@ -196,7 +196,7 @@ fn pad_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         .prop_filter("pads an empty axis", |(op, inputs)| admitted(op, inputs))
 }
 
-fn trilu_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn trilu_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let part = prop_oneof![Just(TriangularPart::Upper), Just(TriangularPart::Lower)];
     let dims = vec(prop_oneof![1 => Just(0_u64), 12 => 1_u64..=4], 2..=3);
     (any_dtype(), dims, part, -4_i64..=4)

@@ -107,7 +107,7 @@ fn qk_output() -> impl Strategy<Value = Option<QkOutput>> {
     ]
 }
 
-fn attention_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn attention_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let mask_kind = prop_oneof![
         Just(AttentionMask::None),
         Just(AttentionMask::Boolean),

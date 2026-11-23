@@ -57,7 +57,7 @@ fn emptied_if_unindexable(mut dims: Vec<u64>, extents: &[u64]) -> Vec<u64> {
     dims
 }
 
-fn gather_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn gather_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), index_dtype(), axis_dims(), vec(1_u64..=3, 0..=2))
         .prop_flat_map(|(dtype, index_type, dims, index_dims)| {
             let rank = dims.len();
@@ -71,7 +71,7 @@ fn gather_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         .prop_map(|(axis, data, indices)| (Op::Gather(Axis::new(axis)), vec![data, indices]))
 }
 
-fn gather_elements_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn gather_elements_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), index_dtype(), axis_dims())
         .prop_flat_map(|(dtype, index_type, dims)| {
             let rank = dims.len();
@@ -99,7 +99,7 @@ fn gather_elements_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
 
 /// `GatherND` with `batch` leading axes shared, maybe one more outer axis,
 /// and tuples one to all of the remaining axes long.
-fn gather_nd_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn gather_nd_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     (any_dtype(), index_dtype(), axis_dims(), 0_u64..=3, any::<bool>())
         .prop_flat_map(|(dtype, index_type, dims, free_extent, has_free)| {
             let rank = dims.len();

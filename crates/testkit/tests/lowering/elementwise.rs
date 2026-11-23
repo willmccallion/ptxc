@@ -49,7 +49,7 @@ const BINARY: [BinaryOp; 15] = [
     BinaryOp::Xor,
 ];
 
-fn unary_cases() -> Vec<Case> {
+pub(crate) fn unary_cases() -> Vec<Case> {
     admitted(
         UNARY.into_iter().flat_map(|op| {
             DType::ALL.into_iter().map(move |dtype| Case::new(Op::Unary(op), &[dtype]))
@@ -60,7 +60,7 @@ fn unary_cases() -> Vec<Case> {
 /// Every binary op on two operands of one type, and `Pow` with every
 /// exponent type. An integer raised to a float exponent is computed in f32
 /// (see the NOTE in lowering), so its operands stay small enough to be exact.
-fn binary_cases() -> Vec<Case> {
+pub(crate) fn binary_cases() -> Vec<Case> {
     let same = BINARY.into_iter().flat_map(|op| {
         DType::ALL.into_iter().map(move |dtype| Case::new(Op::Binary(op), &[dtype, dtype]))
     });
@@ -79,7 +79,7 @@ fn binary_cases() -> Vec<Case> {
     admitted(same.chain(pow))
 }
 
-fn variadic_cases() -> Vec<Case> {
+pub(crate) fn variadic_cases() -> Vec<Case> {
     let ops = [VariadicOp::Max, VariadicOp::Min, VariadicOp::Sum, VariadicOp::Mean];
     admitted(ops.into_iter().flat_map(|op| {
         DType::ALL.into_iter().flat_map(move |dtype| {
@@ -88,11 +88,11 @@ fn variadic_cases() -> Vec<Case> {
     }))
 }
 
-fn where_cases() -> Vec<Case> {
+pub(crate) fn where_cases() -> Vec<Case> {
     admitted(DType::ALL.into_iter().map(|dtype| Case::new(Op::Where, &[DType::Bool, dtype, dtype])))
 }
 
-fn cast_cases() -> Vec<Case> {
+pub(crate) fn cast_cases() -> Vec<Case> {
     admitted(DType::ALL.into_iter().flat_map(|from| {
         DType::ALL.into_iter().flat_map(move |to| {
             [Overflow::Saturate, Overflow::NonFinite]

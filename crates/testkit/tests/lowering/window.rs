@@ -59,7 +59,7 @@ fn pool_kind() -> impl Strategy<Value = PoolKind> {
 }
 
 /// A pool on a type its kind takes: max pooling also takes 8-bit integers.
-fn pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let leading = [0_u64..=2, 1_u64..=2];
     let spatial = vec(spatial_axis(), 1..=2);
     let kind_and_type = pool_kind().prop_flat_map(|kind| {
@@ -82,7 +82,7 @@ fn pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         .prop_filter("rejected by the type rule", |(op, inputs)| admitted(op, inputs))
 }
 
-fn global_pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn global_pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let kind = prop_oneof![Just(GlobalPoolKind::Max), Just(GlobalPoolKind::Average)];
     (select(FLOATS.to_vec()), kind, vec(0_u64..=3, 3..=4)).prop_flat_map(|(dtype, kind, dims)| {
         (Just(Op::GlobalPool(kind)), tensor(dtype, dims, Domain::Moderate).prop_map(|x| vec![x]))
@@ -91,7 +91,7 @@ fn global_pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
 
 /// A convolution of `groups * group_channels` input channels into `groups *
 /// per_group` outputs, with an optional bias.
-fn conv_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn conv_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let channels = (1_u64..=2, 1_u64..=2, 1_u64..=2);
     let spatial = vec(spatial_axis(), 1..=2);
     (select(FLOATS.to_vec()), 1_u64..=2, channels, spatial, any::<bool>())

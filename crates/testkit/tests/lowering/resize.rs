@@ -77,7 +77,7 @@ fn f64_ratio(size: u64, input: u64) -> f32 {
     ptxc_core::convert::f64_to_f32(as_f64(size) / as_f64(input))
 }
 
-fn resize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
+pub(crate) fn resize_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let antialias = prop_oneof![Just(Antialias::Off), Just(Antialias::On)];
     (select(TYPES.to_vec()), vec(0_u64..=4, 1..=3), mode(), antialias)
         .prop_flat_map(|(dtype, dims, mode, antialias)| {
