@@ -6,6 +6,7 @@
 mod activation;
 mod elementwise;
 mod groups;
+mod norm;
 mod reduce;
 
 use ptxc_core::{DType, Dim, Shape};

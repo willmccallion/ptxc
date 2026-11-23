@@ -1,0 +1,17 @@
+compute log_softmax_0_max(%in0: f16[2, 3]) {
+  %i0 = spatial 2
+  %i1 = spatial 1
+  %k0 = reduce 3
+  %out0: f32[2, 1] = reduce_max[%k0](cast<f32>(%in0[%i0, %k0]))
+}
+compute log_softmax_0_sum(%in0: f16[2, 3], %in1: f32[2, 1]) {
+  %i0 = spatial 2
+  %i1 = spatial 1
+  %k0 = reduce 3
+  %out0: f32[2, 1] = sum[%k0](exp(sub(cast<f32>(%in0[%i0, %k0]), %in1[%i0, %i1])))
+}
+compute log_softmax_0(%in0: f16[2, 3], %in1: f32[2, 1], %in2: f32[2, 1]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %out0: f16[2, 3] = cast<f16>(sub(sub(cast<f32>(%in0[%i0, %i1]), %in1[%i0, 0]), log(%in2[%i0, 0])))
+}

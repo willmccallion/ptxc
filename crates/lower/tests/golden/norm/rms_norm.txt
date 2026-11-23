@@ -1,0 +1,9 @@
+compute rms_norm_0_inverse(%in0: bf16[4]) {
+  %i0 = spatial 1
+  %k0 = reduce 4
+  %out0: f32[1] = div(1.0:f32, sqrt(add(div(sum[%k0](mul(cast<f32>(%in0[%k0]), cast<f32>(%in0[%k0]))), 4.0:f32), 9.999999747378752e-6:f32)))
+}
+compute rms_norm_0(%in0: bf16[4], %in1: f32[1], %in2: f32[4]) {
+  %i0 = spatial 4
+  %out0: f32[4] = mul(mul(cast<f32>(%in0[%i0]), %in1[0]), %in2[%i0])
+}

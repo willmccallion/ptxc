@@ -1,0 +1,23 @@
+compute layer_norm_0_mean(%in0: f16[2, 3]) {
+  %i0 = spatial 2
+  %i1 = spatial 1
+  %k0 = reduce 3
+  %out0: f32[2, 1] = div(sum[%k0](cast<f32>(%in0[%i0, %k0])), 3.0:f32)
+}
+compute layer_norm_0_inverse(%in0: f16[2, 3], %in1: f32[2, 1]) {
+  %i0 = spatial 2
+  %i1 = spatial 1
+  %k0 = reduce 3
+  %out0: f32[2, 1] = div(1.0:f32, sqrt(add(div(sum[%k0](mul(sub(cast<f32>(%in0[%i0, %k0]), %in1[%i0, %i1]), sub(cast<f32>(%in0[%i0, %k0]), %in1[%i0, %i1]))), 3.0:f32), 9.999999747378752e-6:f32)))
+}
+compute layer_norm_0(%in0: f16[2, 3], %in1: f32[2, 1], %in2: f32[2, 1], %in3: f16[3], %in4: f16[1]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %out0: f16[2, 3] = cast<f16>(add(mul(mul(sub(cast<f32>(%in0[%i0, %i1]), %in2[%i0, 0]), %in1[%i0, 0]), cast<f32>(%in3[%i1])), cast<f32>(%in4[0])))
+}
+compute layer_norm_0_statistics(%in0: f32[2, 1], %in1: f32[2, 1]) {
+  %i0 = spatial 2
+  %i1 = spatial 1
+  %out0: bf16[2, 1] = cast<bf16>(%in0[%i0, %i1])
+  %out1: bf16[2, 1] = cast<bf16>(%in1[%i0, %i1])
+}

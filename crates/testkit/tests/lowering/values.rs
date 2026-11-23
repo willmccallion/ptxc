@@ -17,6 +17,11 @@ pub(crate) enum Domain {
     /// Values whose products and squares stay in f32's range: floats
     /// without the specials past 1e4, integers within ±2^20.
     Moderate,
+    /// Whole floats from -8 to 8 and the specials, except those past f32's
+    /// square root of its range. A block of them has a mean whose f32
+    /// rounding is tiny against any nonzero deviation from it, which keeps
+    /// a normalisation's f32 result well-conditioned.
+    Integral,
 }
 
 /// An output shape: rank 0 to 3, extents mostly 1 to 3, sometimes 0.
@@ -64,6 +69,10 @@ fn data(dtype: DType, len: usize, domain: Domain) -> BoxedStrategy<TensorData> {
         (Domain::SmallInt, _) => {
             return vec(0_i64..=6, len).prop_map(move |values| integers(dtype, &values)).boxed();
         }
+        (Domain::Integral, true) => {
+            let whole = prop_oneof![9 => (-8_i32..=8).prop_map(f64::from), 1 => moderate_special()];
+            return vec(whole, len).prop_map(move |values| floats(dtype, &values)).boxed();
+        }
         (Domain::Moderate, true) => {
             return vec(moderate_float(), len)
                 .prop_map(move |values| floats(dtype, &values))
@@ -108,14 +117,15 @@ fn float() -> impl Strategy<Value = f64> {
 
 /// As `float`, without the specials past f32's square root of its range.
 fn moderate_float() -> impl Strategy<Value = f64> {
-    let special = prop_oneof![
-        Just(0.0),
-        Just(-0.0),
-        Just(f64::INFINITY),
-        Just(f64::NEG_INFINITY),
-        Just(f64::NAN),
-    ];
-    prop_oneof![6 => -8.0..8.0_f64, 3 => (-4_i32..=4).prop_map(f64::from), 1 => special]
+    prop_oneof![
+        6 => -8.0..8.0_f64,
+        3 => (-4_i32..=4).prop_map(f64::from),
+        1 => moderate_special(),
+    ]
+}
+
+fn moderate_special() -> impl Strategy<Value = f64> {
+    prop_oneof![Just(0.0), Just(-0.0), Just(f64::INFINITY), Just(f64::NEG_INFINITY), Just(f64::NAN),]
 }
 
 fn floats(dtype: DType, values: &[f64]) -> TensorData {
