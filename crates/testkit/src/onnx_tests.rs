@@ -43,12 +43,23 @@ fn io_error(path: &Path) -> impl FnOnce(io::Error) -> LoadError + '_ {
     move |source| LoadError::Io { path: path.to_path_buf(), source }
 }
 
+/// What a test case exercises.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum TestOp {
+    /// One op, the model's only node: its type, prefixed by its domain
+    /// outside the default one.
+    Single(String),
+    /// Several ops, as the `_expanded` tests spell out a function.
+    Composite,
+}
+
 /// One test case: its name, its model, and where its data sets are.
 #[derive(Debug)]
 pub struct TestCase {
     name: String,
     dir: PathBuf,
     model: Vec<u8>,
+    op: TestOp,
     /// The graph inputs that are not initializers, in order; input file `k`
     /// holds the `k`th.
     inputs: Vec<String>,
@@ -106,14 +117,23 @@ impl TestCase {
             .filter_map(|info| info.name.clone())
             .filter(|name| !initializers.contains(&name.as_str()))
             .collect();
+        let op = match graph.node.as_slice() {
+            [node] => TestOp::Single(qualified_op(node)),
+            _ => TestOp::Composite,
+        };
         let name =
             dir.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-        Ok(Self { name, dir: dir.to_path_buf(), model, inputs })
+        Ok(Self { name, dir: dir.to_path_buf(), model, op, inputs })
     }
 
     /// The case's name, its directory's.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// What the case exercises.
+    pub const fn op(&self) -> &TestOp {
+        &self.op
     }
 
     /// The serialised model.
@@ -182,6 +202,15 @@ impl TestCase {
             .filter(|(name, _)| !options.constant_inputs.contains_key(*name))
             .map(|(_, tensor)| tensor.clone())
             .collect()
+    }
+}
+
+/// A node's op type, prefixed by its domain outside the default one.
+fn qualified_op(node: &ptxc_onnx_proto::NodeProto) -> String {
+    let op = node.op_type.clone().unwrap_or_default();
+    match node.domain.as_deref() {
+        None | Some("" | "ai.onnx") => op,
+        Some(domain) => format!("{domain}.{op}"),
     }
 }
 

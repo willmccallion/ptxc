@@ -10,7 +10,7 @@ use ptxc_onnx_proto::{
     GraphProto, ModelProto, NodeProto, OperatorSetIdProto, TensorProto, TensorShapeProto,
     TypeProto, ValueInfoProto,
 };
-use ptxc_testkit::onnx_tests::{LoadError, TestCase, cases};
+use ptxc_testkit::onnx_tests::{LoadError, TestCase, TestOp, cases};
 use std::path::Path;
 
 fn info(name: &str, dtype: DataType, dims: &[i64]) -> ValueInfoProto {
@@ -213,4 +213,26 @@ fn an_unreadable_tensor_file_is_an_io_error() {
     let error = TestCase::load(&dir).unwrap().data_sets().unwrap_err();
 
     assert!(matches!(error, LoadError::Io { .. }), "{error}");
+}
+
+#[test]
+fn a_case_names_its_single_op_or_is_composite() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = write_case(root.path(), "test_ops", &[[1.0, 2.0, 3.0, 4.0]]);
+    let graph = reshape_model().graph.unwrap();
+    let mut single = graph.clone();
+    single.node.truncate(1);
+    let mut foreign = single.clone();
+    foreign.node[0].domain = Some("ai.onnx.ml".to_owned());
+    let op_of = |graph: &GraphProto| {
+        write(
+            &dir.join("model.onnx"),
+            &ModelProto { graph: Some(graph.clone()), ..reshape_model() },
+        );
+        TestCase::load(&dir).unwrap().op().clone()
+    };
+
+    assert_eq!(op_of(&graph), TestOp::Composite);
+    assert_eq!(op_of(&single), TestOp::Single("Reshape".to_owned()));
+    assert_eq!(op_of(&foreign), TestOp::Single("ai.onnx.ml.Reshape".to_owned()));
 }
