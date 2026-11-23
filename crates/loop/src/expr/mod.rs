@@ -1,11 +1,16 @@
-//! Integer index expressions, hash-consed in an `ExprArena` and evaluated
-//! exactly (D4).
+//! Integer index expressions: hash-consed in an `ExprArena`, evaluated
+//! exactly, bounded by interval arithmetic, and simplified with the
+//! variables' ranges (D4).
 
 mod arena;
 mod eval;
+mod interval;
+mod linear;
 mod simplify;
 
 pub use arena::ExprArena;
+pub use interval::{Interval, VarRanges};
+pub use simplify::Simplifier;
 
 ptxc_core::define_index!(
     /// An expression in an `ExprArena`. Equal expressions have equal ids.

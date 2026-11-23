@@ -28,6 +28,11 @@ impl ExprArena {
         id
     }
 
+    /// The id of `expr`, if the arena holds it.
+    pub(super) fn find(&self, expr: Expr) -> Option<ExprId> {
+        self.ids.get(&expr).copied()
+    }
+
     /// The expression `id` names.
     pub fn get(&self, id: ExprId) -> Expr {
         self.exprs[id]

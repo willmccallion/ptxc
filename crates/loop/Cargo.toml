@@ -17,3 +17,6 @@ workspace = true
 [dependencies]
 ptxc-core.workspace = true
 ptxc-target.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

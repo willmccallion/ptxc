@@ -9,4 +9,4 @@ mod stmt;
 mod text;
 mod verify;
 
-pub use expr::{Expr, ExprArena, ExprId, VarId};
+pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
