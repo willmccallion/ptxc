@@ -1,7 +1,9 @@
 use crate::{add_one, stages, tensor_type};
-use ptxc_core::float::Overflow;
-use ptxc_core::{Affine, DType, Granularity, QuantDType, QuantParams, Scale, ZeroPoint};
-use ptxc_graph::{BinaryOp, GraphBuilder, Op, QuantizeAttrs, UnaryOp};
+use ptxc_core::{Affine, DType, Dim, Granularity, QuantDType, QuantParams, Scale, ZeroPoint};
+use ptxc_graph::{
+    Antialias, BinaryOp, CoordinateTransform, F32Attr, GraphBuilder, Op, QMatMulAttrs, ResizeAttrs,
+    ResizeAxis, ResizeMode, UnaryOp,
+};
 use ptxc_lower::{Binding, LowerError};
 
 #[test]
@@ -36,14 +38,41 @@ fn a_node_whose_output_no_one_reads_has_no_stage() {
 #[test]
 fn an_op_without_a_lowering_is_reported_by_name() {
     let mut builder = GraphBuilder::new();
-    let x = builder.add_input(tensor_type(DType::F32, &[2, 3]));
-    let affine = Affine { scale: Scale::new(0.5), zero_point: ZeroPoint::new(3) };
-    let params = QuantParams::new(QuantDType::U8, Granularity::PerTensor(affine)).unwrap();
-    let attrs = QuantizeAttrs::new(params, Overflow::Saturate);
-    let quantized = add_one(&mut builder, Op::Quantize(attrs), &[x]);
-    let graph = builder.finish(vec![quantized]).unwrap();
+    let x = builder.add_input(tensor_type(DType::F32, &[4]));
+    let axis = ResizeAxis { size: Dim::new(8), scale: F32Attr::new(2.0) };
+    let attrs = ResizeAttrs {
+        mode: ResizeMode::Linear,
+        coordinates: CoordinateTransform::HalfPixel,
+        antialias: Antialias::Off,
+        axes: vec![axis],
+    };
+    let resized = add_one(&mut builder, Op::Resize(attrs), &[x]);
+    let graph = builder.finish(vec![resized]).unwrap();
 
     let error = stages(graph).err();
 
-    assert_eq!(error, Some(LowerError::Unsupported { op: "quantize" }));
+    assert_eq!(error, Some(LowerError::Unsupported { op: "resize" }));
+}
+
+#[test]
+fn a_quantized_product_on_fp8_grids_is_reported_with_its_type() {
+    let grid = || {
+        let affine = Affine { scale: Scale::new(0.5), zero_point: ZeroPoint::new(0) };
+        QuantParams::new(QuantDType::F8E4M3Fn, Granularity::PerTensor(affine)).unwrap()
+    };
+    let mut builder = GraphBuilder::new();
+    let lhs = builder.add_input(tensor_type(DType::F8E4M3Fn, &[2, 3]));
+    let rhs = builder.add_input(tensor_type(DType::F8E4M3Fn, &[3, 2]));
+    let output = {
+        let affine = Affine { scale: Scale::new(1.0), zero_point: ZeroPoint::new(0) };
+        QuantParams::new(QuantDType::I8, Granularity::PerTensor(affine)).unwrap()
+    };
+    let attrs = QMatMulAttrs { a: grid(), b: grid(), output };
+    let product = add_one(&mut builder, Op::QMatMul(attrs), &[lhs, rhs]);
+    let graph = builder.finish(vec![product]).unwrap();
+
+    let error = stages(graph).err();
+
+    let expected = LowerError::UnsupportedDType { op: "qmatmul", dtype: DType::F8E4M3Fn };
+    assert_eq!(error, Some(expected));
 }

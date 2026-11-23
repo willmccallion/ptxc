@@ -13,9 +13,10 @@ mod reduce;
 mod shape;
 mod window;
 
+use crate::builder::{GroupBuilder, Locals, Operand, StageBuilder};
 use crate::error::LowerError;
-use crate::stage::{Binding, GroupBuilder, LoweredGroup, Operand, Stage, StageBuilder};
-use ptxc_core::{Dim, Idx, IndexVec};
+use crate::stage::{Binding, LoweredGroup, Stage};
+use ptxc_core::{DType, Dim, Idx, IndexVec};
 use ptxc_graph::{Graph, Node, NodeId, Op, ValueId};
 use ptxc_loop::{ComputeError, ComputeName, TensorExpr};
 
@@ -62,6 +63,10 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::Conv(attrs) => conv::conv(cx, attrs),
         Op::Pool(attrs) => pool::pool(cx, attrs),
         Op::GlobalPool(kind) => pool::global_pool(cx, *kind),
+        Op::Quantize(attrs) => quant::quantize(cx, attrs),
+        Op::Dequantize(attrs) => quant::dequantize(cx, attrs),
+        Op::QMatMul(attrs) => quant::qmatmul(cx, attrs),
+        Op::QConv(attrs) => quant::qconv(cx, attrs),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }
@@ -107,6 +112,11 @@ impl<'g> NodeContext<'g> {
         i64::try_from(dim.get()).map_err(|_| self.ill_formed(ComputeError::ExtentTooLarge(dim)))
     }
 
+    /// The error for this node's op on `dtype`, which has no lowering yet.
+    fn unsupported(&self, dtype: DType) -> LowerError {
+        LowerError::UnsupportedDType { op: self.node.op().mnemonic(), dtype }
+    }
+
     /// A rejected definition as the error lowering this node gives.
     const fn ill_formed(&self, source: ComputeError) -> LowerError {
         LowerError::Compute { node: self.id, source }
@@ -131,10 +141,10 @@ impl<'g> NodeContext<'g> {
     ) -> Result<LoweredGroup, LowerError> {
         let Some(output) = self.needed_output() else { return Ok(LoweredGroup::default()) };
         let shape = self.graph.value(output).ty().shape();
-        let mut stage = StageBuilder::new(self.graph, IndexVec::new(), self.name(), shape);
+        let mut stage = StageBuilder::new(self.graph, Locals::empty(), self.name(), shape);
         let expr = build(&mut stage)?;
         stage.output(Binding::Value(output), expr);
-        Ok(LoweredGroup::new(IndexVec::new(), vec![self.finish(stage)?]))
+        Ok(LoweredGroup::new(IndexVec::new(), IndexVec::new(), vec![self.finish(stage)?]))
     }
 
     /// One stage computing the node's output elementwise from its operands,

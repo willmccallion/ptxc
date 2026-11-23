@@ -2,10 +2,11 @@
 //! accumulating in f32 (D43), with `Gemm`'s scaling and bias around it.
 
 use super::NodeContext;
+use crate::builder::{Operand, StageBuilder};
 use crate::compose::{add, f32, mul};
 use crate::error::LowerError;
 use crate::precision::{convert, demote, promote};
-use crate::stage::{Binding, LoweredGroup, Operand, StageBuilder};
+use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::{DType, Dim};
 use ptxc_graph::{F32Attr, GemmAttrs, Orientation, ValueId};
 use ptxc_loop::{ExprId, IterVarId, ReduceOp, TensorExpr};
@@ -27,28 +28,49 @@ fn dot(axis: IterVarId, x: &Operand, y: &Operand) -> TensorExpr {
 /// the output drops.
 pub(super) fn matmul(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerError> {
     let [lhs, rhs] = cx.values()?;
+    cx.one_stage(|stage| {
+        let product = product_reads(cx, stage, lhs, rhs)?;
+        Ok(demote(dot(product.inner, &product.lhs, &product.rhs), product.lhs.dtype))
+    })
+}
+
+/// A `MatMul`-shaped product's operands at one output element: each read
+/// along the contracted axis, and the output's row and column, which a
+/// vector operand does not have.
+pub(super) struct Product {
+    pub(super) lhs: Operand,
+    pub(super) rhs: Operand,
+    pub(super) inner: IterVarId,
+    pub(super) row: Option<ExprId>,
+    pub(super) column: Option<ExprId>,
+}
+
+/// `lhs` and `rhs` read for one element of their `MatMul` product.
+pub(super) fn product_reads(
+    cx: &NodeContext<'_>,
+    stage: &mut StageBuilder<'_>,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Result<Product, LowerError> {
     let (lhs_dims, rhs_dims) = (dims(cx, lhs), dims(cx, rhs));
     let inner = *lhs_dims.last().ok_or(LowerError::Operands(cx.id))?;
-    cx.one_stage(|stage| {
-        let spatial = stage.spatial().to_vec();
-        let (has_rows, has_columns) = (lhs_dims.len() != 1, rhs_dims.len() != 1);
-        let matrix_axes = usize::from(has_rows) + usize::from(has_columns);
-        let batch_rank =
-            spatial.len().checked_sub(matrix_axes).ok_or(LowerError::Operands(cx.id))?;
-        let (batch, matrix) = spatial.split_at(batch_rank);
-        let row = has_rows.then(|| matrix[0]);
-        let column = has_columns.then(|| matrix[matrix.len() - 1]);
-        let (k_axis, k) = stage.reduce_axis(inner);
-        let mut lhs_index = batch_index(stage, &lhs_dims, batch);
-        lhs_index.extend(row);
-        lhs_index.push(k);
-        let mut rhs_index = batch_index(stage, &rhs_dims, batch);
-        rhs_index.push(k);
-        rhs_index.extend(column);
-        let x = stage.load(Binding::Value(lhs), lhs_index);
-        let y = stage.load(Binding::Value(rhs), rhs_index);
-        Ok(demote(dot(k_axis, &x, &y), x.dtype))
-    })
+    let spatial = stage.spatial().to_vec();
+    let (has_rows, has_columns) = (lhs_dims.len() != 1, rhs_dims.len() != 1);
+    let matrix_axes = usize::from(has_rows) + usize::from(has_columns);
+    let batch_rank = spatial.len().checked_sub(matrix_axes).ok_or(LowerError::Operands(cx.id))?;
+    let (batch, matrix) = spatial.split_at(batch_rank);
+    let row = has_rows.then(|| matrix[0]);
+    let column = has_columns.then(|| matrix[matrix.len() - 1]);
+    let (inner_axis, k) = stage.reduce_axis(inner);
+    let mut lhs_index = batch_index(stage, &lhs_dims, batch);
+    lhs_index.extend(row);
+    lhs_index.push(k);
+    let mut rhs_index = batch_index(stage, &rhs_dims, batch);
+    rhs_index.push(k);
+    rhs_index.extend(column);
+    let lhs = stage.load(Binding::Value(lhs), lhs_index);
+    let rhs = stage.load(Binding::Value(rhs), rhs_index);
+    Ok(Product { lhs, rhs, inner: inner_axis, row, column })
 }
 
 /// An operand's index along its batch axes, every axis but its last two

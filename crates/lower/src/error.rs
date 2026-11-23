@@ -1,5 +1,6 @@
 //! `LowerError`: a group that cannot be lowered.
 
+use ptxc_core::DType;
 use ptxc_graph::{GroupId, NodeId};
 use ptxc_loop::ComputeError;
 use thiserror::Error;
@@ -15,6 +16,14 @@ pub enum LowerError {
     Unsupported {
         /// The op's mnemonic.
         op: &'static str,
+    },
+    /// An op on an element type it has no lowering for yet.
+    #[error("`{op}` on {} cannot be lowered yet", dtype.name())]
+    UnsupportedDType {
+        /// The op's mnemonic.
+        op: &'static str,
+        /// The element type.
+        dtype: DType,
     },
     /// A node whose operands its op's type rule would have rejected.
     #[error("{0:?} has operands its op does not take")]

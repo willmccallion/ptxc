@@ -2,10 +2,11 @@
 //! stage reading its operands broadcast to the output.
 
 use super::NodeContext;
+use crate::builder::Operand;
 use crate::compose;
 use crate::error::LowerError;
 use crate::precision::{convert, demote, promote};
-use crate::stage::{LoweredGroup, Operand};
+use crate::stage::LoweredGroup;
 use ptxc_core::DType;
 use ptxc_core::convert::count_to_f32;
 use ptxc_graph::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
