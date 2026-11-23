@@ -93,6 +93,11 @@ impl ComputePrinter<'_> {
             TensorExpr::Const(scalar) => {
                 let _infallible = write!(out, "{scalar}");
             }
+            TensorExpr::Index { index, dtype } => {
+                let _infallible = write!(out, "index<{}>(", dtype.name());
+                write_index(out, self.def.exprs(), *index, &|var| self.var_name(var));
+                out.push(')');
+            }
             TensorExpr::Unary(op, value) => {
                 out.push_str(op.name());
                 if let UnaryOp::IsInf(sign) = op {

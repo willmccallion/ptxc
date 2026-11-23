@@ -204,6 +204,9 @@ impl<'s> Lowerer<'s> {
                 ValueExpr::Load { buffer: self.inputs[*tensor], index }
             }
             TensorExpr::Const(scalar) => ValueExpr::Const(*scalar),
+            TensorExpr::Index { index, dtype } => {
+                ValueExpr::Index { index: self.translate(*index), dtype: *dtype }
+            }
             TensorExpr::Unary(op, operand) => ValueExpr::Unary(*op, sub(self, operand)),
             TensorExpr::Binary(op, lhs, rhs) => {
                 ValueExpr::Binary(*op, sub(self, lhs), sub(self, rhs))
@@ -294,6 +297,7 @@ impl<'s> Lowerer<'s> {
                 }
             }
             TensorExpr::Const(_) => {}
+            TensorExpr::Index { index, .. } => self.collect_index_loads(*index, used),
             TensorExpr::Unary(_, value) | TensorExpr::Cast { value, .. } => {
                 self.collect_loaded(value, bodies, used);
             }

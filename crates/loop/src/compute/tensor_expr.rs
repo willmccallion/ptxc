@@ -26,6 +26,14 @@ pub enum TensorExpr {
     },
     /// A constant.
     Const(Scalar),
+    /// An index expression's value as an integer of `dtype`, wrapping, as
+    /// TVM's compute expressions read their iteration variables.
+    Index {
+        /// The index, over variables in scope.
+        index: ExprId,
+        /// The integer type it becomes.
+        dtype: DType,
+    },
     /// An operation on one value.
     Unary(UnaryOp, Box<Self>),
     /// An operation on two values of one type.

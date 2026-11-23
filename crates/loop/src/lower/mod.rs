@@ -54,7 +54,7 @@ impl Schedule<Validated> {
 fn find_reduction(expr: &TensorExpr) -> Option<&TensorExpr> {
     match expr {
         TensorExpr::Reduce { .. } | TensorExpr::ArgReduce { .. } => Some(expr),
-        TensorExpr::Load { .. } | TensorExpr::Const(_) => None,
+        TensorExpr::Load { .. } | TensorExpr::Const(_) | TensorExpr::Index { .. } => None,
         TensorExpr::Unary(_, value) | TensorExpr::Cast { value, .. } => find_reduction(value),
         TensorExpr::Binary(_, lhs, rhs) => find_reduction(lhs).or_else(|| find_reduction(rhs)),
         TensorExpr::Select { condition, then, otherwise } => find_reduction(condition)
