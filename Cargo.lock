@@ -1071,6 +1071,8 @@ dependencies = [
  "flate2",
  "prost-build",
  "protox",
+ "serde",
+ "serde_json",
  "sha2",
  "tar",
  "tempfile",

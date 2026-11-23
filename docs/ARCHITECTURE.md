@@ -591,10 +591,11 @@ Rules, checked by `cargo xtask check-deps` from `cargo metadata`:
 2. **GPU-free core:** no crate among `core`, `target`, `onnx-proto`, `onnx`,
    `graph`, `interp`, `graph-opt`, `loop`, `lower`, `schedule`, `codegen`,
    `cost-model`, `program`, `compiler` or `testkit` depends, transitively,
-   on `cuda`, `runtime`, `autotune` or `bench`.
+   on `cuda`, `runtime`, `autotune` or `bench`, from its tests either.
 3. Only `bench` mentions cuBLAS. Nothing depends on `bench`.
 4. Only `cuda` allows `unsafe_code`.
-5. `interp` and `lower` never depend on each other.
+5. The `interp` and `lower` libraries never depend on each other. Their
+   tests compare them through `testkit`.
 
 | Crate | Purpose |
 |---|---|

@@ -8,13 +8,14 @@ mod proto;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask proto | fetch onnx-tests | fetch imagenetv2";
+const USAGE: &str = "usage: cargo xtask proto | fetch onnx-tests | fetch imagenetv2 | check-deps";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let workspace = workspace_root();
     let outcome = match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
         ["proto"] => proto::run(&workspace).map_err(|error| error.to_string()),
+        ["check-deps"] => check_deps::run(&workspace).map_err(|error| error.to_string()),
         ["fetch", "onnx-tests"] => fetch::onnx_tests(&workspace).map_err(|error| error.to_string()),
         ["fetch", "imagenetv2"] => {
             fetch::imagenet_v2(&workspace).map_err(|error| error.to_string())
