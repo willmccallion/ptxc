@@ -90,6 +90,10 @@ pub enum ComputeError {
         /// The second operand's type.
         rhs: DType,
     },
+    /// An extent or tensor size past `i64::MAX`, which index arithmetic
+    /// cannot hold.
+    #[error("{} is too large for an index", .0.get())]
+    ExtentTooLarge(Dim),
     /// The outputs' shape has more elements than fit in `u64`.
     #[error(transparent)]
     Shape(#[from] ShapeError),
