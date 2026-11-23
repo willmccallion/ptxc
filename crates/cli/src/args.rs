@@ -22,6 +22,25 @@ pub(crate) enum Command {
     Run(RunArgs),
     /// Run the ONNX backend node tests and write report.json and report.md.
     Conformance(ConformanceArgs),
+    /// Run random graphs on every executor and shrink any mismatch.
+    Fuzz(FuzzArgs),
+}
+
+/// `ptxc fuzz`'s arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct FuzzArgs {
+    /// The executor checked beyond the interpreters.
+    #[arg(long, value_enum)]
+    pub(crate) backend: Backend,
+    /// The first seed.
+    #[arg(long, default_value_t = 0)]
+    pub(crate) seed: u64,
+    /// How many seeds, from the first.
+    #[arg(long, default_value_t = 1000)]
+    pub(crate) cases: u64,
+    /// Where shrunk mismatches are written.
+    #[arg(long, default_value = "data/fuzz")]
+    pub(crate) out: PathBuf,
 }
 
 /// `ptxc compile`'s arguments.

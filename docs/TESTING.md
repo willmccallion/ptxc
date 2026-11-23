@@ -100,6 +100,10 @@ right value.
     concatenation), so a last-bit difference between two executors stays
     one rather than flipping a floor or a comparison. The discontinuous ops
     are covered exactly by the op-family tests.
+- `ptxc fuzz` compares the lowered graph on the loop interpreter with the
+  reference within each output's tolerance, widened for the longest
+  reduction, and with `--backend gpu` the GPU with the loop interpreter
+  exactly.
 - Every case runs on at least two executors through the `Evaluate` trait:
   - the reference interpreter;
   - the loop-IR interpreter;

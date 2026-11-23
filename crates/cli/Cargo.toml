@@ -31,6 +31,7 @@ ptxc-interp.workspace = true
 ptxc-compiler.workspace = true
 ptxc-program.workspace = true
 ptxc-graph.workspace = true
+ptxc-loop.workspace = true
 ptxc-cuda.workspace = true
 ptxc-runtime.workspace = true
 ptxc-autotune.workspace = true
