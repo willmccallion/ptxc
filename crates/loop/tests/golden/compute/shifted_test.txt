@@ -1,0 +1,4 @@
+compute shifted_test(%x: f32[20]) {
+  %i = spatial 8
+  %negative_infinite: bool[8] = isinf<negative>(%x[(%i + 1) * 2])
+}

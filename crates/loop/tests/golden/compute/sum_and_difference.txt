@@ -1,0 +1,5 @@
+compute sum_and_difference(%x: i32[6], %y: i32[6]) {
+  %i = spatial 6
+  %sum: i32[6] = add(%x[%i], %y[%i])
+  %difference: i32[6] = sub(%x[%i], %y[%i])
+}

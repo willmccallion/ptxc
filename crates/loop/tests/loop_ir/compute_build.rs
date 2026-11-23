@@ -77,25 +77,30 @@ fn gather() -> ComputeDef {
     compute.finish().unwrap()
 }
 
-fn argmax_and_max() -> ComputeDef {
+fn argmax() -> ComputeDef {
     let mut compute = builder("argmax");
     let x = compute.input(tensor("x"), DType::F32, shape(&[5, 7]));
     let (_, row) = compute.spatial(axis("row"), Dim::new(5));
     let (k_axis, k) = compute.reduce_axis(axis("k"), Dim::new(7));
-    let (m_axis, m) = compute.reduce_axis(axis("m"), Dim::new(7));
     let argmax = TensorExpr::ArgReduce {
         kind: ArgKind::Max,
         tie: TieBreak::First,
         axis: k_axis,
         body: Box::new(load(x, &[row, k])),
     };
-    let max = TensorExpr::Reduce {
-        op: ReduceOp::Max,
-        axes: vec![m_axis],
-        body: Box::new(load(x, &[row, m])),
-    };
     compute.output(tensor("position"), argmax);
-    compute.output(tensor("largest"), max);
+    compute.finish().unwrap()
+}
+
+/// Two outputs from one elementwise pass, which may share a definition.
+fn sum_and_difference() -> ComputeDef {
+    let mut compute = builder("sum_and_difference");
+    let left = compute.input(tensor("x"), DType::I32, shape(&[6]));
+    let right = compute.input(tensor("y"), DType::I32, shape(&[6]));
+    let (_, i) = compute.spatial(axis("i"), Dim::new(6));
+    compute.output(tensor("sum"), binary(BinaryOp::Add, load(left, &[i]), load(right, &[i])));
+    compute
+        .output(tensor("difference"), binary(BinaryOp::Sub, load(left, &[i]), load(right, &[i])));
     compute.finish().unwrap()
 }
 
@@ -113,39 +118,48 @@ fn relu() -> ComputeDef {
     compute.finish().unwrap()
 }
 
-/// Strided loads and unary ops: `exp(sum[r](x[i * 2 + r]))` and the test
-/// `isinf<negative>(x[(i + 1) * 2])`.
-fn strided() -> ComputeDef {
-    let mut compute = builder("strided");
+/// A strided window summed and exponentiated: `exp(sum[r](x[i * 2 + r]))`.
+fn strided_sum() -> ComputeDef {
+    let mut compute = builder("strided_sum");
     let x = compute.input(tensor("x"), DType::F32, shape(&[20]));
     let (_, i) = compute.spatial(axis("i"), Dim::new(8));
     let (r_axis, r) = compute.reduce_axis(axis("r"), Dim::new(3));
-    let (one, two) = (compute.exprs().constant(1), compute.exprs().constant(2));
+    let two = compute.exprs().constant(2);
     let doubled = compute.exprs().mul(i, two);
     let window = compute.exprs().add(doubled, r);
-    let next = compute.exprs().add(i, one);
-    let next_doubled = compute.exprs().mul(next, two);
     let body = Box::new(load(x, &[window]));
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![r_axis], body };
     compute.output(tensor("exp_sum"), TensorExpr::Unary(UnaryOp::Exp, Box::new(sum)));
+    compute.finish().unwrap()
+}
+
+/// A test on a shifted, strided element: `isinf<negative>(x[(i + 1) * 2])`.
+fn shifted_test() -> ComputeDef {
+    let mut compute = builder("shifted_test");
+    let x = compute.input(tensor("x"), DType::F32, shape(&[20]));
+    let (_, i) = compute.spatial(axis("i"), Dim::new(8));
+    let (one, two) = (compute.exprs().constant(1), compute.exprs().constant(2));
+    let next = compute.exprs().add(i, one);
+    let next_doubled = compute.exprs().mul(next, two);
     let negative = UnaryOp::IsInf(InfSign::Negative);
-    compute.output(
-        tensor("negative_infinite"),
-        TensorExpr::Unary(negative, Box::new(load(x, &[next_doubled]))),
-    );
+    let test = TensorExpr::Unary(negative, Box::new(load(x, &[next_doubled])));
+    compute.output(tensor("negative_infinite"), test);
     compute.finish().unwrap()
 }
 
 #[test]
 fn outputs_take_the_spatial_axes_as_their_shape_and_their_expression_type() {
     let matmul = matmul();
-    let argmax = argmax_and_max();
+    let argmax = argmax();
+    let pair = sum_and_difference();
 
     assert_eq!(matmul.output_shape(), &shape(&[64, 16]));
     assert_eq!(matmul.outputs()[0].dtype, DType::F32);
     assert_eq!(argmax.output_shape(), &shape(&[5]));
-    let dtypes: Vec<DType> = argmax.outputs().iter().map(|output| output.dtype).collect();
-    assert_eq!(dtypes, [DType::I64, DType::F32]);
+    assert_eq!(argmax.outputs()[0].dtype, DType::I64);
+    let dtypes: Vec<DType> = pair.outputs().iter().map(|output| output.dtype).collect();
+    assert_eq!(dtypes, [DType::I32, DType::I32]);
+    assert_eq!(pair.output_shape(), &shape(&[6]));
 }
 
 #[test]
@@ -154,9 +168,11 @@ fn a_definition_prints_its_inputs_axes_and_outputs() {
         ("add", add()),
         ("matmul", matmul()),
         ("gather", gather()),
-        ("argmax", argmax_and_max()),
+        ("argmax", argmax()),
+        ("sum_and_difference", sum_and_difference()),
         ("relu", relu()),
-        ("strided", strided()),
+        ("strided_sum", strided_sum()),
+        ("shifted_test", shifted_test()),
     ] {
         golden::check(format!("compute/{name}.txt"), &print_compute(&def)).unwrap();
     }
