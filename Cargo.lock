@@ -895,6 +895,8 @@ dependencies = [
  "ptxc-program",
  "ptxc-schedule",
  "ptxc-target",
+ "ptxc-testkit",
+ "thiserror",
 ]
 
 [[package]]

@@ -25,3 +25,7 @@ ptxc-lower.workspace = true
 ptxc-schedule.workspace = true
 ptxc-codegen.workspace = true
 ptxc-program.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ptxc-testkit.workspace = true
