@@ -1009,6 +1009,7 @@ version = "0.1.0"
 dependencies = [
  "proptest",
  "ptxc-codegen",
+ "ptxc-compiler",
  "ptxc-core",
  "ptxc-cuda",
  "ptxc-graph",
@@ -1017,6 +1018,7 @@ dependencies = [
  "ptxc-schedule",
  "ptxc-target",
  "ptxc-testkit",
+ "thiserror",
 ]
 
 [[package]]
