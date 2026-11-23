@@ -952,6 +952,8 @@ dependencies = [
  "proptest",
  "ptxc-core",
  "ptxc-target",
+ "ptxc-testkit",
+ "thiserror",
 ]
 
 [[package]]

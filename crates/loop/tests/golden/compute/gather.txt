@@ -1,0 +1,6 @@
+compute gather(%data: f32[10, 4], %indices: i64[3]) {
+  %n = spatial 3
+  %c = spatial 4
+  %row = load %indices[%n]
+  %out: f32[3, 4] = %data[floormod(%row, 10), %c]
+}

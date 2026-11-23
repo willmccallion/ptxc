@@ -9,4 +9,10 @@ mod stmt;
 mod text;
 mod verify;
 
+pub use compute::{
+    ArgKind, BinaryOp, ComputeBuilder, ComputeDef, ComputeError, ComputeName, IndexVar, InfSign,
+    IterKind, IterVar, IterVarId, OutputDef, ReduceOp, Scalar, TensorExpr, TensorName, TensorParam,
+    TensorParamId, TieBreak, UnaryOp, VarName,
+};
 pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
+pub use text::print_compute;
