@@ -4,4 +4,5 @@
 mod activation;
 mod constant;
 mod elementwise;
+mod matmul;
 mod reduce;
