@@ -121,3 +121,46 @@ fn polynomials_evaluate_by_horner() {
     assert_eq!(run(2.0, |code, x| code.polynomial(x, 1.0, &[3.0, 5.0])), 27.0);
     assert_eq!(run(2.0, |code, x| code.polynomial(x, 7.0, &[])), 7.0);
 }
+
+/// The table's first two words after the zero word are 2/π to f64's
+/// precision.
+#[test]
+fn the_reduction_table_holds_two_over_pi() {
+    let [_, first, second, ..] = super::reduce::TWO_OVER_PI;
+    let leading = f64::from(second).mul_add(2f64.powi(-64), f64::from(first) * 2f64.powi(-32));
+
+    assert!((leading - std::f64::consts::FRAC_2_PI).abs() <= f64::EPSILON / 2.0);
+}
+
+#[test]
+fn shifts_by_32_or_more_clamp_as_ptx_does() {
+    assert!(int_is(0, int_op(IntOp::Shl, 1, 32)));
+    assert!(int_is(0, int_op(IntOp::ShrLogical, -1, 32)));
+    assert!(int_is(-1, int_op(IntOp::ShrArithmetic, i32::MIN, 32)));
+    assert!(int_is(0, int_op(IntOp::ShrArithmetic, i32::MAX, 40)));
+    assert!(int_is(-1, int_op(IntOp::ShrArithmetic, i32::MIN, 31)));
+}
+
+#[test]
+fn products_xor_and_leading_zeros_are_unsigned_bit_operations() {
+    assert!(int_is(-2, int_op(IntOp::Mul, i32::MAX, 2)));
+    assert!(int_is(i32::MAX - 1, int_op(IntOp::MulHiUnsigned, -1, i32::MAX)));
+    assert!(int_is(0b0110, int_op(IntOp::Xor, 0b1100, 0b1010)));
+    assert!(int_is(31, |code| {
+        let one = code.int(1);
+        code.leading_zeros(one)
+    }));
+    assert!(int_is(32, |code| {
+        let zero = code.int(0);
+        code.leading_zeros(zero)
+    }));
+    assert!(holds(|code| {
+        let (minus_one, zero) = (code.int(-1), code.int(0));
+        code.compare_unsigned(Comparison::Gt, minus_one, zero)
+    }));
+    let rounded = run(0.0, |code, _| {
+        let n = code.int(-1);
+        code.unsigned_to_float(n)
+    });
+    assert_eq!(rounded, 4_294_967_296.0);
+}

@@ -3,7 +3,8 @@
 
 use super::Selector;
 use crate::ast::{
-    B32, BinaryOp, Compare, CvtMode, F32, FunctionBuilder, Pred, PtxType, Reg, Signedness, Value,
+    B32, BinaryOp, Compare, CvtMode, F32, FunctionBuilder, Pred, PtxType, Reg, Signedness, UnaryOp,
+    Value,
 };
 use ptxc_core::IndexVec;
 use ptxc_loop::math::{
@@ -58,6 +59,9 @@ impl Slots {
             FloatDef::FromInt(n) => {
                 code.convert(CvtMode::Rn, (PtxType::F32, PtxType::S32), self.ints[n].into())
             }
+            FloatDef::FromUnsigned(n) => {
+                code.convert(CvtMode::Rn, (PtxType::F32, PtxType::U32), self.ints[n].into())
+            }
             FloatDef::FromBits(n) => code.reinterpret(PtxType::B32, self.ints[n]),
             FloatDef::Select(p, x, y) => {
                 code.select(PtxType::F32, value(x), value(y), self.preds[p])
@@ -72,6 +76,7 @@ impl Slots {
             IntDef::FromFloat(x) => {
                 code.convert(CvtMode::Rni, (PtxType::S32, PtxType::F32), self.floats[x].into())
             }
+            IntDef::LeadingZeros(x) => code.int_unary(UnaryOp::Clz, Signedness::Bits, value(x)),
             IntDef::Bits(x) => code.reinterpret(PtxType::B32, self.floats[x]),
             IntDef::Binary(op, x, y) => {
                 let (op, signedness) = int_op(op);
@@ -89,6 +94,12 @@ impl Slots {
             PredDef::CompareInt(cmp, x, y) => code.compare_int(
                 compare(cmp),
                 Signedness::Signed,
+                self.ints[x].into(),
+                self.ints[y].into(),
+            ),
+            PredDef::CompareUnsigned(cmp, x, y) => code.compare_int(
+                compare(cmp),
+                Signedness::Unsigned,
                 self.ints[x].into(),
                 self.ints[y].into(),
             ),
@@ -110,6 +121,9 @@ const fn int_op(op: IntOp) -> (BinaryOp, Signedness) {
     match op {
         IntOp::Add => (BinaryOp::Add, Signedness::Signed),
         IntOp::Sub => (BinaryOp::Sub, Signedness::Signed),
+        IntOp::Mul => (BinaryOp::Mul, Signedness::Unsigned),
+        IntOp::MulHiUnsigned => (BinaryOp::MulHi, Signedness::Unsigned),
+        IntOp::Xor => (BinaryOp::Xor, Signedness::Bits),
         IntOp::And => (BinaryOp::And, Signedness::Bits),
         IntOp::Or => (BinaryOp::Or, Signedness::Bits),
         IntOp::Shl => (BinaryOp::Shl, Signedness::Bits),

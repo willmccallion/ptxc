@@ -13,6 +13,8 @@ mod expm1;
 mod log;
 mod log1p;
 mod program;
+mod reduce;
+mod sincos;
 mod tanh;
 
 #[cfg(test)]
@@ -31,6 +33,8 @@ static EXPM1: LazyLock<MathProgram> = LazyLock::new(expm1::expm1);
 static LOG1P: LazyLock<MathProgram> = LazyLock::new(log1p::log1p);
 static TANH: LazyLock<MathProgram> = LazyLock::new(tanh::tanh);
 static ERF: LazyLock<MathProgram> = LazyLock::new(erf::erf);
+static SIN: LazyLock<MathProgram> = LazyLock::new(sincos::sin);
+static COS: LazyLock<MathProgram> = LazyLock::new(sincos::cos);
 
 /// `e^x`, within 1.06 ulps.
 pub fn exp() -> &'static MathProgram {
@@ -60,4 +64,14 @@ pub fn tanh() -> &'static MathProgram {
 /// The error function, within 1.03 ulps.
 pub fn erf() -> &'static MathProgram {
     &ERF
+}
+
+/// The sine, within 2.25 ulps for every finite f32.
+pub fn sin() -> &'static MathProgram {
+    &SIN
+}
+
+/// The cosine, within 2.26 ulps for every finite f32.
+pub fn cos() -> &'static MathProgram {
+    &COS
 }

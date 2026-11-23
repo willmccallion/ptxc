@@ -50,6 +50,7 @@ impl Slots {
             FloatDef::Fma(a, b, c) => f(a).mul_add(f(b), f(c)),
             FloatDef::RoundToInteger(a) => f(a).round_ties_even(),
             FloatDef::FromInt(n) => int_to_float(self.ints[n]),
+            FloatDef::FromUnsigned(n) => unsigned_to_float(self.ints[n]),
             FloatDef::FromBits(bits) => f32::from_bits(self.ints[bits]),
             FloatDef::Select(p, a, b) => {
                 if self.preds[p] {
@@ -67,6 +68,7 @@ impl Slots {
             IntDef::Const(value) => value,
             IntDef::FromFloat(a) => float_to_int(self.floats[a]),
             IntDef::Bits(a) => self.floats[a].to_bits(),
+            IntDef::LeadingZeros(a) => n(a).leading_zeros(),
             IntDef::Binary(op, a, b) => int_binary(op, n(a), n(b)),
             IntDef::Select(p, a, b) => {
                 if self.preds[p] {
@@ -84,6 +86,7 @@ impl Slots {
             PredDef::CompareInt(cmp, a, b) => {
                 compare(cmp, self.ints[a].cast_signed(), self.ints[b].cast_signed())
             }
+            PredDef::CompareUnsigned(cmp, a, b) => compare(cmp, self.ints[a], self.ints[b]),
         }
     }
 }
@@ -97,15 +100,30 @@ fn float_binary(op: FloatOp, a: f32, b: f32) -> f32 {
     }
 }
 
-const fn int_binary(op: IntOp, a: u32, b: u32) -> u32 {
+fn int_binary(op: IntOp, a: u32, b: u32) -> u32 {
     match op {
         IntOp::Add => a.wrapping_add(b),
         IntOp::Sub => a.wrapping_sub(b),
+        IntOp::Mul => a.wrapping_mul(b),
+        IntOp::MulHiUnsigned => high_half(a, b),
         IntOp::And => a & b,
         IntOp::Or => a | b,
-        IntOp::Shl => a << b,
-        IntOp::ShrArithmetic => (a.cast_signed() >> b).cast_unsigned(),
-        IntOp::ShrLogical => a >> b,
+        IntOp::Xor => a ^ b,
+        IntOp::Shl => {
+            if b < u32::BITS {
+                a << b
+            } else {
+                0
+            }
+        }
+        IntOp::ShrArithmetic => (a.cast_signed() >> b.min(u32::BITS - 1)).cast_unsigned(),
+        IntOp::ShrLogical => {
+            if b < u32::BITS {
+                a >> b
+            } else {
+                0
+            }
+        }
     }
 }
 
@@ -114,6 +132,18 @@ const fn int_binary(op: IntOp, a: u32, b: u32) -> u32 {
 #[expect(clippy::cast_precision_loss, reason = "rounds to nearest even, as cvt.rn does")]
 const fn int_to_float(n: u32) -> f32 {
     n.cast_signed() as f32
+}
+
+/// The high 32 bits of `a * b`, as `mul.hi.u32` gives them.
+fn high_half(a: u32, b: u32) -> u32 {
+    let [_, _, _, _, high @ ..] = (u64::from(a) * u64::from(b)).to_le_bytes();
+    u32::from_le_bytes(high)
+}
+
+/// `n` rounded to the nearest f32, as `cvt.rn.f32.u32` does.
+#[expect(clippy::cast_precision_loss, reason = "rounds to nearest even, as cvt.rn does")]
+const fn unsigned_to_float(n: u32) -> f32 {
+    n as f32
 }
 
 /// An integral `x` as two's complement, saturating with NaN giving 0, as

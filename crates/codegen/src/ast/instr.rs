@@ -73,11 +73,15 @@ pub(crate) enum BinaryOp {
     Shl,
     /// Arithmetic on signed types, logical on unsigned and bit types.
     Shr,
+    /// The high half of the product.
+    MulHi,
 }
 
 /// A one-operand operation.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum UnaryOp {
+    /// Leading zero bits.
+    Clz,
     Neg,
     Abs,
     Not,

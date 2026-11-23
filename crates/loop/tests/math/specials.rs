@@ -86,3 +86,20 @@ fn erf_meets_ieee_special_cases() {
     assert_eq!(erf(3.95), 1.0);
     assert!(erf(3.9) < 1.0);
 }
+
+#[test]
+fn sin_and_cos_meet_ieee_special_cases() {
+    let sin = |x| math::sin().eval(x);
+    let cos = |x| math::cos().eval(x);
+
+    for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        assert!(sin(x).is_nan() && cos(x).is_nan(), "{x}");
+    }
+    assert_eq!(sin(0.0).to_bits(), 0.0_f32.to_bits());
+    assert_eq!(sin(-0.0).to_bits(), (-0.0_f32).to_bits());
+    assert_eq!(cos(0.0), 1.0);
+    assert_eq!(cos(-0.0), 1.0);
+    assert_eq!(sin(f32::from_bits(1)), f32::from_bits(1));
+    assert_eq!(sin(-f32::MAX), -sin(f32::MAX));
+    assert_eq!(cos(-f32::MAX), cos(f32::MAX));
+}

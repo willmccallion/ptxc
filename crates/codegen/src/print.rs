@@ -102,11 +102,13 @@ fn binary_name(op: BinaryOp, ty: PtxType) -> &'static str {
         BinaryOp::Xor => "xor",
         BinaryOp::Shl => "shl",
         BinaryOp::Shr => "shr",
+        BinaryOp::MulHi => "mul.hi",
     }
 }
 
 const fn unary_name(op: UnaryOp) -> &'static str {
     match op {
+        UnaryOp::Clz => "clz",
         UnaryOp::Neg => "neg",
         UnaryOp::Abs => "abs",
         UnaryOp::Not => "not",
