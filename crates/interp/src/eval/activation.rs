@@ -1,4 +1,5 @@
-//! Activations, `Clip` and `PRelu`, computed in f32 (D19).
+//! Activations, `Clip` and `PRelu`, computed in f32 (D19); `Relu` also
+//! takes signed integers, as ONNX's does since opset 14.
 
 use crate::error::{InterpError, Malformed};
 use crate::eval::first;
@@ -14,7 +15,12 @@ pub(super) fn activation(
     operands: &[&HostTensor],
     output: &TensorType,
 ) -> Result<TensorData, InterpError> {
-    let values = floats(first(operands)?.data())?;
+    let input = first(operands)?;
+    if let (Activation::Relu, Elements::Int(values)) = (activation, widen(input.data())) {
+        let rectified = values.into_iter().map(|value| value.max(0)).collect();
+        return store(Elements::Int(rectified), output.dtype());
+    }
+    let values = floats(input.data())?;
     let applied: Vec<f32> = values.into_iter().map(|x| apply(activation, x)).collect();
     store_floats(&applied, output.dtype(), Overflow::NonFinite)
 }

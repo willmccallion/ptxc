@@ -133,6 +133,13 @@ fn relu_passes_nan_and_softplus_does_not_overflow() {
 }
 
 #[test]
+fn relu_takes_signed_integers() {
+    let x = i64s(&[3], &[-3, 0, 5]);
+
+    assert_exact(&op("relu", "i64[3]", &[x]), &[3], &[0, 0, 5]);
+}
+
+#[test]
 fn celu_propagates_nan_as_numpys_maximum_and_minimum_do() {
     let nan = f32s(&[1], &[f32::NAN]);
 
