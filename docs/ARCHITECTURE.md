@@ -57,7 +57,7 @@ impl Compilation<Scheduled>   { pub fn emit(self) -> Result<Program, CompileErro
 ```
 
 Each state struct holds that stage's output (`Imported { graph: Graph }`,
-`Lowered { partitioned: Partitioned, kernels: IndexVec<GroupId, ComputeDef> }`,
+`Lowered { partitioned: Partitioned, stages: IndexVec<GroupId, Vec<Stage>> }`,
 and so on).
 
 ## Stages
@@ -172,10 +172,14 @@ because "every node belongs to exactly one group" is an invariant the graph
 itself cannot express:
 
 ```rust
-pub struct Partitioned { graph: Graph, groups: IndexVec<GroupId, FusedGroup>, group_of: IndexVec<NodeId, GroupId> }
+pub struct Partitioned { graph: Graph, groups: IndexVec<GroupId, FusedGroup>, group_of: IndexVec<NodeId, Option<GroupId>> }
 pub struct FusedGroup { nodes: Vec<NodeId> /* topological */, inputs: Vec<ValueId>, outputs: Vec<ValueId>, kind: GroupKind }
 pub enum GroupKind { Injective, Reduction, MatMulEpilogue, ConvEpilogue, Attention, View }
 ```
+
+Groups are numbered so each comes after the groups computing its inputs. A
+group's outputs are only the values read outside it. In M2,
+`Partitioned::one_node_per_group` is the only partitioner.
 
 `View` groups (reshape, or squeeze on contiguous data) produce no kernel:
 they become buffer aliases in the memory plan.
@@ -360,8 +364,12 @@ fragment layout) are caught by `cargo test`.
 
 ### Lowering (`ptxc-lower`)
 
-- **In:** `Partitioned`. **Out:** `IndexVec<GroupId, Vec<ComputeDef>>`: each
-  group's stages in order, joined by intermediate buffers (D40).
+- **In:** `Partitioned`. **Out:** `IndexVec<GroupId, Vec<Stage>>`: each
+  group's stages in order, joined by intermediate buffers (D40). A `Stage`
+  is a `ComputeDef` with the graph value bound to each of its tensors (D42).
+- Arithmetic on f16, bf16 and FP8 values runs in f32 and rounds back once
+  (`precision.rs`), as the reference does; comparisons, selects and integer
+  arithmetic stay in the operands' own types.
 - Each op family has one file, mirroring `ptxc-graph/src/ops`. Each produces
   `TensorExpr`s for its stages; an op with several reductions in sequence
   (softmax, layer norm, log-sum-exp) is several stages.

@@ -613,3 +613,27 @@ the old one.
   the GPU agreement check in M2's exit criteria can be exact for integer and
   arg-reduction kernels. Agreement with the reference stays a tolerance
   check, as it is for the GPU.
+
+## D42. Lowering binds stages to graph values and computes narrow floats in f32
+
+- **Context:** a `ComputeDef` names its tensors for printing only. The
+  compiler must know which graph value or intermediate buffer each tensor
+  is, and arithmetic on f16, bf16 and FP8 values needs a rounding rule.
+- **Options:** encode value ids in tensor names, or return a `Stage` that
+  binds each tensor to a value; compute in each value's own type, or widen
+  narrow floats to f32 and round back once.
+- **Choice:** lowering returns `IndexVec<GroupId, Vec<Stage>>`, each stage a
+  `ComputeDef` with a `ValueId` per input tensor and per output (this
+  supersedes the `Vec<ComputeDef>` of D40). Float arithmetic on types
+  narrower than f32 widens to f32 and rounds once at the end;
+  comparisons, selects and integer arithmetic stay in their own types.
+  `Pow` of an integer base and a float exponent runs in f32 (a `NOTE` in
+  `elementwise.rs`): exact while the base and result stay below 2^24,
+  where the reference computes in f64.
+- **Reason:** bindings are typed, so a stage cannot be wired to the wrong
+  buffer through a string. Widening matches `ptxc-interp` (D19) and what
+  GPU kernels do outside tensor cores, costs nothing in memory-bound
+  elementwise kernels, and avoids rounding every intermediate of a
+  composed op (a mean, a GELU) to f16. Loop IR has no f64, and f64
+  throughput on sm_89 is 1/64 of f32, which one rare `Pow` form does not
+  justify.
