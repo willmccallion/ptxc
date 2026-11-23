@@ -140,16 +140,18 @@ One file per suite and framework:
 {
   "schema": 1,
   "suite": "gemm",
-  "framework": { "name": "ptxc", "version": "0.1.0", "commit": "abc1234" },
-  "environment": {
-    "gpu": "NVIDIA GeForce RTX 4060 Ti", "driver": "595.112.07",
-    "clocks_mhz": { "sm": 2520, "mem": 9001 }, "locked": true
-  },
+  "framework": { "name": "ptxc", "version": "0.1.0", "commit": "abc1234def56", "dirty": false },
+  "environment": { "gpu": "NVIDIA GeForce RTX 4060 Ti", "driver": "595.112.07" },
   "cases": [
     {
       "id": "gemm/f16/NN/4096x4096x4096",
       "params": { "m": 4096, "n": 4096, "k": 4096, "dtype": "f16", "layout": "NN" },
       "verified": true,
+      "clocks": {
+        "before": { "sm_mhz": 2520, "mem_mhz": 9001, "temperature_c": 52, "events": [] },
+        "after": { "sm_mhz": 2520, "mem_mhz": 9001, "temperature_c": 61, "events": ["sw_power_cap"] },
+        "held": true
+      },
       "samples_us": [...],
       "median_us": 0.0, "p10_us": 0.0, "p90_us": 0.0
     }
@@ -157,7 +159,16 @@ One file per suite and framework:
 }
 ```
 
+- `dirty` records uncommitted changes in the working tree; published
+  results come only from committed code.
+- `clocks` is the GPU's state just before and just after the case's
+  series. `events` are the reasons `nvidia-smi` gives for holding the
+  clocks down, named as its `clocks_event_reasons` fields are. `held` is
+  whether the SM and memory clocks were the same before and after.
+- Whether clocks were locked is not recorded: the harness cannot read it.
+  Clocks that held are what locking is for.
+
 `render_tables.py` joins the files on `id`. It rewrites the README tables
 between `<!-- bench:<suite>:begin -->` and `<!-- bench:<suite>:end -->`
 markers, and refuses to render a case that is unverified, or that comes from
-a series whose clocks moved.
+a series whose clocks moved (`held` false).

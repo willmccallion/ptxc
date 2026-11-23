@@ -6,6 +6,7 @@
 )]
 mod clocks;
 mod cublas;
+#[expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")]
 mod results;
 mod suites;
 #[cfg_attr(
