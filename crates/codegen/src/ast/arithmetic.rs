@@ -8,18 +8,26 @@ use super::reg::{B16, B32, B64, Class, F32, Pred, Reg};
 
 /// An integer register class and the types its operations take.
 pub(crate) trait Int: Class {
+    /// The width in bits.
+    const WIDTH: i64;
+    /// The low `WIDTH` bits of `i64::MAX`, as this class reads them signed.
+    const LOW_I64_MAX: i64;
     const SIGNED: PtxType;
     const UNSIGNED: PtxType;
     const BITS: PtxType;
 }
 
 impl Int for B32 {
+    const WIDTH: i64 = 32;
+    const LOW_I64_MAX: i64 = -1;
     const SIGNED: PtxType = PtxType::S32;
     const UNSIGNED: PtxType = PtxType::U32;
     const BITS: PtxType = PtxType::B32;
 }
 
 impl Int for B64 {
+    const WIDTH: i64 = 64;
+    const LOW_I64_MAX: i64 = i64::MAX;
     const SIGNED: PtxType = PtxType::S64;
     const UNSIGNED: PtxType = PtxType::U64;
     const BITS: PtxType = PtxType::B64;
