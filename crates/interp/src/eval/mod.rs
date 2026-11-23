@@ -44,6 +44,7 @@ pub(crate) fn evaluate(
         Op::GlobalPool(kind) => single(pool::global_pool(*kind, operands, output)),
         Op::Reduce(attrs) => single(reduce::reduce(attrs, operands, output)),
         Op::ArgReduce(attrs) => single(reduce::arg_reduce(attrs, operands, output)),
+        Op::CumSum(attrs) => single(reduce::cum_sum(*attrs, operands, output)),
         Op::Softmax(attrs) => single(norm::softmax(attrs, operands, output)),
         Op::LayerNorm(attrs) => norm::layer_norm(attrs, operands, outputs),
         Op::BatchNorm(attrs) => single(norm::batch_norm(*attrs, operands, output)),

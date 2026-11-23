@@ -1,4 +1,4 @@
-//! Reductions and arg-reductions. Floats reduce in f64 (D19).
+//! Reductions, arg-reductions and running sums. Floats reduce in f64 (D19).
 
 use super::round_to_output;
 use crate::error::{InterpError, Malformed};
@@ -9,7 +9,10 @@ use crate::numeric::{
     store_ints, truncate, widen,
 };
 use ptxc_core::{Axis, HostTensor, TensorData};
-use ptxc_graph::{ArgKind, ArgReduceAttrs, ReduceAttrs, ReduceOp, TensorType, TieBreak};
+use ptxc_graph::{
+    ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, ReduceAttrs, ReduceOp, ScanDirection,
+    TensorType, TieBreak,
+};
 
 /// For each output position, the input offsets it reduces, in input order.
 /// Keeping a reduced axis adds an extent-1 axis, which leaves the order of
@@ -166,4 +169,56 @@ fn extreme<T: PartialOrd + Copy>(
         }
     }
     best.map_or(0, |(position, _)| position)
+}
+
+/// `CumSum`: running sums along the axis. Floats sum in f64 and each sum
+/// is rounded to the output type; integers wrap, as in the input type.
+pub(super) fn cum_sum(
+    attrs: CumSumAttrs,
+    operands: &[&HostTensor],
+    output: &TensorType,
+) -> Result<TensorData, InterpError> {
+    let input = first(operands)?;
+    let mut lines = groups(&Extents::of(input.shape())?, &[attrs.axis]);
+    if attrs.direction == ScanDirection::Reverse {
+        for line in &mut lines {
+            line.reverse();
+        }
+    }
+    match widen(input.data()) {
+        Elements::Float(values) => {
+            // NOTE: ONNX's reference sums in the input type; D19 sums in f64.
+            let values: Vec<f64> = values.into_iter().map(f64::from).collect();
+            let sums = running_sums(&lines, &values, 0.0, |a, b| a + b, attrs.inclusion);
+            round_to_output(&sums, output)
+        }
+        Elements::Int(values) => {
+            let sums = running_sums(&lines, &values, 0, i64::wrapping_add, attrs.inclusion);
+            store_ints(&sums, output.dtype())
+        }
+        Elements::Bool(_) => Err(Malformed::DType(input.dtype()).into()),
+    }
+}
+
+/// The running sum at each offset, adding `values` along each line in order.
+fn running_sums<T: Copy>(
+    lines: &[Vec<usize>],
+    values: &[T],
+    zero: T,
+    add: fn(T, T) -> T,
+    inclusion: Inclusion,
+) -> Vec<T> {
+    let mut sums = vec![zero; values.len()];
+    for line in lines {
+        let mut total = zero;
+        for &offset in line {
+            let before = total;
+            total = add(total, values[offset]);
+            sums[offset] = match inclusion {
+                Inclusion::Inclusive => total,
+                Inclusion::Exclusive => before,
+            };
+        }
+    }
+    sums
 }

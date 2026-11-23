@@ -19,14 +19,15 @@ pub use node::{Node, NodeId, NodeOutputIndex, OperandIndex};
 pub use ops::{
     Activation, Antialias, ArgKind, ArgReduceAttrs, AttentionAttrs, AttentionLayout, AttentionMask,
     AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs, Causality, ConvAttrs, CoordinateTransform,
-    DequantizeAttrs, DiagonalOffset, Dilation, F32Attr, GeluApproximation, GemmAttrs,
-    GlobalPoolKind, Groups, HeadCount, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs,
-    LayerNormKind, ModKind, NearestRounding, NormOutputs, Op, OperandCount, Orientation,
-    OutsideWeights, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs, PoolAxis, PoolKind,
-    Presence, QConvAttrs, QMatMulAttrs, QkOutput, QuantizeAttrs, ReduceAttrs, ReduceOp,
-    RepeatCount, ResizeAttrs, ResizeAxis, ResizeMode, Rounding, SliceAttrs, SliceAxis, SliceStep,
-    SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak, TileAttrs, TransposeAttrs,
-    TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp, VariadicOp, WindowAxis,
+    CumSumAttrs, DequantizeAttrs, DiagonalOffset, Dilation, F32Attr, GeluApproximation, GemmAttrs,
+    GlobalPoolKind, Groups, HeadCount, Inclusion, InfDetection, InstanceNormAttrs, KeepDims,
+    LayerNormAttrs, LayerNormKind, ModKind, NearestRounding, NormOutputs, Op, OperandCount,
+    Orientation, OutsideWeights, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs, PoolAxis,
+    PoolKind, Presence, QConvAttrs, QMatMulAttrs, QkOutput, QuantizeAttrs, ReduceAttrs, ReduceOp,
+    RepeatCount, ResizeAttrs, ResizeAxis, ResizeMode, Rounding, ScanDirection, SliceAttrs,
+    SliceAxis, SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak,
+    TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp,
+    VariadicOp, WindowAxis,
 };
 pub use rewrite::{RewriteError, Rewriter};
 pub use tensor_type::{Layout, TensorType};

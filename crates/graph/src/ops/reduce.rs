@@ -1,4 +1,4 @@
-//! Reduction attributes and type rules.
+//! Reduction and running-sum attributes and type rules.
 
 use super::accepts::Accepts;
 use super::{TypeError, TypeRule, check_axis, exact_operands};
@@ -108,6 +108,46 @@ impl TypeRule for ArgReduceAttrs {
         Accepts::Numeric.check(input.dtype())?;
         let shape = reduced_shape(input.shape(), &[self.axis], self.keep_dims)?;
         Ok(vec![TensorType::new(DType::I64, shape, Layout::RowMajor)])
+    }
+}
+
+/// Whether each running sum includes its own element, from ONNX's
+/// `exclusive`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Inclusion {
+    /// The sum up to and including the element.
+    Inclusive,
+    /// The sum of the elements before it.
+    Exclusive,
+}
+
+/// Which way a running sum goes along its axis, from ONNX's `reverse`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ScanDirection {
+    /// From the first element.
+    Forward,
+    /// From the last element.
+    Reverse,
+}
+
+/// ONNX `CumSum` along one axis. The axis is an input in ONNX; the importer
+/// requires it to be known.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct CumSumAttrs {
+    /// The axis summed along.
+    pub axis: Axis,
+    /// Whether each sum includes its element.
+    pub inclusion: Inclusion,
+    /// Which way the sums go.
+    pub direction: ScanDirection,
+}
+
+impl TypeRule for CumSumAttrs {
+    fn infer(&self, operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError> {
+        let [input] = exact_operands(operands)?;
+        Accepts::FloatOrWideInt.check(input.dtype())?;
+        check_axis(input.shape(), self.axis)?;
+        Ok(vec![TensorType::new(input.dtype(), input.shape().clone(), Layout::RowMajor)])
     }
 }
 

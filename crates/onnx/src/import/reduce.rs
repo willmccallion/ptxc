@@ -1,9 +1,12 @@
-//! Imports reductions and arg-reductions.
+//! Imports reductions, arg-reductions and `CumSum`.
 
 use crate::context::NodeContext;
-use crate::error::ImportError;
+use crate::error::{ImportError, ImportErrorKind};
 use crate::lowered::Lowered;
-use ptxc_graph::{ArgKind, ArgReduceAttrs, KeepDims, Op, ReduceAttrs, ReduceOp, TieBreak};
+use ptxc_graph::{
+    ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, Op, ReduceAttrs, ReduceOp,
+    ScanDirection, TieBreak,
+};
 
 pub(super) fn lower(
     op: &str,
@@ -22,6 +25,7 @@ pub(super) fn lower(
         "ReduceLogSumExp" => ReduceOp::LogSumExp,
         "ArgMax" => return Some(arg_reduce(context, ArgKind::Max)),
         "ArgMin" => return Some(arg_reduce(context, ArgKind::Min)),
+        "CumSum" => return Some(cum_sum(context)),
         _ => return None,
     };
     Some(reduce(context, reduce_op))
@@ -66,4 +70,26 @@ fn arg_reduce(context: &mut NodeContext<'_>, kind: ArgKind) -> Result<Lowered, I
         TieBreak::Last
     };
     Ok(Lowered::on_inputs(Op::ArgReduce(ArgReduceAttrs { kind, axis, keep_dims, tie }), 1))
+}
+
+/// `CumSum`, whose axis input must be a known scalar.
+fn cum_sum(context: &mut NodeContext<'_>) -> Result<Lowered, ImportError> {
+    let rank = context.ty(0)?.shape().rank();
+    let written = context.ints(1)?;
+    let [axis] = written[..] else {
+        let problem = format!("CumSum's axis must be one integer, got {written:?}");
+        return Err(ImportErrorKind::Invalid { field: "axis", problem }.into());
+    };
+    let axis = context.axis(axis, rank)?;
+    let inclusion = if context.attrs.int_or("exclusive", 0)? == 0 {
+        Inclusion::Inclusive
+    } else {
+        Inclusion::Exclusive
+    };
+    let direction = if context.attrs.int_or("reverse", 0)? == 0 {
+        ScanDirection::Forward
+    } else {
+        ScanDirection::Reverse
+    };
+    Ok(Lowered::on_inputs(Op::CumSum(CumSumAttrs { axis, inclusion, direction }), 1))
 }

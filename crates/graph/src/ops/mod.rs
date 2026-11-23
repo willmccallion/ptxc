@@ -34,7 +34,10 @@ pub use norm::{
 };
 pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
 pub use quant::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QuantizeAttrs};
-pub use reduce::{ArgKind, ArgReduceAttrs, KeepDims, ReduceAttrs, ReduceOp, TieBreak};
+pub use reduce::{
+    ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, ReduceAttrs, ReduceOp,
+    ScanDirection, TieBreak,
+};
 pub use resize::{
     Antialias, CoordinateTransform, NearestRounding, OutsideWeights, ResizeAttrs, ResizeAxis,
     ResizeMode,
@@ -84,6 +87,8 @@ pub enum Op {
     Reduce(ReduceAttrs),
     /// `ArgMax` or `ArgMin` along one axis.
     ArgReduce(ArgReduceAttrs),
+    /// Running sums along one axis.
+    CumSum(CumSumAttrs),
     /// `Softmax` or `LogSoftmax` along one axis.
     Softmax(SoftmaxAttrs),
     /// Layer or RMS normalisation over the trailing axes.
@@ -155,6 +160,7 @@ impl TypeRule for Op {
             Self::GlobalPool(kind) => kind.infer(operands),
             Self::Reduce(attrs) => attrs.infer(operands),
             Self::ArgReduce(attrs) => attrs.infer(operands),
+            Self::CumSum(attrs) => attrs.infer(operands),
             Self::Softmax(attrs) => attrs.infer(operands),
             Self::LayerNorm(attrs) => attrs.infer(operands),
             Self::BatchNorm(attrs) => attrs.infer(operands),

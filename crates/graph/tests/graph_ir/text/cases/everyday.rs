@@ -6,12 +6,12 @@ use ptxc_core::float::Overflow;
 use ptxc_core::{Axis, DType, Dim, Rank};
 use ptxc_graph::{
     Activation, ArgKind, ArgReduceAttrs, AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs,
-    ConvAttrs, DiagonalOffset, GeluApproximation, GemmAttrs, GlobalPoolKind, Groups, InfDetection,
-    InstanceNormAttrs, KeepDims, LayerNormAttrs, LayerNormKind, ModKind, NormOutputs, Op,
-    Orientation, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs, PoolAxis, PoolKind,
-    ReduceAttrs, ReduceOp, RepeatCount, Rounding, SliceAttrs, SliceAxis, SliceStep, SoftmaxAttrs,
-    SoftmaxKind, SplitAttrs, StashType, TensorType, TieBreak, TileAttrs, TransposeAttrs,
-    TriangularPart, TriluAttrs, UnaryOp, VariadicOp,
+    ConvAttrs, CumSumAttrs, DiagonalOffset, GeluApproximation, GemmAttrs, GlobalPoolKind, Groups,
+    Inclusion, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs, LayerNormKind, ModKind,
+    NormOutputs, Op, Orientation, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs, PoolAxis,
+    PoolKind, ReduceAttrs, ReduceOp, RepeatCount, Rounding, ScanDirection, SliceAttrs, SliceAxis,
+    SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, TensorType, TieBreak, TileAttrs,
+    TransposeAttrs, TriangularPart, TriluAttrs, UnaryOp, VariadicOp,
 };
 
 /// Every elementwise variant.
@@ -172,6 +172,13 @@ pub(in crate::text) fn reduce_and_norm() -> Vec<(Op, Vec<TensorType>)> {
     for (kind, tie) in [(ArgKind::Max, TieBreak::Last), (ArgKind::Min, TieBreak::First)] {
         let attrs = ArgReduceAttrs { kind, axis: Axis::new(1), keep_dims: KeepDims::Drop, tie };
         cases.push((Op::ArgReduce(attrs), vec![input.clone()]));
+    }
+    for (inclusion, direction) in [
+        (Inclusion::Inclusive, ScanDirection::Reverse),
+        (Inclusion::Exclusive, ScanDirection::Forward),
+    ] {
+        let attrs = CumSumAttrs { axis: Axis::new(2), inclusion, direction };
+        cases.push((Op::CumSum(attrs), vec![input.clone()]));
     }
     for kind in [SoftmaxKind::Softmax, SoftmaxKind::LogSoftmax] {
         cases.push((Op::Softmax(SoftmaxAttrs { kind, axis: Axis::new(1) }), vec![input.clone()]));
