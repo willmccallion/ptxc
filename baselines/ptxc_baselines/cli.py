@@ -40,6 +40,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
     ort.add_argument(
         "--inputs", required=True, help="an input set's name in data/inputs/, or a directory"
     )
+    fuzz = commands.add_parser(
+        "fuzz-reference",
+        help="cache ONNX Runtime's outputs for every case `ptxc fuzz-export` wrote",
+    )
+    fuzz.add_argument("--dir", default=str(paths.DATA / "fuzz-ort"), help="the exported cases")
     return parser.parse_args(argv)
 
 
@@ -91,11 +96,21 @@ def run_reference(args: argparse.Namespace) -> Path:
     return reference.cache(model, inputs_dir)
 
 
+def run_fuzz_reference(args: argparse.Namespace) -> Path:
+    directory = Path(args.dir)
+    cached, without_kernel = reference.cache_cases(directory)
+    for reason in without_kernel:
+        print(f"no ONNX Runtime kernel: {reason}", file=sys.stderr)
+    print(f"cached {cached} cases; {len(without_kernel)} without an ONNX Runtime kernel")
+    return directory
+
+
 COMMANDS = {
     "export": run_export,
     "images": run_images,
     "random": run_random,
     "reference": run_reference,
+    "fuzz-reference": run_fuzz_reference,
 }
 
 
