@@ -9,7 +9,7 @@ use ptxc_core::{DType, Dim, HostTensor, Shape, TensorData};
 
 /// The values an operand takes.
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum Domain {
+pub enum Domain {
     /// Anything its type holds, specials included.
     Any,
     /// Integers from 0 to 6, where a computation is exact in any type.
@@ -28,12 +28,12 @@ pub(crate) enum Domain {
 }
 
 /// An output shape: rank 0 to 3, extents mostly 1 to 3, sometimes 0.
-pub(crate) fn output_dims() -> impl Strategy<Value = Vec<u64>> {
+pub fn output_dims() -> impl Strategy<Value = Vec<u64>> {
     dims_of_rank(0..=3)
 }
 
 /// As `output_dims`, with at least one axis.
-pub(crate) fn axis_dims() -> impl Strategy<Value = Vec<u64>> {
+pub fn axis_dims() -> impl Strategy<Value = Vec<u64>> {
     dims_of_rank(1..=3)
 }
 
@@ -44,7 +44,7 @@ fn dims_of_rank(ranks: std::ops::RangeInclusive<usize>) -> impl Strategy<Value =
 
 /// A shape broadcasting to `output`: some leading axes dropped, some
 /// extents replaced by 1.
-pub(crate) fn operand_dims(output: Vec<u64>) -> impl Strategy<Value = Vec<u64>> {
+pub fn operand_dims(output: Vec<u64>) -> impl Strategy<Value = Vec<u64>> {
     let rank = output.len();
     (0..=rank, vec(any::<bool>(), rank)).prop_map(move |(dropped, ones)| {
         output[dropped..]
@@ -55,12 +55,13 @@ pub(crate) fn operand_dims(output: Vec<u64>) -> impl Strategy<Value = Vec<u64>> 
     })
 }
 
-pub(crate) fn shape(dims: &[u64]) -> Shape {
+/// The shape with extents `dims`.
+pub fn shape(dims: &[u64]) -> Shape {
     Shape::new(dims.iter().copied().map(Dim::new).collect()).unwrap()
 }
 
 /// A tensor of `dtype` and `dims` with values from `domain`.
-pub(crate) fn tensor(dtype: DType, dims: Vec<u64>, domain: Domain) -> BoxedStrategy<HostTensor> {
+pub fn tensor(dtype: DType, dims: Vec<u64>, domain: Domain) -> BoxedStrategy<HostTensor> {
     let len = usize::try_from(shape(&dims).element_count().get()).unwrap();
     data(dtype, len, domain)
         .prop_map(move |data| HostTensor::new(shape(&dims), data).unwrap())
