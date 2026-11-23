@@ -1,0 +1,14 @@
+compute mod_0(%in0: i8[3], %in1: i8[]) {
+  %i0 = spatial 3
+  %out0: i8[3] = floored_rem(%in0[%i0], %in1[])
+}
+
+compute div_0(%in0: i32[3], %in1: i32[3]) {
+  %i0 = spatial 3
+  %out0: i32[3] = div(%in0[%i0], %in1[%i0])
+}
+
+compute abs_0(%in0: i64[3]) {
+  %i0 = spatial 3
+  %out0: i64[3] = abs(%in0[%i0])
+}

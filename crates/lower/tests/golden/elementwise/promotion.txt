@@ -1,0 +1,21 @@
+compute add_0(%in0: f16[2, 3], %in1: f16[3]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %out0: f16[2, 3] = cast<f16>(add(cast<f32>(%in0[%i0, %i1]), cast<f32>(%in1[%i1])))
+}
+
+compute less_0(%in0: bf16[2, 1], %in1: bf16[1, 3]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %out0: bool[2, 3] = lt(%in0[%i0, 0], %in1[0, %i1])
+}
+
+compute exp_0(%in0: bf16[4]) {
+  %i0 = spatial 4
+  %out0: bf16[4] = cast<bf16>(exp(cast<f32>(%in0[%i0])))
+}
+
+compute is_nan_0(%in0: f16[4]) {
+  %i0 = spatial 4
+  %out0: bool[4] = isnan(cast<f32>(%in0[%i0]))
+}
