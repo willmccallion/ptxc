@@ -426,6 +426,8 @@ fragment layout) are caught by `cargo test`.
   booleans as predicates. Index arithmetic is `s64`.
 - FP8 converts in hardware, which needs PTX ISA 8.1 on `sm_89`; the
   `sm_89` preset declares 8.4 (D50).
+- Transcendental functions are emitted inline from the math programs the
+  loop interpreter evaluates, one instruction per step (D51).
 - **Validation:** in tests every emitted module is assembled by ptxas
   (D11). At runtime the driver JIT-compiles the PTX (`cuModuleLoadDataEx`).
   ptxas is never on the compiler path.

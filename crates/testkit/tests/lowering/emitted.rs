@@ -14,20 +14,8 @@ use std::sync::Arc;
 /// Graphs drawn per family; each stage is one ptxas run.
 const CASES_PER_FAMILY: usize = 6;
 
-/// What codegen does not emit yet: the math programs and FP8 conversions.
-const PENDING: [&str; 11] = [
-    "exp",
-    "expm1",
-    "log",
-    "log1p",
-    "erf",
-    "sin",
-    "cos",
-    "tanh",
-    "pow",
-    "truncated_rem",
-    "fp8 conversion",
-];
+/// What codegen does not emit yet: the remaining math programs.
+const PENDING: [&str; 8] = ["expm1", "log1p", "erf", "sin", "cos", "tanh", "pow", "truncated_rem"];
 
 fn from_cases(
     cases: impl Strategy<Value = (Op, Vec<HostTensor>)> + 'static,
