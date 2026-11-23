@@ -1,87 +1,11 @@
 //! Runs a graph through partitioning, lowering and the loop interpreter, and
 //! checks it against `ptxc-interp`.
 
-use ptxc_core::{DType, Evaluate, HostTensor, Idx};
-use ptxc_graph::{Graph, Partitioned, ValueDef, ValueId};
+use ptxc_core::{DType, Evaluate, HostTensor};
+use ptxc_graph::Graph;
 use ptxc_interp::Interpreter;
-use ptxc_loop::RunError;
-use ptxc_lower::{Binding, IntermediateId, LoweredGroup};
-use ptxc_target::{SmVersion, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
-use std::collections::HashMap;
-use std::sync::Arc;
-
-/// `graph`'s outputs for `inputs`, each group lowered and each stage run
-/// under its default schedule, threads and blocks bound.
-pub(crate) fn run_lowered(
-    graph: Graph,
-    inputs: &[HostTensor],
-) -> Result<Vec<HostTensor>, RunError> {
-    let partitioned = Partitioned::one_node_per_group(graph).unwrap();
-    let groups = ptxc_lower::lower(&partitioned).unwrap();
-    let graph = partitioned.graph();
-    let target = preset(SmVersion::SM_89).unwrap();
-    let mut tensors = Tensors {
-        graph,
-        values: graph.inputs().iter().copied().zip(inputs.iter().cloned()).collect(),
-        intermediates: HashMap::new(),
-        tables: Vec::new(),
-    };
-    for group in &groups {
-        tensors.intermediates.clear();
-        tensors.tables = group.tables().iter().cloned().collect();
-        for stage in group.stages() {
-            let arguments: Vec<HostTensor> =
-                stage.inputs().iter().map(|&binding| tensors.read(binding)).collect();
-            let schedule = ptxc_schedule::default_schedule(Arc::clone(stage.compute()), &target);
-            let kernel = schedule.unwrap().lower();
-            let outputs = ptxc_loop::run(&kernel, &arguments)?;
-            for (&binding, flat) in stage.outputs().iter().zip(outputs) {
-                tensors.write(group, binding, &flat);
-            }
-        }
-    }
-    Ok(graph.outputs().iter().map(|&value| tensors.read(Binding::Value(value))).collect())
-}
-
-/// Every tensor computed so far: graph values, and the current group's
-/// intermediates and tables.
-struct Tensors<'g> {
-    graph: &'g Graph,
-    values: HashMap<ValueId, HostTensor>,
-    intermediates: HashMap<IntermediateId, HostTensor>,
-    tables: Vec<HostTensor>,
-}
-
-impl Tensors<'_> {
-    fn read(&self, binding: Binding) -> HostTensor {
-        match binding {
-            Binding::Value(value) => match self.graph.value(value).def() {
-                ValueDef::Constant(constant) => self.graph.constant(constant).clone(),
-                ValueDef::Input(_) | ValueDef::Output { .. } => self.values[&value].clone(),
-            },
-            Binding::Intermediate(id) => self.intermediates[&id].clone(),
-            Binding::Table(id) => self.tables[id.index()].clone(),
-        }
-    }
-
-    /// Stores a stage's flat output with the shape of the tensor it binds.
-    fn write(&mut self, group: &LoweredGroup, binding: Binding, flat: &HostTensor) {
-        match binding {
-            Binding::Value(value) => {
-                let shape = self.graph.value(value).ty().shape().clone();
-                let _new =
-                    self.values.insert(value, HostTensor::new(shape, flat.data().clone()).unwrap());
-            }
-            Binding::Intermediate(id) => {
-                let shape = group.intermediates()[id].shape().clone();
-                let tensor = HostTensor::new(shape, flat.data().clone()).unwrap();
-                let _new = self.intermediates.insert(id, tensor);
-            }
-            Binding::Table(id) => panic!("a stage wrote table {id:?}"),
-        }
-    }
-}
+use ptxc_testkit::lowered::run_lowered;
 
 /// Checks the lowered graph agrees with the reference: within each output's
 /// dtype tolerance, or failing wherever the reference fails.
@@ -98,7 +22,7 @@ pub(crate) fn check_within(
 ) -> Result<(), String> {
     let expected = Interpreter::new(&graph).evaluate(inputs);
     let text = ptxc_graph::text::print(&graph);
-    let actual = run_lowered(graph, inputs);
+    let actual = run_lowered(graph, inputs, ptxc_loop::run);
     match (expected, actual) {
         (Ok(expected), Ok(actual)) => {
             for (actual, expected) in actual.iter().zip(&expected) {

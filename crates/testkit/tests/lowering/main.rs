@@ -5,7 +5,6 @@
 
 mod activation;
 mod attention;
-mod cases;
 mod elementwise;
 mod emitted;
 mod gather;
@@ -16,7 +15,6 @@ mod quant;
 mod reduce;
 mod resize;
 mod shape;
-mod values;
 mod window;
 
 /// Property-test cases: `PROPTEST_CASES` if set, else `default`.

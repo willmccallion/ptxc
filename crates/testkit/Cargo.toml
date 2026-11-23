@@ -16,20 +16,20 @@ publish = false
 workspace = true
 
 [dependencies]
+proptest.workspace = true
 prost.workspace = true
 ptxc-core.workspace = true
 ptxc-graph.workspace = true
 ptxc-interp.workspace = true
+ptxc-loop.workspace = true
+ptxc-lower.workspace = true
 ptxc-onnx.workspace = true
 ptxc-onnx-proto.workspace = true
+ptxc-schedule.workspace = true
+ptxc-target.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-proptest.workspace = true
 ptxc-codegen.workspace = true
-ptxc-loop.workspace = true
-ptxc-lower.workspace = true
-ptxc-schedule.workspace = true
-ptxc-target.workspace = true

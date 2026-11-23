@@ -1,7 +1,7 @@
 //! A case is an op with the element type, values and shape kind of each
 //! operand; `graphs` draws single-node graphs and inputs from a list.
 
-use crate::values::{Domain, operand_dims, output_dims, shape, tensor};
+use super::values::{Domain, operand_dims, output_dims, shape, tensor};
 use proptest::prelude::*;
 use proptest::sample::select;
 use ptxc_core::{DType, HostTensor};
@@ -9,7 +9,7 @@ use ptxc_graph::{Graph, GraphBuilder, Layout, Op, TensorType, TypeRule};
 
 /// How an operand's shape relates to the output's.
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum Extent {
+pub enum Extent {
     /// The output's shape.
     Full,
     /// A shape that broadcasts to the output's.
@@ -20,23 +20,30 @@ pub(crate) enum Extent {
 
 /// One operand of a case.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct OperandSpec {
-    pub(crate) dtype: DType,
-    pub(crate) domain: Domain,
-    pub(crate) extent: Extent,
+pub struct OperandSpec {
+    /// The element type.
+    pub dtype: DType,
+    /// The values it takes.
+    pub domain: Domain,
+    /// Its shape against the output's.
+    pub extent: Extent,
 }
 
 impl OperandSpec {
     /// Any values of `dtype`, in a shape that broadcasts to the output.
-    pub(crate) const fn any(dtype: DType) -> Self {
+    pub const fn any(dtype: DType) -> Self {
         Self { dtype, domain: Domain::Any, extent: Extent::Broadcast }
     }
 
-    pub(crate) const fn with_extent(self, extent: Extent) -> Self {
+    /// The same operand with shape `extent`.
+    #[must_use]
+    pub const fn with_extent(self, extent: Extent) -> Self {
         Self { extent, ..self }
     }
 
-    pub(crate) const fn with_domain(self, domain: Domain) -> Self {
+    /// The same operand with values from `domain`.
+    #[must_use]
+    pub const fn with_domain(self, domain: Domain) -> Self {
         Self { domain, ..self }
     }
 
@@ -55,14 +62,17 @@ impl OperandSpec {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Case {
-    pub(crate) op: Op,
-    pub(crate) operands: Vec<OperandSpec>,
+/// An op and its operands.
+pub struct Case {
+    /// The op.
+    pub op: Op,
+    /// Its operands, in order.
+    pub operands: Vec<OperandSpec>,
 }
 
 impl Case {
     /// `op` on broadcasting operands of `dtypes` with any values.
-    pub(crate) fn new(op: Op, dtypes: &[DType]) -> Self {
+    pub fn new(op: Op, dtypes: &[DType]) -> Self {
         Self { op, operands: dtypes.iter().map(|&dtype| OperandSpec::any(dtype)).collect() }
     }
 
@@ -73,14 +83,14 @@ impl Case {
 }
 
 /// The cases the op's type rule accepts, of which there must be some.
-pub(crate) fn admitted(cases: impl IntoIterator<Item = Case>) -> Vec<Case> {
+pub fn admitted(cases: impl IntoIterator<Item = Case>) -> Vec<Case> {
     let admitted: Vec<Case> = cases.into_iter().filter(Case::is_admitted).collect();
     assert!(!admitted.is_empty());
     admitted
 }
 
 /// A graph of one node of a case drawn from `cases`, and inputs for it.
-pub(crate) fn graphs(cases: Vec<Case>) -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
+pub fn graphs(cases: Vec<Case>) -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
     select(cases)
         .prop_flat_map(|case| {
             output_dims().prop_flat_map(move |output| {
@@ -100,7 +110,7 @@ pub(crate) fn graphs(cases: Vec<Case>) -> impl Strategy<Value = (Graph, Vec<Host
 }
 
 /// A graph whose one node is `op` on inputs typed as `inputs`.
-pub(crate) fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
+pub fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
     let mut builder = GraphBuilder::new();
     let operands = inputs
         .iter()

@@ -892,3 +892,24 @@ the old one.
     compared with.
 - **Evidence:** `cargo test --release -p ptxc-loop --test math -- --ignored`
   checks every f32 for both functions in about ten minutes on 28 threads.
+
+## D52. Test generators shared as a library keep their panics
+
+- **Context:** the op-family generators and the stage-by-stage runner lived
+  in testkit's lowering tests. The GPU tests in `ptxc-runtime` need the
+  same cases, and the fuzz commands will too, so they moved into the
+  testkit library, where the workspace denies `unwrap` and `panic`.
+- **Options:**
+  - return errors from every generator;
+  - keep the panics in the generators, under an `expect` that names the
+    reason.
+- **Choice:**
+  - `ptxc_testkit::families` keeps its panics. A generator that builds an
+    invalid shape or graph has a bug, and a proptest strategy has no way to
+    report an error.
+  - `ptxc_testkit::lowered::run_lowered`, which callers drive with their
+    own executors, returns typed errors.
+- **Reason:** the panics guard invariants the generators establish
+  themselves, so threading `Result` through roughly forty strategies would
+  add noise without catching anything. In test code a panic is already a
+  failure with its message.
