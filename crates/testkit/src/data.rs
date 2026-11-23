@@ -14,13 +14,13 @@ pub enum DataError {
         /// Where the search started.
         from: PathBuf,
     },
-    /// The data has not been fetched.
+    /// The data has not been fetched or made.
     #[error("{} does not exist; run `{fetch}`", .path.display())]
     NotFetched {
-        /// The missing directory.
+        /// The missing file or directory.
         path: PathBuf,
-        /// The command that fetches it.
-        fetch: &'static str,
+        /// The command that makes it.
+        fetch: String,
     },
     /// The current directory could not be read.
     #[error("reading the current directory: {0}")]
@@ -51,7 +51,26 @@ pub fn onnx_node_tests() -> Result<PathBuf, DataError> {
     if path.is_dir() {
         Ok(path)
     } else {
-        Err(DataError::NotFetched { path, fetch: "cargo xtask fetch onnx-tests" })
+        Err(DataError::NotFetched { path, fetch: "cargo xtask fetch onnx-tests".to_owned() })
+    }
+}
+
+/// The baselines command that makes data: `uv run --project baselines
+/// ptxc-baselines <arguments>`.
+pub(crate) fn baselines_command(arguments: &str) -> String {
+    format!("uv run --project baselines ptxc-baselines {arguments}")
+}
+
+/// A target model's ONNX file, which `ptxc-baselines export` writes.
+pub fn model(name: &str) -> Result<PathBuf, DataError> {
+    let path = workspace_root()?.join("data").join("models").join(name).join("model.onnx");
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(DataError::NotFetched {
+            path,
+            fetch: baselines_command(&format!("export --model {name}")),
+        })
     }
 }
 

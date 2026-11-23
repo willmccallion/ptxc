@@ -221,7 +221,7 @@ fn qualified_op(node: &ptxc_onnx_proto::NodeProto) -> String {
 }
 
 /// `<prefix>_0.pb`, `<prefix>_1.pb`, … in `dir`, up to the first missing.
-fn tensors(dir: &Path, prefix: &str) -> Result<Vec<HostTensor>, LoadError> {
+pub(crate) fn tensors(dir: &Path, prefix: &str) -> Result<Vec<HostTensor>, LoadError> {
     let mut found = Vec::new();
     for k in 0.. {
         let path = dir.join(format!("{prefix}_{k}.pb"));
