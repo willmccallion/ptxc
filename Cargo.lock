@@ -856,6 +856,7 @@ dependencies = [
  "ptxc-autotune",
  "ptxc-compiler",
  "ptxc-core",
+ "ptxc-cuda",
  "ptxc-interp",
  "ptxc-onnx",
  "ptxc-onnx-proto",
