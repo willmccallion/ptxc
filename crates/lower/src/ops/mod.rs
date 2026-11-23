@@ -40,6 +40,10 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::Reduce(attrs) => reduce::reduce(cx, attrs),
         Op::ArgReduce(attrs) => reduce::arg_reduce(cx, *attrs),
         Op::CumSum(attrs) => reduce::cum_sum(cx, *attrs),
+        Op::Softmax(attrs) => norm::softmax(cx, *attrs),
+        Op::LayerNorm(attrs) => norm::layer_norm(cx, *attrs),
+        Op::BatchNorm(attrs) => norm::batch_norm(cx, *attrs),
+        Op::InstanceNorm(attrs) => norm::instance_norm(cx, *attrs),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }

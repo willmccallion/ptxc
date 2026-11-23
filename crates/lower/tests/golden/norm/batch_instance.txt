@@ -1,0 +1,27 @@
+compute batch_norm_0(%in0: f16[2, 3, 2], %in1: f32[3], %in2: f32[3], %in3: f16[3], %in4: f16[3]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %i2 = spatial 2
+  %out0: f16[2, 3, 2] = cast<f16>(add(mul(div(sub(cast<f32>(%in0[%i0, %i1, %i2]), cast<f32>(%in3[%i1])), sqrt(add(cast<f32>(%in4[%i1]), 9.999999747378752e-6:f32))), %in1[%i1]), %in2[%i1]))
+}
+
+compute instance_norm_0_mean(%in0: f32[1, 2, 4]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 1
+  %k0 = reduce 4
+  %out0: f32[1, 2, 1] = div(sum[%k0](%in0[%i0, %i1, %k0]), 4.0:f32)
+}
+compute instance_norm_0_inverse(%in0: f32[1, 2, 4], %in1: f32[1, 2, 1]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 1
+  %k0 = reduce 4
+  %out0: f32[1, 2, 1] = div(1.0:f32, sqrt(add(div(sum[%k0](mul(sub(%in0[%i0, %i1, %k0], %in1[%i0, %i1, %i2]), sub(%in0[%i0, %i1, %k0], %in1[%i0, %i1, %i2]))), 4.0:f32), 9.999999747378752e-6:f32)))
+}
+compute instance_norm_0(%in0: f32[1, 2, 4], %in1: f32[2], %in2: f32[2], %in3: f32[1, 2, 1], %in4: f32[1, 2, 1]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 4
+  %out0: f32[1, 2, 4] = add(mul(mul(sub(%in0[0, %i1, %i2], %in4[%i0, %i1, 0]), %in3[%i0, %i1, 0]), %in1[%i1]), %in2[%i1])
+}
