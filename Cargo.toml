@@ -37,6 +37,7 @@ categories = ["compilers", "science"]
 
 [workspace.dependencies]
 flate2 = "1.1.11"
+libm = "0.2.16"
 prost = "0.14.6"
 prost-build = "0.14.6"
 protox = "0.10.0"
