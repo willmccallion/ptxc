@@ -69,7 +69,7 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::QMatMul(attrs) => quant::qmatmul(cx, attrs),
         Op::QConv(attrs) => quant::qconv(cx, attrs),
         Op::Resize(attrs) => resize::resize(cx, attrs),
-        other @ Op::Attention(_) => Err(LowerError::Unsupported { op: other.mnemonic() }),
+        Op::Attention(attrs) => attention::attention(cx, attrs),
     }
 }
 
