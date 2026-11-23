@@ -4,6 +4,10 @@ mod clocks;
 mod cublas;
 mod results;
 mod suites;
+#[cfg_attr(
+    not(all(test, feature = "gpu")),
+    expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")
+)]
 mod timing;
 
 use std::process::ExitCode;

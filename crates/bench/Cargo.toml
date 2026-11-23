@@ -15,6 +15,10 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+# Compiles the device tests, which fail without a GPU rather than skip.
+gpu = []
+
 [[bin]]
 name = "ptxc-bench"
 path = "src/main.rs"

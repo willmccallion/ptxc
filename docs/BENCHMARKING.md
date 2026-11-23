@@ -32,8 +32,9 @@ upgrade shows up in the data.
   - CUDA events around each iteration on one stream, after a warmup of at
     least 20 iterations and 1 s.
   - Then at least 100 timed iterations, or 2 s, whichever is longer.
-  - Reported as the median, with p10 and p90 alongside. Raw samples are kept
-    in the JSON.
+  - Reported as the median, with p10 and p90 alongside, interpolated
+    linearly between the nearest ranks as numpy's default percentile is.
+    Raw samples are kept in the JSON.
 - **Whole models.** All frameworks are timed the same way:
   - from inputs already on the device to outputs on the device;
   - one stream, with CUDA graphs where the framework supports them (ptxc
