@@ -702,3 +702,20 @@ the old one.
     Compensating would cost another pass of every block for inputs that
     are ill-conditioned anyway. The differential tests draw normalisation
     inputs from whole numbers, which keeps them well-conditioned.
+
+## D45. A gather wraps its indices into the axis
+
+- **Context:** ONNX makes a gather index outside `[-extent, extent)` an
+  error. A GPU kernel cannot return one, and an out-of-bounds read can
+  fault, which leaves the CUDA context unusable for every later call.
+- **Options:** read at the raw index (undefined behaviour on bad input);
+  clamp the index into the axis; or wrap it, as `floormod(index, extent)`.
+- **Choice:** wrap. For every valid index, wrapping is exactly ONNX's
+  resolution of negative indices. An invalid one reads some element of the
+  axis instead of faulting. A gather over an empty axis reads nothing.
+- **Reason:** one remainder both resolves negative indices and keeps every
+  read in bounds, so a bad input can never take down the process's GPU
+  context. Clamping would still need a select to resolve negative indices.
+  Invalid indices give wrong values rather than an error. A later runtime
+  check could report them with a device-side flag, without changing the
+  kernels' reads.
