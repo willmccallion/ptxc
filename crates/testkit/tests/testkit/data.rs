@@ -27,3 +27,14 @@ fn the_node_tests_live_under_the_pinned_tag() {
     assert_eq!(path, expected);
     assert!(Path::new(ptxc_onnx_proto::ONNX_TAG).to_string_lossy().starts_with('v'));
 }
+
+#[test]
+fn a_missing_model_names_the_command_that_exports_it() {
+    let Err(DataError::NotFetched { path, fetch }) = ptxc_testkit::data::model("no-such-model")
+    else {
+        panic!()
+    };
+
+    assert!(path.ends_with("data/models/no-such-model/model.onnx"));
+    assert_eq!(fetch, "uv run --project baselines ptxc-baselines export --model no-such-model");
+}

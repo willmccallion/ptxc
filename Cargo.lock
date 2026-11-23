@@ -913,6 +913,7 @@ dependencies = [
  "ptxc-interp",
  "ptxc-onnx",
  "ptxc-onnx-proto",
+ "sha2",
  "tempfile",
  "thiserror",
 ]
