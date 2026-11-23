@@ -1,0 +1,52 @@
+compute attention_0_scores(%in0: f32[1, 2, 4], %in1: f32[1, 3, 4]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 2
+  %i3 = spatial 3
+  %k0 = reduce 2
+  %out0: f32[1, 2, 2, 3] = mul(0.5:f32, sum[%k0](mul(%in0[%i0, %i2, %i1 * 2 + %k0], %in1[%i0, min(max(%i3, 0), 2), %i1 * 2 + %k0])))
+}
+compute attention_0_max(%in0: f32[1, 2, 2, 3]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 2
+  %i3 = spatial 1
+  %k0 = reduce 3
+  %out0: f32[1, 2, 2, 1] = reduce_max[%k0](%in0[%i0, %i1, %i2, %k0])
+}
+compute attention_0_sum(%in0: f32[1, 2, 2, 3], %in1: f32[1, 2, 2, 1]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 2
+  %i3 = spatial 1
+  %k0 = reduce 3
+  %out0: f32[1, 2, 2, 1] = sum[%k0](exp(sub(%in0[%i0, %i1, %i2, %k0], %in1[%i0, %i1, %i2, %i3])))
+}
+compute attention_0(%in0: f32[1, 2, 2, 3], %in1: f32[1, 2, 2, 1], %in2: f32[1, 2, 2, 1], %in3: f32[1, 3, 2]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 2
+  %k0 = reduce 3
+  %out0: f32[1, 2, 2] = sum[%k0](mul(div(exp(sub(%in0[%i0, floordiv(%i2, 1), %i1, %k0], %in1[%i0, floordiv(%i2, 1), %i1, 0])), %in2[%i0, floordiv(%i2, 1), %i1, 0]), %in3[%i0, min(max(%k0, 0), 2), floordiv(%i2, 1) * 1 + floormod(%i2, 1)]))
+}
+compute attention_0_present(%in0: f32[1, 3, 4]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 3
+  %i3 = spatial 2
+  %out0: f32[1, 2, 3, 2] = %in0[%i0, min(max(%i2, 0), 2), %i1 * 2 + %i3]
+}
+compute attention_0_present(%in0: f32[1, 3, 2]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 3
+  %i3 = spatial 1
+  %out0: f32[1, 2, 3, 1] = %in0[%i0, min(max(%i2, 0), 2), %i1 * 1 + %i3]
+}
+compute attention_0_qk(%in0: f32[1, 2, 2, 3], %in1: f32[1, 2, 2, 1], %in2: f32[1, 2, 2, 1]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 2
+  %i3 = spatial 3
+  %out0: f32[1, 2, 2, 3] = div(exp(sub(%in0[%i0, %i1, %i2, %i3], %in1[%i0, %i1, %i2, 0])), %in2[%i0, %i1, %i2, 0])
+}

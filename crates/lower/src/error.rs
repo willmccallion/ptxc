@@ -11,12 +11,6 @@ pub enum LowerError {
     /// A group of several nodes, which needs epilogue fusion.
     #[error("group {0:?} holds several nodes, which cannot be lowered yet")]
     Fused(GroupId),
-    /// An op with no lowering yet.
-    #[error("`{op}` cannot be lowered yet")]
-    Unsupported {
-        /// The op's mnemonic.
-        op: &'static str,
-    },
     /// An op on an element type it has no lowering for yet.
     #[error("`{op}` on {} cannot be lowered yet", dtype.name())]
     UnsupportedDType {

@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
 mod activation;
+mod attention;
 mod cases;
 mod elementwise;
 mod gather;
