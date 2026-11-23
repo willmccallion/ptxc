@@ -1,11 +1,11 @@
 //! Prints compute definitions, schedules and lowered kernels.
 
+use super::cast::cast_name;
 use super::index::write_index;
 use crate::compute::{
     ComputeDef, IndexVar, IterKind, IterVarId, TensorExpr, TensorParamId, UnaryOp,
 };
 use crate::expr::{ExprId, VarId};
-use ptxc_core::float::Overflow;
 use ptxc_core::{DType, Dim, Shape};
 use std::fmt::Write;
 
@@ -105,11 +105,7 @@ impl ComputePrinter<'_> {
                 self.write_args(out, &[lhs, rhs]);
             }
             TensorExpr::Cast { to, overflow, value } => {
-                let overflow = match overflow {
-                    Overflow::Saturate => "saturate",
-                    Overflow::NonFinite => "nonfinite",
-                };
-                let _infallible = write!(out, "cast<{}, {overflow}>", to.name());
+                out.push_str(&cast_name(*to, *overflow));
                 self.write_args(out, &[value]);
             }
             TensorExpr::Select { condition, then, otherwise } => {
