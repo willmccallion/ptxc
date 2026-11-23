@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d591305d7ca30bbdb7fd6d3a903babca091a3dfda82d9db59b6d2e5121725478 # shrinks to tree = Max(Add(Var(0), FloorMod(Var(0), Const(0))), Mul(FloorDiv(Mul(Var(0), Const(1)), Const(0)), Var(0))), (ranges, _) = ([(0, 0), (0, 0), (0, 0)], [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
