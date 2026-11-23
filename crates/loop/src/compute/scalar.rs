@@ -42,6 +42,11 @@ impl Scalar {
         fits.then_some(Self { dtype, value: ScalarValue::Int(value) })
     }
 
+    /// An `i64` constant.
+    pub const fn i64(value: i64) -> Self {
+        Self { dtype: DType::I64, value: ScalarValue::Int(value) }
+    }
+
     /// An `f32` constant.
     pub fn f32(value: f32) -> Self {
         Self { dtype: DType::F32, value: ScalarValue::Float(f64::from(value).to_bits()) }
