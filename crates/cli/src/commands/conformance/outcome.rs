@@ -1,18 +1,16 @@
 //! One test case's outcome on a backend.
 
-use crate::args::Backend;
+use super::runner::Runner;
 use crate::report::{Failure, Outcome, Reason, Worst};
-use ptxc_core::{Evaluate, HostTensor};
-use ptxc_interp::Interpreter;
 use ptxc_onnx::{ImportError, ImportErrorKind, ImportOptions, Unsupported, import_model};
 use ptxc_testkit::compare::{self, Mismatch, Tolerance};
-use ptxc_testkit::onnx_tests::{DataSet, LoadError, Runnable, TestCase};
+use ptxc_testkit::onnx_tests::{DataSet, LoadError, TestCase};
 
 /// The node tests' own tolerance.
 pub(super) const TOLERANCE: Tolerance = Tolerance::ONNX_SUITE;
 
 /// The case's outcome: a pass only if every data set matches.
-pub(super) fn of_case(case: &TestCase, backend: Backend) -> Outcome {
+pub(super) fn of_case(case: &TestCase, runner: &Runner) -> Outcome {
     let data_sets = match case.data_sets() {
         Ok(data_sets) => data_sets,
         Err(error) => return model_unsupported(case).unwrap_or_else(|| of_load_error(&error)),
@@ -20,17 +18,17 @@ pub(super) fn of_case(case: &TestCase, backend: Backend) -> Outcome {
     data_sets
         .iter()
         .enumerate()
-        .map(|(index, data_set)| of_data_set(case, data_set, index, backend))
+        .map(|(index, data_set)| of_data_set(case, data_set, index, runner))
         .find(|outcome| *outcome != Outcome::Pass)
         .unwrap_or(Outcome::Pass)
 }
 
-fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, backend: Backend) -> Outcome {
+fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, runner: &Runner) -> Outcome {
     let runnable = match case.import(data_set) {
         Ok(runnable) => runnable,
         Err(error) => return of_import_error(&error),
     };
-    let actual = match evaluate(backend, &runnable) {
+    let actual = match runner.evaluate(&runnable) {
         Ok(actual) => actual,
         Err(message) => return Outcome::Fail { failure: Failure::Evaluate { message } },
     };
@@ -48,14 +46,6 @@ fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, backend: Backe
         }
     }
     Outcome::Pass
-}
-
-fn evaluate(backend: Backend, runnable: &Runnable) -> Result<Vec<HostTensor>, String> {
-    match backend {
-        Backend::Interp => Interpreter::new(&runnable.graph)
-            .evaluate(&runnable.inputs)
-            .map_err(|error| error.to_string()),
-    }
 }
 
 /// Why the model alone is unsupported, if it is: a test of sequences or

@@ -83,6 +83,8 @@ pub(crate) struct ConformanceArgs {
 pub(crate) enum Backend {
     /// The reference interpreter.
     Interp,
+    /// Compiled and run on GPU 0.
+    Gpu,
 }
 
 impl Backend {
@@ -90,6 +92,7 @@ impl Backend {
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Interp => "interp",
+            Self::Gpu => "gpu",
         }
     }
 }
