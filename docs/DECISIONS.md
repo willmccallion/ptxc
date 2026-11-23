@@ -719,3 +719,28 @@ the old one.
   Invalid indices give wrong values rather than an error. A later runtime
   check could report them with a device-side flag, without changing the
   kernels' reads.
+
+## D46. Lowered groups own constant tables, and quantized products rescale in f32
+
+- **Context:** quantization parameters are op attributes (D19), not graph
+  tensors. A per-axis map has one scale and zero point per channel, and a
+  stage can only read tensors bound to it. `QLinearMatMul` and
+  `QLinearConv` rescale an exact integer sum by
+  `a_scale * b_scale / y_scale`.
+- **Options:** for per-axis maps, a chain of selects on the channel index,
+  growing with the channel count, or small tables the group owns; for the
+  rescale, the reference's f64 or f32.
+- **Choice:**
+  - A `LoweredGroup` lists constant tables built from attributes, and
+    `Binding::Table` binds one to a stage input. The runtime uploads tables
+    once with the program. One map stays an inlined constant.
+  - Quantized products sum exactly in `i64` and rescale in f32. FP8
+    operands of a quantized product are an `UnsupportedDType` error, as the
+    reference does not take them either.
+- **Reason:**
+  - A table read costs one load per element whatever the channel count;
+    select chains cost a comparison per channel. Tables also keep the graph
+    free of tensors no model has.
+  - f32 epilogues are what int8 GPU kernels use. A rounding tie can land
+    one step apart once a sum passes 2^24, which testkit's `QUANTIZED`
+    tolerance of one step already allows for.
