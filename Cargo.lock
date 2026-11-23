@@ -842,6 +842,7 @@ dependencies = [
  "ptxc-program",
  "ptxc-runtime",
  "ptxc-target",
+ "thiserror",
 ]
 
 [[package]]

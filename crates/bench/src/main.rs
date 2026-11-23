@@ -1,5 +1,9 @@
 //! Benchmark harness: times ptxc against cuBLAS and records results as JSON. The only crate that may load cuBLAS.
 
+#[cfg_attr(
+    not(all(test, feature = "gpu")),
+    expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")
+)]
 mod clocks;
 mod cublas;
 mod results;
