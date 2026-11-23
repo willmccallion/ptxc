@@ -258,6 +258,9 @@ infinity tests. Activations, softmax and normalisation are compositions,
 built by `ptxc-lower`. FP8 is storage only here too: it reaches arithmetic
 through `Cast`. A gather's index is an `IndexVar::Loaded`, an integer read
 from an index tensor, so index arithmetic never reads data directly.
+A definition is one stage: at most one reduction, and then exactly one
+output; every load not indexed through a gather stays within its tensor over
+the iteration domain (D40).
 
 **2. Schedule: how to iterate.** A loop tree is transformed by primitives.
 Every applied primitive is recorded in a `Trace`, as in TVM's MetaSchedule.
@@ -336,11 +339,14 @@ barrier, a bad swizzle, a wrong fragment layout) are caught by `cargo test`.
 
 ### Lowering (`ptxc-lower`)
 
-- **In:** `Partitioned`. **Out:** `IndexVec<GroupId, ComputeDef>`.
+- **In:** `Partitioned`. **Out:** `IndexVec<GroupId, Vec<ComputeDef>>`: each
+  group's stages in order, joined by intermediate buffers (D40).
 - Each op family has one file, mirroring `ptxc-graph/src/ops`. Each produces
-  a `TensorExpr` for its outputs.
-- `epilogue.rs` substitutes injective consumers into the producer's output
-  expression. A fused group is a single `ComputeDef`.
+  `TensorExpr`s for its stages; an op with several reductions in sequence
+  (softmax, layer norm, log-sum-exp) is several stages.
+- `epilogue.rs` substitutes injective consumers into the producing stage's
+  output expression. In M2 every stage is its own kernel; M3's `compute_at`
+  places a stage inside another's loop nest, so a group becomes one kernel.
 
 ### Scheduling (`ptxc-schedule`)
 
