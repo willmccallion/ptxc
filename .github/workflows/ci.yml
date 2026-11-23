@@ -20,6 +20,16 @@ jobs:
           toolchain: ${{ steps.toolchain.outputs.channel }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # The tests assemble every emitted kernel with ptxas (D11). The flake
+      # provides it locally; CI fetches the same release and checks it.
+      - name: Install ptxas
+        run: |
+          curl -fsSL -o nvcc.tar.xz https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-13.5.37-archive.tar.xz
+          echo "ac41262734f3c62cd75a502081cfae093b03b846d7f9274d8b1eb41f83209b96  nvcc.tar.xz" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/nvcc"
+          tar -xJf nvcc.tar.xz -C "$RUNNER_TEMP/nvcc" --strip-components=1
+          echo "$RUNNER_TEMP/nvcc/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/nvcc/bin/ptxas" --version
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Includes xtask's check that crates/onnx-proto/src/generated.rs is up to date.

@@ -6,4 +6,5 @@ mod compare;
 mod data;
 mod golden;
 mod onnx_tests;
+mod ptxas;
 mod reference;

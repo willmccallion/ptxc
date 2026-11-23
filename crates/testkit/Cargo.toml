@@ -23,6 +23,7 @@ ptxc-interp.workspace = true
 ptxc-onnx.workspace = true
 ptxc-onnx-proto.workspace = true
 sha2.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
@@ -31,4 +32,3 @@ ptxc-loop.workspace = true
 ptxc-lower.workspace = true
 ptxc-schedule.workspace = true
 ptxc-target.workspace = true
-tempfile.workspace = true
