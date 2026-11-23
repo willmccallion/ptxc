@@ -2,8 +2,9 @@
 //! code generation read.
 
 use crate::limits::Limits;
-use crate::mma::MmaInstruction;
+use crate::mma::{MmaInstruction, MmaShape};
 use crate::sm::{PtxIsaVersion, SmVersion};
+use ptxc_core::DType;
 
 /// A GPU architecture as data. Nothing outside `ptxc-target` names an
 /// architecture; it reads one of these.
@@ -34,5 +35,17 @@ impl Target {
     /// The `mma.sync` variants the target supports.
     pub const fn mma(&self) -> &'static [MmaInstruction] {
         self.mma
+    }
+
+    /// The variant of `shape` on `multiplicands` accumulating in
+    /// `accumulator`, if the target has one.
+    pub fn mma_instruction(
+        &self,
+        shape: MmaShape,
+        multiplicands: DType,
+        accumulator: DType,
+    ) -> Option<MmaInstruction> {
+        let wanted = MmaInstruction { shape, multiplicands, accumulator };
+        self.mma.iter().copied().find(|&instruction| instruction == wanted)
     }
 }
