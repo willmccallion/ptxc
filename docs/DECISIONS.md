@@ -637,3 +637,38 @@ the old one.
   composed op (a mean, a GELU) to f16. Loop IR has no f64, and f64
   throughput on sm_89 is 1/64 of f32, which one rare `Pow` form does not
   justify.
+
+## D43. Reductions accumulate in f32, and groups own their intermediates
+
+- **Context:** `ptxc-interp` accumulates float reductions in f64 (D19).
+  `ReduceLogSumExp` needs a maximum before its sum, which D40 makes two
+  stages joined by a buffer that is no graph value. Loop IR has no scan for
+  `CumSum`.
+- **Options:** for accumulation, f64 or f32; for the joining buffer, a graph
+  value added by lowering, or a buffer the group owns; for `CumSum`, a new
+  scan construct, or a reduction masked to the elements the scan has
+  reached.
+- **Choice:**
+  - Float reductions accumulate in f32 and round once to the output type.
+    Integer `Sum`, `Prod`, `SumSquare` and `L1` wrap in their own type, and
+    integer `Mean` divides an exact `i64` sum. Integer `L2`, `LogSum` and
+    `LogSumExp` run in f32 (a `NOTE` in `reduce.rs`).
+  - Lowering returns `IndexVec<GroupId, LoweredGroup>`. A group lists its
+    intermediates' types, and a stage's `Binding` is a graph value or one
+    of its group's intermediates (this supersedes D42's `Vec<Stage>`).
+  - `CumSum` is a sum along the axis masked by comparing positions, read as
+    values through the new `TensorExpr::Index`. It is O(n²) along the axis.
+  - An arg-reduction over an empty axis gives 0, as the reference does, and
+    an empty loop cannot be bound to a thread or block axis, which would
+    launch nothing.
+- **Reason:**
+  - f32 accumulation is what ONNX Runtime and every GPU library do, and f64
+    on sm_89 runs at 1/64 of f32's rate. The difference is rounding, which
+    testkit's per-length reduction tolerance covers, and intermediate
+    overflow past f32's range (an `L2` or `Prod` of values near 1e30),
+    which ORT shares.
+  - An intermediate is not a graph value: graph passes never see it, and
+    the memory plan can place it in the group's scratch.
+  - The masked sum needs nothing new in schedules or codegen. The
+    sequences ptxc meets are short, such as positions along a sequence
+    axis. A scan schedule comes when a model needs long scans.

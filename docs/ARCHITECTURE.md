@@ -57,7 +57,7 @@ impl Compilation<Scheduled>   { pub fn emit(self) -> Result<Program, CompileErro
 ```
 
 Each state struct holds that stage's output (`Imported { graph: Graph }`,
-`Lowered { partitioned: Partitioned, stages: IndexVec<GroupId, Vec<Stage>> }`,
+`Lowered { partitioned: Partitioned, groups: IndexVec<GroupId, LoweredGroup> }`,
 and so on).
 
 ## Stages
@@ -247,7 +247,8 @@ pub struct ComputeDef {                               // made only by ComputeBui
 pub struct IterVar { name: VarName, extent: Dim, kind: IterKind }   // IterKind::{Spatial, Reduce}
 pub enum TensorExpr {
     Load { tensor: TensorParamId, index: Vec<ExprId> },
-    Const(Scalar), Unary(UnaryOp, Box<TensorExpr>), Binary(BinaryOp, Box<TensorExpr>, Box<TensorExpr>),
+    Const(Scalar), Index { index: ExprId, dtype: DType },     // an index read as an integer value
+    Unary(UnaryOp, Box<TensorExpr>), Binary(BinaryOp, Box<TensorExpr>, Box<TensorExpr>),
     Cast { to: DType, overflow: Overflow, value: Box<TensorExpr> },
     Select { condition: Box<TensorExpr>, then: Box<TensorExpr>, otherwise: Box<TensorExpr> },
     Reduce { op: ReduceOp, axes: Vec<IterVarId>, body: Box<TensorExpr> },          // Sum, Prod, Max, Min
@@ -261,7 +262,9 @@ arithmetic, both remainders, comparisons, logic, `exp`, `log`, `erf`,
 infinity tests. Activations, softmax and normalisation are compositions,
 built by `ptxc-lower`. FP8 is storage only here too: it reaches arithmetic
 through `Cast`. A gather's index is an `IndexVar::Loaded`, an integer read
-from an index tensor, so index arithmetic never reads data directly.
+from an index tensor, so index arithmetic never reads data directly; the
+other direction, an index read as data, is `TensorExpr::Index`, which masks
+running sums and triangles. An arg-reduction over an empty axis gives 0.
 A definition is one stage: at most one reduction, and then exactly one
 output; every load not indexed through a gather stays within its tensor over
 the iteration domain (D40).
@@ -288,7 +291,7 @@ impl Schedule<Validated> { pub fn lower(&self) -> Result<LoweredKernel, LowerErr
 pub enum Primitive {                                    // M2's; cache, compute-at, tensorize,
     Split { loop_: LoopId, factors: Vec<SplitFactor> },  // pipeline and layout come with M3
     Reorder { order: Vec<LoopId> }, Fuse { loops: Vec<LoopId> },
-    Bind { loop_: LoopId, axis: ThreadAxis },          // blockIdx.{x,y,z}, threadIdx.{x,y,z}
+    Bind { loop_: LoopId, axis: ThreadAxis },          // blockIdx/threadIdx.{x,y,z}; never an empty loop
     Unroll { loop_: LoopId }, Vectorize { loop_: LoopId },
 }
 ```
@@ -364,12 +367,14 @@ fragment layout) are caught by `cargo test`.
 
 ### Lowering (`ptxc-lower`)
 
-- **In:** `Partitioned`. **Out:** `IndexVec<GroupId, Vec<Stage>>`: each
-  group's stages in order, joined by intermediate buffers (D40). A `Stage`
-  is a `ComputeDef` with the graph value bound to each of its tensors (D42).
+- **In:** `Partitioned`. **Out:** `IndexVec<GroupId, LoweredGroup>`: each
+  group's stages in order and the intermediate buffers joining them (D40,
+  D43). A `Stage` is a `ComputeDef` with a `Binding`, a graph value or an
+  intermediate, for each of its tensors (D42).
 - Arithmetic on f16, bf16 and FP8 values runs in f32 and rounds back once
   (`precision.rs`), as the reference does; comparisons, selects and integer
-  arithmetic stay in the operands' own types.
+  arithmetic stay in the operands' own types. Reductions accumulate in f32
+  (D43).
 - Each op family has one file, mirroring `ptxc-graph/src/ops`. Each produces
   `TensorExpr`s for its stages; an op with several reductions in sequence
   (softmax, layer norm, log-sum-exp) is several stages.
