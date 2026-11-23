@@ -1,0 +1,27 @@
+compute gemm_0(%in0: bf16[3, 2], %in1: bf16[3, 4], %in2: bf16[4]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %k0 = reduce 3
+  %out0: bf16[2, 4] = cast<bf16>(add(mul(0.5:f32, sum[%k0](mul(cast<f32>(%in0[%k0, %i0]), cast<f32>(%in1[%k0, %i1])))), cast<f32>(%in2[%i1])))
+}
+
+compute gemm_0(%in0: i64[2, 3], %in1: i64[4, 3], %in2: i64[2, 1]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %k0 = reduce 3
+  %out0: i64[2, 4] = add(sum[%k0](mul(%in0[%i0, %k0], %in1[%i1, %k0])), %in2[%i0, 0])
+}
+
+compute gemm_0(%in0: i32[3, 2], %in1: i32[3, 4]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %k0 = reduce 3
+  %out0: i32[2, 4] = cast<i32>(cast<i64>(mul(0.5:f32, cast<f32>(sum[%k0](mul(cast<i64>(%in0[%k0, %i0]), cast<i64>(%in1[%k0, %i1])))))))
+}
+
+compute gemm_0(%in0: i32[2, 3], %in1: i32[4, 3], %in2: i32[4]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %k0 = reduce 3
+  %out0: i32[2, 4] = cast<i32>(cast<i64>(add(cast<f32>(sum[%k0](mul(cast<i64>(%in0[%i0, %k0]), cast<i64>(%in1[%i1, %k0])))), mul(2.0:f32, cast<f32>(%in2[%i1])))))
+}

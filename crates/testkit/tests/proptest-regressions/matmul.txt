@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 1633f0f3be789ceeb0ee7cfff6842c1b5e0c1efad395acf9119c1242ad5110f5 # shrinks to case = (MatMul, [HostTensor { shape: Shape { dims: [Dim(0)], elements: ElementCount(0) }, data: F32([]) }, HostTensor { shape: Shape { dims: [Dim(0), Dim(0), Dim(1)], elements: ElementCount(0) }, data: F32([]) }])

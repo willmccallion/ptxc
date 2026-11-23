@@ -7,6 +7,7 @@ mod activation;
 mod elementwise;
 mod gather;
 mod groups;
+mod matmul;
 mod norm;
 mod reduce;
 mod shape;

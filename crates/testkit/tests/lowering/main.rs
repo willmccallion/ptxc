@@ -8,6 +8,7 @@ mod cases;
 mod elementwise;
 mod gather;
 mod harness;
+mod matmul;
 mod norm;
 mod reduce;
 mod shape;

@@ -1,0 +1,21 @@
+compute matmul_0(%in0: f16[2, 1, 2, 3], %in1: f16[4, 3, 5]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %i2 = spatial 2
+  %i3 = spatial 5
+  %k0 = reduce 3
+  %out0: f16[2, 4, 2, 5] = cast<f16>(sum[%k0](mul(cast<f32>(%in0[%i0, 0, %i2, %k0]), cast<f32>(%in1[%i1, %k0, %i3]))))
+}
+
+compute matmul_0(%in0: i32[3], %in1: i32[2, 3, 4]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %k0 = reduce 3
+  %out0: i32[2, 4] = sum[%k0](mul(%in0[%k0], %in1[%i0, %k0, %i1]))
+}
+
+compute matmul_0(%in0: f32[2, 3], %in1: f32[3]) {
+  %i0 = spatial 2
+  %k0 = reduce 3
+  %out0: f32[2] = sum[%k0](mul(%in0[%i0, %k0], %in1[%k0]))
+}
