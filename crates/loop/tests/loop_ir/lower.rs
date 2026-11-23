@@ -128,7 +128,7 @@ fn a_gather_binds_its_index_before_the_load() {
 }
 
 proptest::proptest! {
-    #![proptest_config(proptest::prelude::ProptestConfig::with_cases(256))]
+    #![proptest_config(crate::cases(256))]
 
     /// Whatever splits, fuses and reorders shape a schedule, it lowers to a
     /// kernel the verifier accepts.
