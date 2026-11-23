@@ -33,6 +33,25 @@ impl ExprArena {
         self.ids.get(&expr).copied()
     }
 
+    /// The variables `id` reads, each once, in first-read order.
+    pub(crate) fn vars(&self, id: ExprId) -> Vec<VarId> {
+        let mut found = Vec::new();
+        let mut pending = vec![id];
+        while let Some(next) = pending.pop() {
+            match self.get(next) {
+                Expr::Var(var) if !found.contains(&var) => found.push(var),
+                Expr::Var(_) | Expr::Const(_) => {}
+                Expr::Add(a, b)
+                | Expr::Mul(a, b)
+                | Expr::FloorDiv(a, b)
+                | Expr::FloorMod(a, b)
+                | Expr::Min(a, b)
+                | Expr::Max(a, b) => pending.extend([b, a]),
+            }
+        }
+        found
+    }
+
     /// The expression `id` names.
     pub fn get(&self, id: ExprId) -> Expr {
         self.exprs[id]
@@ -76,5 +95,21 @@ impl ExprArena {
     /// `max(a, b)`.
     pub fn max(&mut self, a: ExprId, b: ExprId) -> ExprId {
         self.intern(Expr::Max(a, b))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ptxc_core::Idx;
+
+    #[test]
+    fn variables_are_listed_once_in_first_read_order() {
+        let mut arena = ExprArena::new();
+        let (x, y) = (arena.var(VarId::new(0)), arena.var(VarId::new(1)));
+        let product = arena.mul(x, y);
+        let sum = arena.add(x, product);
+
+        assert_eq!(arena.vars(sum), [VarId::new(0), VarId::new(1)]);
     }
 }

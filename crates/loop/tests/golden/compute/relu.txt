@@ -1,0 +1,4 @@
+compute relu(%x: f32[16]) {
+  %i = spatial 16
+  %y: f32[16] = select(gt(%x[%i], 0.0:f32), %x[%i], 0.0:f32)
+}

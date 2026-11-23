@@ -1,0 +1,6 @@
+compute strided(%x: f32[20]) {
+  %i = spatial 8
+  %r = reduce 3
+  %exp_sum: f32[8] = exp(sum[%r](%x[%i * 2 + %r]))
+  %negative_infinite: bool[8] = isinf<negative>(%x[(%i + 1) * 2])
+}

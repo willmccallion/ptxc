@@ -1,0 +1,6 @@
+compute matmul(%a: f16[64, 32], %b: f16[32, 16]) {
+  %i = spatial 64
+  %j = spatial 16
+  %k = reduce 32
+  %c: f32[64, 16] = sum[%k](mul(cast<f32, saturate>(%a[%i, %k]), cast<f32, saturate>(%b[%k, %j])))
+}

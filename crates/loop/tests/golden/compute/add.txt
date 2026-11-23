@@ -1,0 +1,5 @@
+compute add(%x: f32[4, 8], %y: f32[4, 8]) {
+  %i = spatial 4
+  %j = spatial 8
+  %sum: f32[4, 8] = add(%x[%i, %j], %y[%i, %j])
+}

@@ -1,0 +1,7 @@
+compute argmax(%x: f32[5, 7]) {
+  %row = spatial 5
+  %k = reduce 7
+  %m = reduce 7
+  %position: i64[5] = argmax<first>[%k](%x[%row, %k])
+  %largest: f32[5] = reduce_max[%m](%x[%row, %m])
+}
