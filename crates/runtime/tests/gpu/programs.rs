@@ -149,3 +149,26 @@ fn an_mlp_matches_the_interpreter_exactly_and_the_reference_within_tolerance() {
     compare(&actual[0], &lowered[0], Tolerance::Exact).unwrap();
     compare(&actual[0], &reference[0], Tolerance::for_dtype(ptxc_core::DType::F32)).unwrap();
 }
+
+#[test]
+fn a_bound_program_runs_repeatedly_on_a_callers_stream_and_gives_runs_outputs() {
+    let x = HostTensor::vector(vec![1.0_f32, -2.0, 0.5].into());
+    let inputs = std::slice::from_ref(&x);
+    let graph =
+        families::cases::single_node(ptxc_graph::Op::Unary(ptxc_graph::UnaryOp::Neg), inputs);
+    let target = preset(SmVersion::SM_89).unwrap();
+    let program = Compilation::from_graph(graph, target).optimize().unwrap().partition().unwrap();
+    let program = program.lower().unwrap().schedule().unwrap().emit().unwrap();
+    let executor = Executor::eager(load(program, device()).unwrap());
+    let expected = executor.run(inputs).unwrap();
+    let bound = executor.bind(inputs).unwrap();
+    let stream = device().primary_context().stream().unwrap();
+
+    bound.enqueue(&stream).unwrap();
+    bound.enqueue(&stream).unwrap();
+    stream.synchronize().unwrap();
+
+    let outputs = bound.outputs().unwrap();
+    assert_eq!(outputs.len(), expected.len());
+    compare(&outputs[0], &expected[0], Tolerance::Exact).unwrap();
+}

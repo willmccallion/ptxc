@@ -519,7 +519,9 @@ kernel.launch()
 
 - `load.rs` takes a `Program`, loads its modules, allocates the arena and
   uploads its constants, producing a `LoadedProgram`.
-- `Executor<Eager>` runs the steps in order on one stream.
+- `Executor<Eager>` runs the steps in order on one stream. `bind` keeps a
+  program's inputs and outputs on the device, so a caller can queue it
+  repeatedly on its own stream with no host copies, as the benchmarks do.
   `.capture(self) -> Result<Executor<Graphed>, RuntimeError>` records them
   into a CUDA graph once. Replays then copy the inputs into fixed staging
   buffers and launch the graph.
