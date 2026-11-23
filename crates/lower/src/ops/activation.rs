@@ -2,10 +2,11 @@
 //! forms `ptxc-interp` evaluates.
 
 use super::NodeContext;
+use crate::builder::Operand;
 use crate::compose::{add, at_least, div, f32, greater, less, max, min, mul, neg, select, unary};
 use crate::error::LowerError;
 use crate::precision::{demote, promote};
-use crate::stage::{LoweredGroup, Operand};
+use crate::stage::LoweredGroup;
 use ptxc_graph::{Activation, GeluApproximation};
 use ptxc_loop::{Scalar, TensorExpr, UnaryOp};
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_2_SQRT_PI};

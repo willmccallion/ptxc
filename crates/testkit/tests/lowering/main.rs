@@ -10,6 +10,7 @@ mod gather;
 mod harness;
 mod matmul;
 mod norm;
+mod quant;
 mod reduce;
 mod shape;
 mod values;

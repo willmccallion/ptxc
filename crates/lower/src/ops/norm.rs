@@ -3,10 +3,11 @@
 
 use super::NodeContext;
 use super::reduce::{load_reduced, wide};
+use crate::builder::{GroupBuilder, StageBuilder};
 use crate::compose::{add, div, f32, mul, sub, unary};
 use crate::error::LowerError;
 use crate::precision::{convert, demote};
-use crate::stage::{Binding, GroupBuilder, IntermediateId, LoweredGroup, StageBuilder};
+use crate::stage::{Binding, IntermediateId, LoweredGroup};
 use ptxc_core::{Axis, DType, Dim, Shape};
 use ptxc_graph::{
     BatchNormAttrs, F32Attr, InstanceNormAttrs, KeepDims, LayerNormAttrs, LayerNormKind,

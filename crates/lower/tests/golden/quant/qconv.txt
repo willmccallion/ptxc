@@ -1,0 +1,17 @@
+compute qconv_0(%in0: f32[2], %in1: i64[2], %in2: u8[1, 1, 4], %in3: i8[2, 1, 2], %in4: i32[2]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 4
+  %k0 = reduce 1
+  %k1 = reduce 2
+  %out0: u8[1, 2, 4] = cast<u8>(min(max(cast<i64>(add(round(mul(cast<f32>(add(sum[%k0, %k1](select(and(ge(index<i64>(%i2 + %k1 + -1), 0:i64), lt(index<i64>(%i2 + %k1 + -1), 4:i64)), mul(sub(cast<i64>(%in2[%i0, floordiv(%i1, 2) * 1 + %k0, min(max(%i2 + %k1 + -1, 0), 3)]), 128:i64), sub(cast<i64>(%in3[%i1, %k0, %k1]), %in1[%i1])), 0:i64)), cast<i64>(%in4[%i1]))), div(mul(0.5:f32, %in0[%i1]), 1.0:f32))), cast<f32>(10:i64))), 0:i64), 255:i64))
+}
+
+compute qconv_0(%in0: f32[2], %in1: i64[2], %in2: u8[1, 1, 4], %in3: i8[2, 1, 2]) {
+  %i0 = spatial 1
+  %i1 = spatial 2
+  %i2 = spatial 4
+  %k0 = reduce 1
+  %k1 = reduce 2
+  %out0: u8[1, 2, 4] = cast<u8>(min(max(cast<i64>(add(round(mul(cast<f32>(sum[%k0, %k1](select(and(ge(index<i64>(%i2 + %k1 + -1), 0:i64), lt(index<i64>(%i2 + %k1 + -1), 4:i64)), mul(sub(cast<i64>(%in2[%i0, floordiv(%i1, 2) * 1 + %k0, min(max(%i2 + %k1 + -1, 0), 3)]), 128:i64), sub(cast<i64>(%in3[%i1, %k0, %k1]), %in1[%i1])), 0:i64))), div(mul(0.5:f32, %in0[%i1]), 1.0:f32))), cast<f32>(10:i64))), 0:i64), 255:i64))
+}

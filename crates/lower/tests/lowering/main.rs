@@ -9,6 +9,7 @@ mod gather;
 mod groups;
 mod matmul;
 mod norm;
+mod quant;
 mod reduce;
 mod shape;
 mod window;

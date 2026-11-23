@@ -1,0 +1,6 @@
+compute qmatmul_0(%in0: u8[2, 3], %in1: i8[3, 4]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %k0 = reduce 3
+  %out0: i8[2, 4] = cast<i8>(min(max(cast<i64>(add(round(mul(cast<f32>(sum[%k0](mul(sub(cast<i64>(%in0[%i0, %k0]), 3:i64), sub(cast<i64>(%in1[%k0, %i1]), -1:i64)))), div(mul(0.5:f32, 0.25:f32), 2.0:f32))), cast<f32>(5:i64))), -128:i64), 127:i64))
+}

@@ -2,10 +2,11 @@
 //! (D40). Floats accumulate in f32 (D43).
 
 use super::NodeContext;
+use crate::builder::{Operand, StageBuilder};
 use crate::compose::{add, div, f32, mul, select, sub, unary};
 use crate::error::LowerError;
 use crate::precision::{arithmetic_dtype, convert, demote, promote};
-use crate::stage::{Binding, LoweredGroup, Operand, StageBuilder};
+use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::{Axis, DType, Dim, ElementCount, Shape};
 use ptxc_graph::{
     ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, ReduceAttrs, ReduceOp,

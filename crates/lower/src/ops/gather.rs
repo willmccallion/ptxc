@@ -3,8 +3,9 @@
 
 use super::NodeContext;
 use super::shape::replaced;
+use crate::builder::StageBuilder;
 use crate::error::LowerError;
-use crate::stage::{Binding, LoweredGroup, StageBuilder};
+use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::{Axis, Dim, Rank};
 use ptxc_graph::ValueId;
 use ptxc_loop::{ExprId, Scalar, TensorExpr};

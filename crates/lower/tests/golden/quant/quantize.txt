@@ -1,0 +1,20 @@
+compute quantize_0(%in0: f16[3]) {
+  %i0 = spatial 3
+  %out0: u8[3] = cast<u8>(min(max(cast<i64>(add(round(div(cast<f32>(%in0[%i0]), 0.5:f32)), cast<f32>(7:i64))), 0:i64), 255:i64))
+}
+
+compute quantize_0(%in0: f32[3, 2], %in1: f32[2], %in2: i64[2]) {
+  %i0 = spatial 3
+  %i1 = spatial 2
+  %out0: i8[3, 2] = cast<i8>(min(max(cast<i64>(add(round(div(%in0[%i0, %i1], %in1[%i1])), cast<f32>(%in2[%i1]))), -128:i64), 127:i64))
+}
+
+compute quantize_0(%in0: f32[3]) {
+  %i0 = spatial 3
+  %out0: f8e5m2[3] = cast<f8e5m2, nonfinite>(div(%in0[%i0], 0.25:f32))
+}
+
+compute dequantize_0(%in0: i32[3]) {
+  %i0 = spatial 3
+  %out0: bf16[3] = cast<bf16>(mul(cast<f32>(sub(cast<i64>(%in0[%i0]), 0:i64)), 0.5:f32))
+}

@@ -4,17 +4,27 @@
 
 use super::NodeContext;
 use super::window::{Span, masked, read};
+use crate::builder::{Operand, StageBuilder};
 use crate::compose::{add, f32, mul};
 use crate::error::LowerError;
 use crate::precision::{demote, promote};
-use crate::stage::{Binding, LoweredGroup, StageBuilder};
+use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::Dim;
 use ptxc_graph::{ConvAttrs, ValueId};
 use ptxc_loop::{ExprArena, ExprId, ReduceOp, TensorExpr};
 
+/// What a convolution multiplies at each tap: its input and weights, the
+/// product of an input element and a weight, and the zero that padded taps
+/// and empty inputs contribute.
+pub(super) struct Products<'p> {
+    pub(super) values: [ValueId; 2],
+    pub(super) product: &'p dyn Fn(Operand, Operand) -> TensorExpr,
+    pub(super) zero: TensorExpr,
+}
+
 /// The shape of a convolution: each spatial axis's window, the input
 /// channels per group, and the output channels per group.
-struct Geometry {
+pub(super) struct Geometry {
     spans: Vec<Span>,
     group_channels: Dim,
     per_group: Dim,
@@ -36,7 +46,12 @@ pub(super) fn conv(cx: &NodeContext<'_>, attrs: &ConvAttrs) -> Result<LoweredGro
         let [sample, feature, outs @ ..] = &spatial[..] else {
             return Err(LowerError::Operands(cx.id));
         };
-        let sum = convolved(cx, stage, [input, weights], &geometry, (*sample, *feature, outs))?;
+        let positions = (*sample, *feature, outs);
+        let product = |value: Operand, weight: Operand| {
+            mul(promote(value.expr, value.dtype), promote(weight.expr, weight.dtype))
+        };
+        let products = Products { values: [input, weights], product: &product, zero: f32(0.0) };
+        let sum = convolved(cx, stage, &products, &geometry, positions)?;
         let biased = match bias {
             Some(bias) => {
                 let shift = stage.load(Binding::Value(bias), vec![*feature]);
@@ -48,7 +63,7 @@ pub(super) fn conv(cx: &NodeContext<'_>, attrs: &ConvAttrs) -> Result<LoweredGro
     })
 }
 
-fn geometry(
+pub(super) fn geometry(
     cx: &NodeContext<'_>,
     attrs: &ConvAttrs,
     [input, weights, output]: [ValueId; 3],
@@ -70,19 +85,20 @@ fn geometry(
 }
 
 /// The sum, over output `[sample, feature, outs...]`'s group channels and
-/// kernel taps, of input times weight; 0 when the input has nothing to
-/// read.
-fn convolved(
+/// kernel taps, of `products`' product of input and weight; its zero when
+/// the input has nothing to read.
+pub(super) fn convolved(
     cx: &NodeContext<'_>,
     stage: &mut StageBuilder<'_>,
-    [input, weights]: [ValueId; 2],
+    products: &Products<'_>,
     geometry: &Geometry,
     (sample, feature, outs): (ExprId, ExprId, &[ExprId]),
 ) -> Result<TensorExpr, LowerError> {
     let empty = |dim: Dim| dim.get() == 0;
     if empty(geometry.group_channels) || geometry.spans.iter().any(|span| empty(span.input)) {
-        return Ok(f32(0.0));
+        return Ok(products.zero.clone());
     }
+    let [input, weights] = products.values;
     let (channel_axis, channel) = stage.reduce_axis(geometry.group_channels);
     let read_channel = input_channel(cx, stage.exprs(), (feature, channel), geometry)?;
     let (mut input_index, mut weight_index) = (vec![sample, read_channel], vec![feature, channel]);
@@ -97,8 +113,7 @@ fn convolved(
     }
     let value = stage.load(Binding::Value(input), input_index);
     let weight = stage.load(Binding::Value(weights), weight_index);
-    let product = mul(promote(value.expr, value.dtype), promote(weight.expr, weight.dtype));
-    let body = masked(inside, product, f32(0.0));
+    let body = masked(inside, (products.product)(value, weight), products.zero.clone());
     Ok(TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) })
 }
 

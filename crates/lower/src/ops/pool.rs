@@ -4,10 +4,11 @@
 use super::NodeContext;
 use super::reduce::{load_reduced, wide};
 use super::window::{Counted, Span, masked, read, tap_count};
+use crate::builder::{Operand, StageBuilder};
 use crate::compose::{div, f32};
 use crate::error::LowerError;
 use crate::precision::{convert, demote, promote};
-use crate::stage::{Binding, LoweredGroup, Operand, StageBuilder};
+use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::{Axis, DType};
 use ptxc_graph::{GlobalPoolKind, KeepDims, PadCounting, PoolAttrs, PoolKind, ValueId};
 use ptxc_loop::{ExprId, IterVarId, ReduceOp, Scalar, TensorExpr};

@@ -1,7 +1,7 @@
 //! Runs a graph through partitioning, lowering and the loop interpreter, and
 //! checks it against `ptxc-interp`.
 
-use ptxc_core::{DType, Evaluate, HostTensor};
+use ptxc_core::{DType, Evaluate, HostTensor, Idx};
 use ptxc_graph::{Graph, Partitioned, ValueDef, ValueId};
 use ptxc_interp::Interpreter;
 use ptxc_loop::{RunError, Schedule};
@@ -25,9 +25,11 @@ pub(crate) fn run_lowered(
         graph,
         values: graph.inputs().iter().copied().zip(inputs.iter().cloned()).collect(),
         intermediates: HashMap::new(),
+        tables: Vec::new(),
     };
     for group in &groups {
         tensors.intermediates.clear();
+        tensors.tables = group.tables().iter().cloned().collect();
         for stage in group.stages() {
             let arguments: Vec<HostTensor> =
                 stage.inputs().iter().map(|&binding| tensors.read(binding)).collect();
@@ -43,11 +45,12 @@ pub(crate) fn run_lowered(
 }
 
 /// Every tensor computed so far: graph values, and the current group's
-/// intermediates.
+/// intermediates and tables.
 struct Tensors<'g> {
     graph: &'g Graph,
     values: HashMap<ValueId, HostTensor>,
     intermediates: HashMap<IntermediateId, HostTensor>,
+    tables: Vec<HostTensor>,
 }
 
 impl Tensors<'_> {
@@ -58,6 +61,7 @@ impl Tensors<'_> {
                 ValueDef::Input(_) | ValueDef::Output { .. } => self.values[&value].clone(),
             },
             Binding::Intermediate(id) => self.intermediates[&id].clone(),
+            Binding::Table(id) => self.tables[id.index()].clone(),
         }
     }
 
@@ -74,6 +78,7 @@ impl Tensors<'_> {
                 let tensor = HostTensor::new(shape, flat.data().clone()).unwrap();
                 let _new = self.intermediates.insert(id, tensor);
             }
+            Binding::Table(id) => panic!("a stage wrote table {id:?}"),
         }
     }
 }
