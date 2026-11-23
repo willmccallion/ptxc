@@ -6,11 +6,11 @@ use ptxc_target::{
 };
 
 #[test]
-fn sm_89_declares_the_isa_that_introduced_it() {
+fn sm_89_declares_the_first_isa_with_its_fp8_instructions() {
     let target = preset(SmVersion::SM_89).unwrap();
 
     assert_eq!(target.sm(), SmVersion::SM_89);
-    assert_eq!(target.ptx_isa(), PtxIsaVersion::new(7, 8));
+    assert_eq!(target.ptx_isa(), PtxIsaVersion::new(8, 4));
     assert_eq!(target.mma(), &[]);
 }
 
