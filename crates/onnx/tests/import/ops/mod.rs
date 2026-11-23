@@ -9,5 +9,6 @@ mod gather;
 mod matmul;
 mod norm;
 mod pool;
+mod quant;
 mod reduce;
 mod shape;
