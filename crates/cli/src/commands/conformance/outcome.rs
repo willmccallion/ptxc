@@ -1,10 +1,13 @@
 //! One test case's outcome on a backend.
 
+use crate::commands::agreement::agree;
 use crate::commands::runner::Runner;
 use crate::report::{Failure, Outcome, Reason, Worst};
+use ptxc_core::HostTensor;
 use ptxc_onnx::{ImportError, ImportErrorKind, ImportOptions, Unsupported, import_model};
 use ptxc_testkit::compare::{self, Mismatch, Tolerance};
-use ptxc_testkit::onnx_tests::{DataSet, LoadError, TestCase};
+use ptxc_testkit::lowered::run_lowered;
+use ptxc_testkit::onnx_tests::{DataSet, LoadError, Runnable, TestCase};
 
 /// The node tests' own tolerance.
 pub(super) const TOLERANCE: Tolerance = Tolerance::ONNX_SUITE;
@@ -32,6 +35,11 @@ fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, runner: &Runne
         Ok(actual) => actual,
         Err(message) => return Outcome::Fail { failure: Failure::Evaluate { message } },
     };
+    if let Runner::Gpu(_) = runner
+        && let Err(message) = agrees_with_loop_interpreter(&runnable, &actual)
+    {
+        return Outcome::Fail { failure: Failure::LoopInterpreter { data_set: index, message } };
+    }
     if actual.len() != data_set.outputs.len() {
         let failure = Failure::OutputCount {
             data_set: index,
@@ -46,6 +54,14 @@ fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, runner: &Runne
         }
     }
     Outcome::Pass
+}
+
+/// Whether the loop interpreter, running the lowered stages one by one,
+/// gives exactly `actual`, the GPU's outputs.
+fn agrees_with_loop_interpreter(runnable: &Runnable, actual: &[HostTensor]) -> Result<(), String> {
+    let lowered = run_lowered(runnable.graph.clone(), &runnable.inputs, ptxc_loop::run)
+        .map_err(|error| format!("the loop interpreter failed: {error}"))?;
+    agree(actual, &lowered, |_| Tolerance::Exact)
 }
 
 /// Why the model alone is unsupported, if it is: a test of sequences or

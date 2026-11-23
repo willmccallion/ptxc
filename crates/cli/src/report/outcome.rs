@@ -71,6 +71,9 @@ pub(crate) enum Failure {
     Import { message: String },
     /// The backend failed to evaluate the graph.
     Evaluate { message: String },
+    /// The GPU's outputs differed from the loop interpreter's, which runs
+    /// the same lowered stages and must match them exactly.
+    LoopInterpreter { data_set: usize, message: String },
 }
 
 impl fmt::Display for Failure {
@@ -85,6 +88,12 @@ impl fmt::Display for Failure {
             Self::Load { message } => write!(f, "loading: {message}"),
             Self::Import { message } => write!(f, "importing: {message}"),
             Self::Evaluate { message } => write!(f, "evaluating: {message}"),
+            Self::LoopInterpreter { data_set, message } => {
+                write!(
+                    f,
+                    "data set {data_set}: the GPU differs from the loop interpreter: {message}"
+                )
+            }
         }
     }
 }
