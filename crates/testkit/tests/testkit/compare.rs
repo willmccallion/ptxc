@@ -205,3 +205,11 @@ fn integer_reports_show_the_values() {
 
     assert_eq!((report.worst_absolute.actual, report.worst_absolute.expected), (7.0, 5.0));
 }
+
+#[test]
+fn tolerances_describe_themselves() {
+    assert_eq!(Tolerance::ONNX_SUITE.to_string(), "atol 1e-7, rtol 1e-3");
+    assert_eq!(Tolerance::Steps(1).to_string(), "within 1 step");
+    assert_eq!(Tolerance::Steps(2).to_string(), "within 2 steps");
+    assert_eq!(Tolerance::Exact.to_string(), "exact");
+}
