@@ -47,6 +47,53 @@ impl Scalar {
         Self { dtype: DType::Bool, value: ScalarValue::Bool(value) }
     }
 
+    /// Zero of `dtype` (`false` for booleans).
+    pub const fn zero(dtype: DType) -> Self {
+        Self::extreme(dtype, 0.0, 0, false)
+    }
+
+    /// One of `dtype` (`true` for booleans).
+    pub const fn one(dtype: DType) -> Self {
+        Self::extreme(dtype, 1.0, 1, true)
+    }
+
+    /// The lowest value of `dtype`: negative infinity where the format has
+    /// one, its most negative finite value where it does not (E4M3FN).
+    pub const fn lowest(dtype: DType) -> Self {
+        match dtype {
+            DType::F8E4M3Fn => Self::extreme(dtype, -448.0, 0, false),
+            DType::I8 => Self::extreme(dtype, 0.0, i8::MIN as i64, false),
+            DType::U8 => Self::extreme(dtype, 0.0, 0, false),
+            DType::I32 => Self::extreme(dtype, 0.0, i32::MIN as i64, false),
+            _ => Self::extreme(dtype, f64::NEG_INFINITY, i64::MIN, false),
+        }
+    }
+
+    /// The highest value of `dtype`: positive infinity where the format has
+    /// one, its largest finite value where it does not (E4M3FN).
+    pub const fn highest(dtype: DType) -> Self {
+        match dtype {
+            DType::F8E4M3Fn => Self::extreme(dtype, 448.0, 0, true),
+            DType::I8 => Self::extreme(dtype, 0.0, i8::MAX as i64, true),
+            DType::U8 => Self::extreme(dtype, 0.0, u8::MAX as i64, true),
+            DType::I32 => Self::extreme(dtype, 0.0, i32::MAX as i64, true),
+            _ => Self::extreme(dtype, f64::INFINITY, i64::MAX, true),
+        }
+    }
+
+    /// `float` for float types, `int` for integers and `bool` for booleans;
+    /// each caller passes values every type of its class holds.
+    const fn extreme(dtype: DType, float: f64, int: i64, bool: bool) -> Self {
+        let value = match dtype {
+            DType::F32 | DType::F16 | DType::Bf16 | DType::F8E4M3Fn | DType::F8E5M2 => {
+                ScalarValue::Float(float.to_bits())
+            }
+            DType::I8 | DType::U8 | DType::I32 | DType::I64 => ScalarValue::Int(int),
+            DType::Bool => ScalarValue::Bool(bool),
+        };
+        Self { dtype, value }
+    }
+
     /// The constant's element type.
     pub const fn dtype(self) -> DType {
         self.dtype
