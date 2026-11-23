@@ -60,7 +60,7 @@ impl Selector<'_> {
             DType::I8 => Held::Int32(self.truncated(x, PtxType::S8)),
             DType::U8 => Held::Int32(self.truncated(x, PtxType::U8)),
             DType::I32 => Held::Int32(self.truncated(x, PtxType::S32)),
-            DType::I64 => Held::Int64(self.truncated(x, PtxType::S64)),
+            DType::I64 => Held::Int64(self.truncated_to_i64(x)),
             DType::Bool => {
                 let zero = Value::f32(0.0);
                 Held::Bool(self.builder.compare_float(Compare::NeOrUnordered, x.into(), zero))
@@ -69,6 +69,17 @@ impl Selector<'_> {
                 Held::Float(self.rounded(x, to, overflow))
             }
         }
+    }
+
+    /// `x` truncated toward zero into an `i64`, saturating; NaN gives 0.
+    fn truncated_to_i64(&mut self, x: Reg<F32>) -> Reg<B64> {
+        let truncated: Reg<B64> = self.truncated(x, PtxType::S64);
+        let b = &mut self.builder;
+        // NOTE: PTX specifies NaN converting to 0, but sm_89 gives i64::MIN
+        // for `cvt.rzi.sat.s64.f32` (the 8- and 32-bit forms give 0), so
+        // NaN is selected out.
+        let nan = b.compare_float(Compare::Unordered, x.into(), x.into());
+        b.select(PtxType::B64, Value::<B64>::int(0), truncated.into(), nan)
     }
 
     /// `x` truncated toward zero into the integer type `ty`, saturating;
