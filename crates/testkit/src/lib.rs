@@ -1,6 +1,6 @@
 //! Test infrastructure: tolerance comparison, golden files, ONNX test-case loading, random graph generation and shrinking.
 
-mod compare;
+pub mod compare;
 mod data;
 mod generate;
 mod golden;

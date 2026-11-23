@@ -699,11 +699,14 @@ dependencies = [
 name = "ptxc-testkit"
 version = "0.1.0"
 dependencies = [
+ "prost",
  "ptxc-core",
  "ptxc-graph",
  "ptxc-interp",
  "ptxc-onnx",
  "ptxc-onnx-proto",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]
