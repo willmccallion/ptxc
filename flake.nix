@@ -26,17 +26,21 @@
           uv
           # ptxas, as a test-only checker of emitted PTX; never on the compiler path.
           cudaPackages.cuda_nvcc
+          # cuBLAS, the matrix-multiply baseline only ptxc-bench loads; never on the
+          # compiler path.
+          cudaPackages.libcublas
         ];
         # cargo llvm-cov needs llvm-profdata and llvm-cov from the LLVM rustc was built
         # with; nixpkgs' rustc has no llvm-tools component.
         LLVM_PROFDATA = "${lib.getBin pkgs.rustc.llvmPackages.llvm}/bin/llvm-profdata";
         LLVM_COV = "${lib.getBin pkgs.rustc.llvmPackages.llvm}/bin/llvm-cov";
-        # ptxc-cuda dlopens libcuda.so.1, which NixOS keeps in the driver's directory.
+        # ptxc-cuda dlopens libcuda.so.1, which NixOS keeps in the driver's directory,
+        # and ptxc-bench dlopens libcublas.so from its package.
         # uv's standalone Python looks for CA certificates where NixOS keeps none, so
         # baselines' downloads (torchvision weights) need SSL_CERT_FILE; stdenv's setup
         # replaces the variable, so the hook sets it after.
         shellHook = ''
-          export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export LD_LIBRARY_PATH="/run/opengl-driver/lib:${lib.getLib pkgs.cudaPackages.libcublas}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         '';
       };
