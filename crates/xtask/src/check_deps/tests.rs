@@ -192,7 +192,7 @@ fn only_cuda_may_name_the_unsafe_code_lint() {
 fn of_bench_only_its_cublas_bindings_may_name_the_unsafe_code_lint() {
     let bindings = SourceFile {
         krate: "bench".to_owned(),
-        path: "crates/bench/src/cublas/sys.rs".to_owned(),
+        path: "crates/bench/src/cublas/sys/cublaslt.rs".to_owned(),
         text: "#![allow(unsafe_code)]".to_owned(),
     };
     let sources = [bindings, file("bench", "#![allow(unsafe_code)]")];

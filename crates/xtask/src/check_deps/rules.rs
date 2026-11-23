@@ -33,9 +33,9 @@ const CUBLAS_CRATE: &str = "bench";
 /// The one crate that allows unsafe code, rule 4.
 const UNSAFE_CRATE: &str = "cuda";
 
-/// The one file outside it that allows unsafe code: `bench`'s cuBLAS
-/// bindings, which call into the library it loads (D55).
-const BENCH_FFI: &str = "crates/bench/src/cublas/sys.rs";
+/// The one directory outside it that allows unsafe code: `bench`'s cuBLAS
+/// and cuBLASLt bindings, which call into the libraries it loads (D55).
+const BENCH_FFI: &str = "crates/bench/src/cublas/sys/";
 
 /// The crates whose libraries never depend on each other, rule 5. Their
 /// tests compare them through `testkit`.
@@ -139,7 +139,7 @@ fn unsafe_rules(manifests: &Manifests, sources: &[SourceFile]) -> Vec<Violation>
     found.extend(
         sources
             .iter()
-            .filter(|file| file.krate != UNSAFE_CRATE && file.path != BENCH_FFI)
+            .filter(|file| file.krate != UNSAFE_CRATE && !file.path.starts_with(BENCH_FFI))
             .filter(|file| file.text.contains("unsafe_code"))
             .map(|file| Violation::RelaxesUnsafe(file.path.clone())),
     );

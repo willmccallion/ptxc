@@ -979,9 +979,9 @@ the old one.
   - allow unsafe code in one `ptxc-bench` file;
   - put the cuBLAS bindings in `ptxc-cuda` behind a feature only
     `ptxc-bench` enables.
-- **Choice:** `crates/bench/src/cublas/sys.rs` may use unsafe code. It
-  holds the function table and the calls, each with a `// SAFETY:` line,
-  and checks every argument a call's safety rests on. Everything else in
+- **Choice:** `crates/bench/src/cublas/sys/`, one file for cuBLAS and one
+  for cuBLASLt, may use unsafe code. It holds the function tables and the
+  calls, each with a `// SAFETY:` line. Everything else in
   `ptxc-bench` stays safe. `ptxc-cuda` exposes its `dlopen` wrapper, a
   buffer's device address and a stream's handle for it.
 - **Reason:** cuBLAS stays wholly out of the CUDA crate the runtime builds
