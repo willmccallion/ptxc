@@ -1,7 +1,6 @@
-//! cuBLAS's C entry points, loaded once with ptxc-cuda's `dlopen` wrapper
-//! (D24), and the calls into them. The only unsafe code in `ptxc-bench`
-//! (D55): each function's type transcribes its declaration in
-//! `cublas_api.h` from cuBLAS 13.
+//! cuBLAS's entry points, loaded once with ptxc-cuda's `dlopen` wrapper
+//! (D24), and the calls into them, each typed as `cublas_api.h` declares
+//! it.
 
 #![allow(unsafe_code, reason = "calls into the cuBLAS library it loads (D55)")]
 
@@ -65,7 +64,7 @@ static API: OnceLock<Result<Api, CublasError>> = OnceLock::new();
 
 /// A `cublasOperation_t`: whether cuBLAS reads an operand transposed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Operation {
+pub(in crate::cublas) enum Operation {
     /// `CUBLAS_OP_N`.
     AsIs = 0,
     /// `CUBLAS_OP_T`.
@@ -74,7 +73,7 @@ pub(super) enum Operation {
 
 /// A `cudaDataType`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum DataType {
+pub(in crate::cublas) enum DataType {
     /// `CUDA_R_32F`.
     F32 = 0,
     /// `CUDA_R_16F`.
@@ -85,29 +84,29 @@ pub(super) enum DataType {
 
 /// A `cublasComputeType_t`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum ComputeType {
+pub(in crate::cublas) enum ComputeType {
     /// `CUBLAS_COMPUTE_32F`: f32 arithmetic, never TF32.
     F32 = 68,
 }
 
 /// An operand of `cublasGemmEx`, in cuBLAS's column-major terms.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Operand {
-    pub(super) address: DeviceAddress,
-    pub(super) leading: c_int,
+pub(in crate::cublas) struct Operand {
+    pub(in crate::cublas) address: DeviceAddress,
+    pub(in crate::cublas) leading: c_int,
 }
 
 /// A `cublasGemmEx` call: `c = op(a) op(b)` with `alpha = 1`, `beta = 0`.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct GemmCall {
-    pub(super) operations: [Operation; 2],
-    pub(super) extents: [c_int; 3],
-    pub(super) a: Operand,
-    pub(super) b: Operand,
-    pub(super) c: Operand,
-    pub(super) data: DataType,
-    pub(super) output: DataType,
-    pub(super) compute: ComputeType,
+pub(in crate::cublas) struct GemmCall {
+    pub(in crate::cublas) operations: [Operation; 2],
+    pub(in crate::cublas) extents: [c_int; 3],
+    pub(in crate::cublas) a: Operand,
+    pub(in crate::cublas) b: Operand,
+    pub(in crate::cublas) c: Operand,
+    pub(in crate::cublas) data: DataType,
+    pub(in crate::cublas) output: DataType,
+    pub(in crate::cublas) compute: ComputeType,
 }
 
 /// A cuBLAS handle queuing its work on one stream.
@@ -142,7 +141,7 @@ impl<'s> Handle<'s> {
     }
 
     /// Queues `call` on the handle's stream.
-    pub(super) fn gemm_ex(&mut self, call: &GemmCall) -> Result<(), CublasError> {
+    pub(in crate::cublas) fn gemm_ex(&mut self, call: &GemmCall) -> Result<(), CublasError> {
         let (alpha, beta) = (1.0_f32, 0.0_f32);
         let [m, n, k] = call.extents;
         let address = |operand: Operand| operand.address.get() as *mut c_void;

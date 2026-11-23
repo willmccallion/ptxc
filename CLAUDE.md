@@ -24,7 +24,7 @@ before changing a stage.
 - Crates other than `cuda`, `runtime`, `autotune` and `bench` never depend
   on a GPU. `cargo xtask check-deps` enforces the rules in ARCHITECTURE.md.
 - Only `ptxc-cuda`, and `ptxc-bench`'s cuBLAS bindings in
-  `crates/bench/src/cublas/sys.rs`, contain unsafe code (D55). Every unsafe
+  `crates/bench/src/cublas/sys/`, contain unsafe code (D55). Every unsafe
   block has a `// SAFETY:` line naming its invariant.
 - `ptxc-interp` stays naive and shares no code with `ptxc-lower`.
 - Python lives only in `baselines/`, managed with uv. Rust never runs it.

@@ -595,7 +595,7 @@ Rules, checked by `cargo xtask check-deps` from `cargo metadata`:
    on `cuda`, `runtime`, `autotune` or `bench`, from its tests either.
 3. Only `bench` mentions cuBLAS. Nothing depends on `bench`.
 4. Only `cuda`, and `bench`'s cuBLAS bindings in
-   `crates/bench/src/cublas/sys.rs`, allow `unsafe_code` (D55).
+   `crates/bench/src/cublas/sys/`, allow `unsafe_code` (D55).
 5. The `interp` and `lower` libraries never depend on each other. Their
    tests compare them through `testkit`.
 
