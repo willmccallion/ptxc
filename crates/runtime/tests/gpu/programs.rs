@@ -2,11 +2,11 @@
 //! reloaded, loaded and run by the eager executor, matching the loop interpreter run stage by stage
 //! exactly.
 
+use crate::device::device;
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
 use ptxc_compiler::Compilation;
 use ptxc_core::{Evaluate, HostTensor};
-use ptxc_cuda::{DeviceOrdinal, Driver};
 use ptxc_runtime::{Executor, RuntimeError, load};
 use ptxc_target::{SmVersion, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
@@ -22,8 +22,7 @@ fn run_program(graph: ptxc_graph::Graph, inputs: &[HostTensor]) -> Vec<HostTenso
     let program = compilation.optimize().unwrap().partition().unwrap().lower().unwrap();
     let program = program.schedule().unwrap().emit().unwrap();
     let saved = ptxc_program::load(&ptxc_program::save(&program).unwrap()).unwrap();
-    let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
-    let mut executor = Executor::eager(load(saved, &device).unwrap());
+    let mut executor = Executor::eager(load(saved, device()).unwrap());
     executor.evaluate(inputs).unwrap()
 }
 
@@ -73,9 +72,8 @@ fn a_program_for_another_gpu_is_refused() {
     let program = Compilation::from_graph(graph, target).optimize().unwrap().partition().unwrap();
     let program = program.lower().unwrap().schedule().unwrap().emit().unwrap();
     let foreign = ptxc_program::load(&retargeted(&program)).unwrap();
-    let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
 
-    let error = load(foreign, &device).unwrap_err();
+    let error = load(foreign, device()).unwrap_err();
 
     assert!(matches!(error, RuntimeError::Target { .. }), "{error}");
 }
@@ -88,8 +86,7 @@ fn inputs_of_the_wrong_count_type_or_shape_are_refused() {
     let target = preset(SmVersion::SM_89).unwrap();
     let program = Compilation::from_graph(graph, target).optimize().unwrap().partition().unwrap();
     let program = program.lower().unwrap().schedule().unwrap().emit().unwrap();
-    let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
-    let mut executor = Executor::eager(load(program, &device).unwrap());
+    let mut executor = Executor::eager(load(program, device()).unwrap());
     let wrong_type = HostTensor::vector(vec![1_i32, 2].into());
     let wrong_shape = HostTensor::vector(vec![1.0_f32, 2.0, 3.0].into());
 

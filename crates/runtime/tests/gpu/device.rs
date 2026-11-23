@@ -2,18 +2,25 @@
 
 use ptxc_codegen::generate;
 use ptxc_core::{ByteSize, HostTensor, TensorData};
-use ptxc_cuda::{BlockDim, Context, DeviceBuffer, DeviceOrdinal, Driver, GridDim};
+use ptxc_cuda::{BlockDim, Context, Device, DeviceBuffer, DeviceOrdinal, Driver, GridDim};
 use ptxc_loop::{Access, ComputeDef, LoweredKernel, RunError};
 use ptxc_target::{BlockCount, SmVersion, Target, ThreadsPerBlock, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 fn target() -> Target {
     preset(SmVersion::SM_89).unwrap()
 }
 
+/// Device 0, opened once, so its context lives for the whole test run
+/// rather than being made again for every case.
+pub(crate) fn device() -> &'static Device {
+    static DEVICE: OnceLock<Device> = OnceLock::new();
+    DEVICE.get_or_init(|| Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap())
+}
+
 fn context() -> Context {
-    Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context()
+    device().primary_context()
 }
 
 /// `compute` under its default schedule.
