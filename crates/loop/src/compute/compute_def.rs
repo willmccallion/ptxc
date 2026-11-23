@@ -105,6 +105,7 @@ impl ComputeDef {
         match expr {
             TensorExpr::Load { tensor, .. } => self.inputs[*tensor].dtype,
             TensorExpr::Const(scalar) => scalar.dtype(),
+            TensorExpr::Index { dtype, .. } => *dtype,
             TensorExpr::Unary(UnaryOp::Not | UnaryOp::IsNaN | UnaryOp::IsInf(_), _) => DType::Bool,
             TensorExpr::Binary(op, _, _) if crate::stmt::is_predicate(*op) => DType::Bool,
             TensorExpr::Unary(_, value) | TensorExpr::Binary(_, value, _) => self.dtype_of(value),

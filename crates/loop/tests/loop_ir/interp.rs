@@ -154,6 +154,51 @@ fn a_sum_adds_along_its_axis() {
     assert_eq!(floats(&outputs[0]), [6.0, 15.5]);
 }
 
+/// The running sum of `x: i32[4]`, as a sum over `k` masked to `k <= i`.
+fn running_sum() -> Arc<ComputeDef> {
+    let mut compute = ComputeBuilder::new(ComputeName::new("running_sum"));
+    let x = compute.input(TensorName::new("x"), DType::I32, shape(&[4]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(4));
+    let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(4));
+    let index = |index| TensorExpr::Index { index, dtype: DType::I64 };
+    let zero = TensorExpr::Const(ptxc_loop::Scalar::zero(DType::I32));
+    let masked = TensorExpr::Select {
+        condition: Box::new(binary(BinaryOp::LessOrEqual, index(k), index(i))),
+        then: Box::new(load(x, &[k])),
+        otherwise: Box::new(zero),
+    };
+    let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![k_axis], body: Box::new(masked) };
+    compute.output(TensorName::new("y"), sum);
+    Arc::new(compute.finish().unwrap())
+}
+
+#[test]
+fn an_index_read_as_a_value_masks_a_running_sum() {
+    let compute = running_sum();
+    let input = tensor(&[4], vec![1_i32, 2, 3, 4]);
+
+    let outputs = run_default(&compute, &[input]).unwrap();
+
+    assert_eq!(ints(&outputs[0]), [1, 3, 6, 10]);
+    ptxc_testkit::golden::check("compute/running_sum.txt", &ptxc_loop::print_compute(&compute))
+        .unwrap();
+}
+
+#[test]
+fn an_index_value_may_read_a_gathered_index() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("echo"));
+    let positions = compute.input(TensorName::new("idx"), DType::I32, shape(&[3]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(3));
+    let gathered = compute.loaded_index(VarName::new("j"), positions, vec![i]);
+    let doubled = compute.exprs().add(gathered, gathered);
+    compute.output(TensorName::new("y"), TensorExpr::Index { index: doubled, dtype: DType::I64 });
+    let compute = Arc::new(compute.finish().unwrap());
+
+    let outputs = run_default(&compute, &[tensor(&[3], vec![7_i32, -2, 0])]).unwrap();
+
+    assert_eq!(ints(&outputs[0]), [14, -4, 0]);
+}
+
 #[test]
 fn argmax_finds_the_first_or_last_maximum_and_the_first_nan() {
     let rows = vec![

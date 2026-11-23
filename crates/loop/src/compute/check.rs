@@ -73,6 +73,12 @@ impl<'a> Checker<'a> {
                 Ok(self.input(*tensor)?.dtype)
             }
             TensorExpr::Const(scalar) => Ok(scalar.dtype()),
+            TensorExpr::Index { index, dtype } => {
+                for var in self.exprs.vars(*index) {
+                    self.check_var(var, scope)?;
+                }
+                types::index(*dtype)
+            }
             TensorExpr::Unary(op, value) => types::unary(*op, self.dtype(value, scope)?),
             TensorExpr::Binary(op, lhs, rhs) => {
                 types::binary(*op, self.dtype(lhs, scope)?, self.dtype(rhs, scope)?)

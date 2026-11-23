@@ -1,0 +1,5 @@
+compute running_sum(%x: i32[4]) {
+  %i = spatial 4
+  %k = reduce 4
+  %y: i32[4] = sum[%k](select(le(index<i64>(%k), index<i64>(%i)), %x[%k], 0:i32))
+}

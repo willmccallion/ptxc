@@ -79,6 +79,11 @@ pub(crate) fn binary(op: BinaryOp, lhs: DType, rhs: DType) -> Result<DType, Comp
     }
 }
 
+/// The type an index read as a value gives: `dtype`, if an integer type.
+pub(super) const fn index(dtype: DType) -> Result<DType, ComputeError> {
+    accept(is_integer(dtype), "index", dtype, dtype)
+}
+
 /// The type a reduction of `dtype` values gives.
 pub(super) fn reduce(op: ReduceOp, dtype: DType) -> Result<DType, ComputeError> {
     let accepted = match op {

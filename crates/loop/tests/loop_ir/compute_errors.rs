@@ -221,3 +221,19 @@ fn extents_and_tensor_sizes_must_fit_an_index() {
     compute.output(TensorName::new("out"), f32_const(0.0));
     assert_eq!(compute.finish().unwrap_err(), ComputeError::ExtentTooLarge(Dim::new(1 << 63)));
 }
+
+#[test]
+fn an_index_value_needs_an_integer_type_and_its_axes_in_scope() {
+    let s = setup();
+    let i = s.i;
+    let as_float = TensorExpr::Index { index: i, dtype: DType::F32 };
+    assert_eq!(
+        reject(s, as_float),
+        ComputeError::UnsupportedDType { op: "index", dtype: DType::F32 }
+    );
+
+    let s = setup();
+    let k = s.k;
+    let outside = TensorExpr::Index { index: k, dtype: DType::I64 };
+    assert_eq!(reject(s, outside), ComputeError::ReduceAxisOutOfScope(VarName::new("k")));
+}
