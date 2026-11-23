@@ -2,7 +2,8 @@
 //! shapes need, declared types, and where errors are reported.
 
 use crate::builders::{
-    D, FLOAT, INT64, fixed, import, import_with, int, ints, model, model_at, node, text, value_info,
+    D, FLOAT, INT64, fixed, i64_tensor, import, import_with, int, ints, model, model_at, node,
+    text, value_info,
 };
 use ptxc_core::{Dim, Shape};
 use ptxc_onnx::{ImportErrorKind, ImportOptions, Unsupported};
@@ -123,6 +124,32 @@ fn an_attribute_of_the_wrong_type_is_invalid() {
 }
 
 #[test]
+fn a_shape_from_a_graph_input_names_the_input_and_imports_once_bound() {
+    let model = model(
+        vec![node("Reshape", &["x", "s"], &["y"], vec![])],
+        vec![fixed("x", FLOAT, &[2, 3]), fixed("s", INT64, &[1])],
+        vec![],
+        vec![],
+    );
+
+    let error = import(&model).unwrap_err();
+    let ImportErrorKind::NeedsConstant { operand, inputs } = error.kind() else {
+        panic!("{error}")
+    };
+    assert_eq!((operand.as_str(), inputs.as_slice()), ("s", ["s".to_owned()].as_slice()));
+
+    let bound =
+        ptxc_core::HostTensor::new(Shape::new(vec![Dim::new(1)]).unwrap(), vec![6_i64].into())
+            .unwrap();
+    let options = ImportOptions {
+        constant_inputs: [("s".to_owned(), bound)].into(),
+        ..ImportOptions::default()
+    };
+    let graph = import_with(&model, &options).unwrap();
+    assert_eq!(graph.inputs().iter().count(), 1);
+}
+
+#[test]
 fn a_declared_output_that_differs_from_the_inferred_type_is_an_error() {
     let model = model(
         vec![node("Relu", &["x"], &["y"], vec![])],
@@ -226,4 +253,22 @@ fn errors_name_the_node_by_its_name_or_its_op_and_position() {
 
     assert_eq!(by_name.node(), Some("act1 (Relu)"));
     assert_eq!(by_position.node(), Some("Relu #0"));
+}
+
+#[test]
+fn a_needed_constant_names_graph_inputs_but_not_initializers_listed_as_inputs() {
+    let nodes = vec![
+        node("Concat", &["s", "rest"], &["target"], vec![int("axis", 0)]),
+        node("Reshape", &["x", "target"], &["y"], vec![]),
+    ];
+    let inputs =
+        vec![fixed("x", FLOAT, &[2, 3]), fixed("s", INT64, &[1]), fixed("rest", INT64, &[1])];
+    let model = model(nodes, inputs, vec![i64_tensor("rest", &[1], &[3])], vec![]);
+
+    let error = import(&model).unwrap_err();
+
+    let ImportErrorKind::NeedsConstant { operand, inputs } = error.kind() else {
+        panic!("{error}")
+    };
+    assert_eq!((operand.as_str(), inputs.as_slice()), ("target", ["s".to_owned()].as_slice()));
 }

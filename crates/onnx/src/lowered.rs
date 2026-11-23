@@ -1,4 +1,4 @@
-//! What a node's importer produces: a graph node, constants, or an alias.
+//! What a node's importer produces: graph nodes, constants, or an alias.
 
 use ptxc_core::HostTensor;
 use ptxc_graph::Op;
@@ -17,6 +17,10 @@ pub(crate) enum Operand {
 pub(crate) enum Lowered {
     /// One graph node; its outputs are the node's outputs in order.
     Node { op: Op, operands: Vec<Operand> },
+    /// Two graph nodes: `first` on the node's input 0, then `then` on
+    /// `first`'s output followed by `rest` (a cropping `Pad` is a `Slice`
+    /// then a `Pad`). `then`'s outputs are the node's outputs.
+    Chain { first: Op, then: Op, rest: Vec<Operand> },
     /// Values known at import, one per output (`Shape`, `Constant`, ...).
     Constants(Vec<HostTensor>),
     /// The node's output is its input at this position (`Identity`).

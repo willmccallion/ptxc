@@ -22,4 +22,7 @@ exclude_re = [
     "replace \\| with \\^ in (FloatFormat::(encode|decode_magnitude|pack)|decompose)",
     # Writes generated.rs; what it writes is checked by xtask's test.
     "replace run -> Result<\\(\\), ProtoError> with Ok\\(\\(\\)\\)",
+    # The step's direction picks the clamp range; SliceStep rejects zero, so
+    # `step >= 0` is the same test.
+    "replace > with >= in slice_axis",
 ]

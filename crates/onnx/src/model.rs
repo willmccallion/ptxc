@@ -123,6 +123,13 @@ fn apply(node: &NodeProto, lowered: Lowered, values: &mut Values) -> Result<(), 
             let operands = resolve_all(node, operands, values)?;
             named_outputs(node, add_node(&op, &operands, values)?, values)
         }
+        Lowered::Chain { first, then, rest } => {
+            let input = resolve(node, Operand::Input(0), values)?;
+            let mut operands = add_node(&first, &[input], values)?;
+            operands.truncate(1);
+            operands.extend(resolve_all(node, rest, values)?);
+            named_outputs(node, add_node(&then, &operands, values)?, values)
+        }
     };
     for (index, name) in node.output.iter().enumerate() {
         if name.is_empty() {
