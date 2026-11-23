@@ -229,10 +229,18 @@ mod tests {
     }
 }
 
+/// Held by every test that times the GPU or needs no other process on it,
+/// and by the test whose child process holds it, so none of them overlap.
+#[cfg(all(test, feature = "gpu"))]
+pub(crate) fn exclusive_gpu() -> std::sync::MutexGuard<'static, ()> {
+    static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GPU.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(all(test, feature = "gpu"))]
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod gpu {
-    use super::time;
+    use super::{exclusive_gpu, time};
     use ptxc_core::KernelName;
     use ptxc_cuda::{BlockDim, CudaError, DeviceOrdinal, Driver, GridDim};
 
@@ -261,6 +269,7 @@ LOOP:
 
     #[test]
     fn a_kernel_waiting_50_microseconds_times_at_about_50() {
+        let _gpu = exclusive_gpu();
         let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
         let context = device.primary_context();
         let module = context.load_ptx(WAIT).unwrap();

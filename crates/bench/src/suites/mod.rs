@@ -1,5 +1,5 @@
 //! Benchmark suites.
 
 mod conv;
-mod gemm;
+pub(crate) mod gemm;
 mod models;

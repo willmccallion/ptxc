@@ -3,9 +3,9 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+use crate::host::{data, values};
 use crate::problem::{GemmProblem, GemmShape, GemmType};
-use ptxc_core::convert::{f64_to_f32, int_to_f64};
-use ptxc_core::float::{Bf16, F8E4M3Fn, F16, Overflow};
+use ptxc_core::convert::{int_to_f64, truncate};
 use ptxc_core::{ByteSize, TensorData};
 use ptxc_cuda::{Context, DeviceBuffer, DeviceOrdinal, Driver};
 
@@ -32,17 +32,8 @@ fn stored(rows: u32, columns: u32, stride: u32, transposed: bool) -> Vec<i64> {
 }
 
 fn encode(dtype: GemmType, values: &[i64]) -> Vec<u8> {
-    let floats = || values.iter().map(|&v| int_to_f64(v));
-    let data: TensorData = match dtype {
-        GemmType::F32 => floats().map(f64_to_f32).collect::<Vec<_>>().into(),
-        GemmType::F16 => floats().map(F16::from_f64).collect::<Vec<_>>().into(),
-        GemmType::Bf16 => floats().map(Bf16::from_f64).collect::<Vec<_>>().into(),
-        GemmType::E4m3 => {
-            floats().map(|v| F8E4M3Fn::from_f64(v, Overflow::Saturate)).collect::<Vec<_>>().into()
-        }
-        GemmType::I8 => values.iter().map(|&v| i8::try_from(v).unwrap()).collect::<Vec<_>>().into(),
-    };
-    data.to_le_bytes()
+    let floats: Vec<f64> = values.iter().map(|&v| int_to_f64(v)).collect();
+    data(dtype.dtype(), &floats).unwrap().to_le_bytes()
 }
 
 fn upload(context: &Context, bytes: &[u8]) -> DeviceBuffer {
@@ -66,17 +57,15 @@ pub(super) fn inputs(context: &Context, problem: GemmProblem) -> ([DeviceBuffer;
 pub(super) fn download(problem: GemmProblem, c: &DeviceBuffer) -> Vec<i64> {
     let mut bytes = vec![0; usize::try_from(c.size().get()).unwrap()];
     c.copy_to_host(&mut bytes).unwrap();
-    let whole = |value: f64| {
-        assert!(value.fract() == 0.0 && value.abs() < 1e6, "{value}");
-        format!("{value:.0}").parse::<i64>().unwrap()
-    };
-    match TensorData::from_le_bytes(problem.dtype.output(), &bytes).unwrap() {
-        TensorData::F32(v) => v.into_iter().map(|x| whole(f64::from(x))).collect(),
-        TensorData::F16(v) => v.into_iter().map(|x| whole(x.to_f64())).collect(),
-        TensorData::Bf16(v) => v.into_iter().map(|x| whole(x.to_f64())).collect(),
-        TensorData::I32(v) => v.into_iter().map(i64::from).collect(),
-        other => panic!("{:?}", other.dtype()),
-    }
+    let output = TensorData::from_le_bytes(problem.dtype.output(), &bytes).unwrap();
+    values(&output)
+        .unwrap()
+        .into_iter()
+        .map(|value| {
+            assert!(value.fract() == 0.0 && value.abs() < 1e6, "{value}");
+            truncate(value)
+        })
+        .collect()
 }
 
 /// `C = A B` on the host, row-major.

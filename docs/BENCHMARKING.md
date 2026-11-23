@@ -84,10 +84,12 @@ recorded here.
 
 - **Shapes:**
   - squares M = N = K in {256, 512, 1024, 2048, 4096, 8192};
-  - the transformer shapes of BERT-base and GPT-2 (M = batch × sequence
-    length; (N, K) in {(768, 768), (3072, 768), (768, 3072), (2304, 768)});
-  - skinny shapes with M in {1, 4, 16}, as in decoding;
-  - non-multiples of 128.
+  - the transformer shapes of BERT-base and GPT-2: M = batch × sequence
+    length in {128, 1024, 4096} (batch 1, 8 and 32 at sequence length 128),
+    with (N, K) in {(768, 768), (3072, 768), (768, 3072), (2304, 768)};
+  - skinny shapes with M in {1, 4, 16}, as in decoding, with the same N
+    and K;
+  - squares no power-of-two tile divides: 1000 and 3000.
 - **Data types:** f16→f32, bf16→f32, E4M3→f32, int8→i32, f32 (SIMT).
 - **Layouts:** NN, NT, TN.
 - **Baseline:** cuBLAS (cuBLASLt for FP8 and int8), loaded with dlopen by
@@ -97,6 +99,19 @@ recorded here.
     its column-major terms. The FP8 NN and TN rows have no baseline.
 - **Metrics:** TFLOP/s (or TOP/s) and the percentage of cuBLAS. Every result
   is checked against a reference before it is timed.
+  - Inputs are multiples of 1/8 in [-1, 1] (integers in [-8, 8] for int8),
+    which every type holds exactly. Their products sum exactly in f32, so
+    256 evenly spaced output elements recomputed on the host match within
+    the output type's tolerance for a K-long sum.
+  - A result that fails its check is reported and not timed, and the run
+    fails.
+- **Frameworks:** each writes its own file: `gemm-ptxc.json`,
+  `gemm-cublas.json` (the default heuristic: `GemmEx`, or cuBLASLt's first
+  algorithm for E4M3 and int8) and `gemm-cublas-best-of-8.json`. A cuBLAS
+  file records cuBLAS's version; its `commit` is the harness's.
+- ptxc compiles each problem as an ONNX `Gemm`, with A and B transposed as
+  the layout stores them. Its E4M3 and int8 rows wait for the quantized
+  matmul (#107).
 
 ### Convolution (`ptxc-bench conv`, M3)
 
@@ -133,7 +148,7 @@ bench/results/scratch/           gitignored, for runs during development
 ```
 
 ```sh
-ptxc-bench gemm --out bench/results/scratch/gemm.json
+ptxc-bench gemm --out bench/results/scratch/              # --only f16/NN for a subset
 ptxc-bench models --model resnet50 --batch 1,8,32 --out bench/results/scratch/
 uv run --project baselines ptxc-baselines bench --framework trt --model resnet50 --batch 1,8,32 --out bench/results/scratch/
 uv run --project baselines ptxc-baselines render --results bench/results/<run>/ --readme README.md

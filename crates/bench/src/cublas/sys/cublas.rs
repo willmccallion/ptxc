@@ -48,6 +48,7 @@ struct Api {
     create: unsafe extern "C" fn(*mut RawHandle) -> Status,
     destroy: unsafe extern "C" fn(RawHandle) -> Status,
     set_stream: unsafe extern "C" fn(RawHandle, *mut c_void) -> Status,
+    get_version: unsafe extern "C" fn(RawHandle, *mut c_int) -> Status,
     status_name: unsafe extern "C" fn(Status) -> *const c_char,
     gemm_ex: GemmEx,
 }
@@ -162,6 +163,16 @@ impl<'s> Handle<'s> {
         Ok(handle)
     }
 
+    /// The library's version, such as `13.10.0`.
+    pub(crate) fn version(&self) -> Result<String, CublasError> {
+        let mut version: c_int = 0;
+        // SAFETY: the handle is alive and `version` is a valid place for
+        // cuBLAS to write.
+        let status = unsafe { (self.api.get_version)(self.raw, &raw mut version) };
+        self.api.check("cublasGetVersion", status)?;
+        Ok(version_name(version))
+    }
+
     /// Queues `call` on the handle's stream.
     pub(in crate::cublas) fn gemm_ex(&mut self, call: &GemmCall) -> Result<(), CublasError> {
         let (alpha, beta) = (1.0_f32, 0.0_f32);
@@ -213,6 +224,8 @@ impl Api {
             destroy: unsafe { resolve(&library, c"cublasDestroy_v2")? },
             // SAFETY: cublasStatus_t cublasSetStream_v2(cublasHandle_t, cudaStream_t).
             set_stream: unsafe { resolve(&library, c"cublasSetStream_v2")? },
+            // SAFETY: cublasStatus_t cublasGetVersion_v2(cublasHandle_t, int*).
+            get_version: unsafe { resolve(&library, c"cublasGetVersion_v2")? },
             // SAFETY: const char* cublasGetStatusName(cublasStatus_t).
             status_name: unsafe { resolve(&library, c"cublasGetStatusName")? },
             // SAFETY: cublasGemmEx's 19 parameters, as `GemmEx` lists them.
@@ -238,6 +251,12 @@ impl Api {
     }
 }
 
+/// cuBLAS's version number, `major * 10000 + minor * 100 + patch`, as a
+/// name.
+fn version_name(version: c_int) -> String {
+    format!("{}.{}.{}", version / 10_000, version % 10_000 / 100, version % 100)
+}
+
 /// `symbol` from `library`, as the function pointer type `F`.
 ///
 /// # Safety
@@ -254,6 +273,17 @@ pub(super) unsafe fn resolve<F: Copy>(library: &Library, symbol: &CStr) -> Resul
     // SAFETY: `F` is the size of a pointer, checked above, and the caller
     // promises it is the symbol's function pointer type.
     Ok(unsafe { std::mem::transmute_copy::<*mut c_void, F>(&address) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_name;
+
+    #[test]
+    fn a_version_number_reads_as_major_minor_patch() {
+        assert_eq!(version_name(131_000), "13.10.0");
+        assert_eq!(version_name(120_803), "12.8.3");
+    }
 }
 
 #[cfg(all(test, feature = "gpu"))]
@@ -283,11 +313,13 @@ mod gpu {
         };
 
         let error = handle.gemm_ex(&call).unwrap_err();
+        let version = handle.version().unwrap();
 
         let expected = CublasError::Call {
             call: "cublasGemmEx",
             name: "CUBLAS_STATUS_INVALID_VALUE".to_owned(),
         };
         assert_eq!(error, expected);
+        assert!(version.starts_with("13."), "{version}");
     }
 }
