@@ -603,7 +603,7 @@ Rules, checked by `cargo xtask check-deps` from `cargo metadata`:
 | `ptxc-graph` | Graph IR: arenas, `Op`, `TypeRule`, `GraphBuilder`, `Rewriter`, verifier, text format, `Partitioned`. |
 | `ptxc-interp` | The golden model: a naive, obviously-correct evaluator of the graph IR. |
 | `ptxc-graph-opt` | `Pass`/`PassManager`, rewrite rules as data with a `RewriteEngine` trait, constant folding, CSE, DCE, layout, QDQ folding, fusion partitioners, the attention matcher. |
-| `ptxc-loop` | Loop IR: compute definitions, `Schedule<S>` with traces, lowering to `LoweredKernel`, the verifier, the text format, the CPU interpreter with race detection. |
+| `ptxc-loop` | Loop IR: compute definitions, `Schedule<S>` with traces, lowering to `LoweredKernel`, the verifier, the text format, the CPU interpreter with race detection, and the math programs both executors run (D51). |
 | `ptxc-lower` | `FusedGroup` to `ComputeDef`, one file per op family, with epilogue fusion. |
 | `ptxc-schedule` | `ScheduleRule`s and their search spaces, shared-memory swizzles, pipelining, tuning records, default heuristics. |
 | `ptxc-codegen` | Typed PTX AST, instruction selection from `LoweredKernel`, printer. |

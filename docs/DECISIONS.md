@@ -851,3 +851,44 @@ the old one.
   - `cvt.rn.bf16.s32`: "requires .target sm_90 or higher".
 - **Supersedes:** D36's choice of the SM's minimum version. Its check that
   the driver supports the preset's version stands.
+
+## D51. Transcendental functions are math programs both executors run
+
+- **Context:** M2's exit criteria ask the loop interpreter to agree with the
+  GPU on every conformance kernel.
+  - The interpreter computed exp, log and the other transcendental
+    functions in f64 through libm.
+  - PTX has no correctly rounded transcendental instructions. Its `.approx`
+    instructions are specified only by error bounds, which the
+    interpreter cannot reproduce.
+- **Options:**
+  - libm in the interpreter, approximate instructions on the GPU, and a
+    tolerance between them;
+  - a GPU implementation in codegen only, with the interpreter keeping
+    libm;
+  - one program per function that both run.
+- **Choice:** a function is a `MathProgram` in `ptxc_loop::math`.
+  - It is straight-line code over f32, 32-bit integer and predicate slots.
+  - Every step is exact IEEE arithmetic (add, sub, mul, div and fma
+    rounding to nearest even with subnormals kept, rounding to an
+    integer, conversions) or integer arithmetic, which PTX without `.ftz`
+    computes the same way.
+  - The loop interpreter evaluates programs, and codegen emits each step
+    as one instruction, so the two agree bit for bit, NaN payloads aside.
+  - exp uses Cody and Waite's reduction, a degree-7 Taylor polynomial and
+    a scale in two steps, so a subnormal result rounds once: within 1.06
+    ulps of the exact value over every f32.
+  - log uses fdlibm's formulation with five terms of the atanh series:
+    within 0.84 ulps.
+  - Coefficients are Taylor coefficients computed in code, not fitted
+    constants.
+- **Reason:**
+  - Exact agreement makes the loop interpreter an oracle for codegen: a
+    mismatch is a codegen bug, never accuracy noise.
+  - Accuracy is checked on the host, over every f32.
+  - Programs are data, so a better algorithm replaces one without
+    touching either executor.
+  - The graph interpreter keeps f64 libm as the reference both are
+    compared with.
+- **Evidence:** `cargo test --release -p ptxc-loop --test math -- --ignored`
+  checks every f32 for both functions in about ten minutes on 28 threads.
