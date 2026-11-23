@@ -30,13 +30,18 @@ pub(super) struct Reduced {
 
 pub(super) fn exp() -> MathProgram {
     let (mut code, argument) = ProgramBuilder::new();
-    let x = clamp(&mut code, argument, (UNDERFLOW, OVERFLOW));
-    let Reduced { k, r } = reduce(&mut code, x);
-    let s = expm1_reduced(&mut code, r);
+    let result = exp_of(&mut code, argument);
+    code.finish(result)
+}
+
+/// `e^x`.
+pub(super) fn exp_of(code: &mut ProgramBuilder, argument: FloatSlot) -> FloatSlot {
+    let x = clamp(code, argument, (UNDERFLOW, OVERFLOW));
+    let Reduced { k, r } = reduce(code, x);
+    let s = expm1_reduced(code, r);
     let one = code.float(1.0);
     let p = code.add(one, s);
-    let result = scale(&mut code, p, k);
-    code.finish(result)
+    scale(code, p, k)
 }
 
 /// `x` limited to `[low, high]`; NaN stays NaN.
