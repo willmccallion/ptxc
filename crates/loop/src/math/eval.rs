@@ -3,8 +3,8 @@
 //! subnormals kept, wrapping 32-bit integers, ordered comparisons.
 
 use super::program::{
-    Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
-    PredSlot, Step,
+    Binary, Comparison, FloatDef, FloatOp, FloatSlot, IntDef, IntOp, IntSlot, MathProgram, PredDef,
+    PredSlot, Side, Step, Unary,
 };
 use ptxc_core::IndexVec;
 
@@ -15,36 +15,50 @@ struct Slots {
     preds: IndexVec<PredSlot, bool>,
 }
 
-impl MathProgram {
+impl MathProgram<Unary> {
     /// The program's result for `x`.
     pub fn eval(&self, x: f32) -> f32 {
-        let mut slots =
-            Slots { floats: IndexVec::new(), ints: IndexVec::new(), preds: IndexVec::new() };
-        for step in &self.steps {
-            match *step {
-                Step::Float(def) => {
-                    let value = slots.float(def, x);
-                    let _slot = slots.floats.push(value);
-                }
-                Step::Int(def) => {
-                    let value = slots.int(def);
-                    let _slot = slots.ints.push(value);
-                }
-                Step::Pred(def) => {
-                    let value = slots.pred(def);
-                    let _slot = slots.preds.push(value);
-                }
-            }
-        }
-        slots.floats[self.result]
+        run(&self.steps, self.result, [x, x])
     }
 }
 
+impl MathProgram<Binary> {
+    /// The program's result for `x` and `y`.
+    pub fn eval(&self, x: f32, y: f32) -> f32 {
+        run(&self.steps, self.result, [x, y])
+    }
+}
+
+/// `steps` run on `arguments`, left then right; a unary program reads only
+/// the left.
+fn run(steps: &[Step], result: FloatSlot, arguments: [f32; 2]) -> f32 {
+    let mut slots =
+        Slots { floats: IndexVec::new(), ints: IndexVec::new(), preds: IndexVec::new() };
+    for step in steps {
+        match *step {
+            Step::Float(def) => {
+                let value = slots.float(def, arguments);
+                let _slot = slots.floats.push(value);
+            }
+            Step::Int(def) => {
+                let value = slots.int(def);
+                let _slot = slots.ints.push(value);
+            }
+            Step::Pred(def) => {
+                let value = slots.pred(def);
+                let _slot = slots.preds.push(value);
+            }
+        }
+    }
+    slots.floats[result]
+}
+
 impl Slots {
-    fn float(&self, def: FloatDef, argument: f32) -> f32 {
+    fn float(&self, def: FloatDef, [left, right]: [f32; 2]) -> f32 {
         let f = |slot: FloatSlot| self.floats[slot];
         match def {
-            FloatDef::Argument => argument,
+            FloatDef::Argument(Side::Left) => left,
+            FloatDef::Argument(Side::Right) => right,
             FloatDef::Const(bits) => f32::from_bits(bits),
             FloatDef::Binary(op, a, b) => float_binary(op, f(a), f(b)),
             FloatDef::Fma(a, b, c) => f(a).mul_add(f(b), f(c)),

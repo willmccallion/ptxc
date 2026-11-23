@@ -4,13 +4,13 @@
 #![allow(clippy::float_cmp, reason = "test code: exact values are the point")]
 
 use super::builder::ProgramBuilder;
-use super::program::{Comparison, FloatSlot, IntOp, IntSlot, PredSlot};
+use super::program::{Comparison, FloatSlot, IntOp, IntSlot, PredSlot, Unary};
 
 /// The program `body` builds from its argument, evaluated at `x`.
 fn run(x: f32, body: impl FnOnce(&mut ProgramBuilder, FloatSlot) -> FloatSlot) -> f32 {
     let (mut code, argument) = ProgramBuilder::new();
     let result = body(&mut code, argument);
-    code.finish(result).eval(x)
+    code.finish::<Unary>(result).eval(x)
 }
 
 /// Whether the predicate `body` builds holds.

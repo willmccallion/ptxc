@@ -3,6 +3,7 @@
 //! wrong kind cannot be written.
 
 use ptxc_core::define_index;
+use std::marker::PhantomData;
 
 define_index!(
     /// An f32 value a step defines.
@@ -73,11 +74,20 @@ pub enum Comparison {
     Eq,
 }
 
+/// Which argument: a unary program has only the left one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Side {
+    /// The first argument.
+    Left,
+    /// The second argument, of a binary program.
+    Right,
+}
+
 /// A step defining a float.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FloatDef {
-    /// The program's argument.
-    Argument,
+    /// One of the program's arguments.
+    Argument(Side),
     /// A constant, as its bits.
     Const(u32),
     /// `a op b`.
@@ -135,15 +145,24 @@ pub enum Step {
     Pred(PredDef),
 }
 
-/// A function of one f32, as steps whose every operation is exact IEEE or
-/// integer arithmetic.
+/// A program of one argument.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Unary;
+
+/// A program of two arguments.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Binary;
+
+/// A function of `A`'s f32 arguments, as steps whose every operation is
+/// exact IEEE or integer arithmetic.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct MathProgram {
+pub struct MathProgram<A = Unary> {
     pub(super) steps: Vec<Step>,
     pub(super) result: FloatSlot,
+    pub(super) arity: PhantomData<A>,
 }
 
-impl MathProgram {
+impl<A> MathProgram<A> {
     /// The steps, in order.
     pub fn steps(&self) -> &[Step] {
         &self.steps
