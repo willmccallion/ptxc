@@ -1,6 +1,8 @@
 //! `Scalar`: a typed constant in a tensor expression.
 
 use ptxc_core::DType;
+use ptxc_core::convert::f64_to_f32;
+use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
 use std::fmt;
 
 /// A constant of one element type. Floats are kept as `f64` bits, so
@@ -19,14 +21,12 @@ enum ScalarValue {
 }
 
 impl Scalar {
-    /// A float constant of `dtype`, which must be a float type; the value
-    /// is rounded to `dtype` where it is used.
-    pub const fn float(dtype: DType, value: f64) -> Option<Self> {
-        if is_float_storage(dtype) {
-            Some(Self { dtype, value: ScalarValue::Float(value.to_bits()) })
-        } else {
-            None
-        }
+    /// A float constant of `dtype`, which must be a float type, rounded to
+    /// it: nearest with ties to even, an FP8 value beyond the largest
+    /// finite one saturating.
+    pub fn float(dtype: DType, value: f64) -> Option<Self> {
+        let rounded = round_to(dtype, value)?;
+        Some(Self { dtype, value: ScalarValue::Float(rounded.to_bits()) })
     }
 
     /// An integer constant of `dtype`, which must be an integer type that
@@ -117,37 +117,13 @@ impl Scalar {
             ScalarValue::Bool(value) => Constant::Bool(value),
         }
     }
-
-    /// The value of a float constant.
-    pub const fn as_f64(self) -> Option<f64> {
-        match self.value {
-            ScalarValue::Float(bits) => Some(f64::from_bits(bits)),
-            _ => None,
-        }
-    }
-
-    /// The value of an integer constant.
-    pub const fn as_i64(self) -> Option<i64> {
-        match self.value {
-            ScalarValue::Int(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// The value of a boolean constant.
-    pub const fn as_bool(self) -> Option<bool> {
-        match self.value {
-            ScalarValue::Bool(value) => Some(value),
-            _ => None,
-        }
-    }
 }
 
-/// A constant's value: a float before it is rounded to its type, an
-/// integer that fits its type, or a boolean.
+/// A constant's value: a float or an integer its type holds exactly, or a
+/// boolean.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Constant {
-    /// A float, rounded to its type where it is used.
+    /// A float.
     Float(f64),
     /// An integer.
     Int(i64),
@@ -155,9 +131,17 @@ pub enum Constant {
     Bool(bool),
 }
 
-/// Whether `dtype` stores floats, FP8 included.
-const fn is_float_storage(dtype: DType) -> bool {
-    matches!(dtype, DType::F32 | DType::F16 | DType::Bf16 | DType::F8E4M3Fn | DType::F8E5M2)
+/// `value` rounded to the float type `dtype`, or `None` if `dtype` is not
+/// a float type.
+fn round_to(dtype: DType, value: f64) -> Option<f64> {
+    Some(match dtype {
+        DType::F32 => f64::from(f64_to_f32(value)),
+        DType::F16 => F16::from_f64(value).to_f64(),
+        DType::Bf16 => Bf16::from_f64(value).to_f64(),
+        DType::F8E4M3Fn => F8E4M3Fn::from_f64(value, Overflow::Saturate).to_f64(),
+        DType::F8E5M2 => F8E5M2::from_f64(value, Overflow::Saturate).to_f64(),
+        DType::I8 | DType::U8 | DType::I32 | DType::I64 | DType::Bool => return None,
+    })
 }
 
 impl fmt::Display for Scalar {

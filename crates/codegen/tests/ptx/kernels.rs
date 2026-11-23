@@ -218,6 +218,10 @@ fn selects_and_constants_select_per_type() {
         let constant = |_: &[TensorExpr]| TensorExpr::Const(Scalar::one(dtype));
         table += &entry(&format!("one {}", dtype.name()), &scalar(&[], constant).unwrap());
     }
+    for dtype in DType::ALL.into_iter().filter(|dtype| dtype.is_float()) {
+        let constant = |_: &[TensorExpr]| TensorExpr::Const(Scalar::float(dtype, 1000.1).unwrap());
+        table += &entry(&format!("1000.1 {}", dtype.name()), &scalar(&[], constant).unwrap());
+    }
 
     golden::check("select_constant.txt", &table).unwrap();
 }

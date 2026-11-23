@@ -20,7 +20,7 @@ pub(crate) fn binary(op: BinaryOp, lhs: TensorExpr, rhs: TensorExpr) -> TensorEx
     TensorExpr::Binary(op, Box::new(lhs), Box::new(rhs))
 }
 
-pub(crate) const fn f32_const(value: f64) -> TensorExpr {
+pub(crate) fn f32_const(value: f64) -> TensorExpr {
     TensorExpr::Const(Scalar::float(DType::F32, value).unwrap())
 }
 

@@ -1,7 +1,7 @@
 //! `Value`: one element as the interpreter holds it, always exactly
 //! representable in its element type.
 
-use crate::compute::Scalar;
+use crate::compute::{Constant, Scalar};
 use ptxc_core::DType;
 use ptxc_core::convert::{f64_to_f32, int_to_f32, int_to_f64};
 use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
@@ -16,14 +16,12 @@ pub(crate) enum Value {
 }
 
 impl Value {
-    /// A constant, rounded to its type.
-    pub(crate) fn of_scalar(scalar: Scalar) -> Self {
-        let dtype = scalar.dtype();
-        match (scalar.as_f64(), scalar.as_i64(), scalar.as_bool()) {
-            (Some(float), _, _) => round(float, dtype, Overflow::Saturate),
-            (_, Some(int), _) => Self::Int(int),
-            (_, _, Some(flag)) => Self::Bool(flag),
-            (None, None, None) => Self::Bool(false),
+    /// A constant, which its type holds exactly.
+    pub(crate) const fn of_scalar(scalar: Scalar) -> Self {
+        match scalar.constant() {
+            Constant::Float(value) => Self::Float(value),
+            Constant::Int(value) => Self::Int(value),
+            Constant::Bool(value) => Self::Bool(value),
         }
     }
 

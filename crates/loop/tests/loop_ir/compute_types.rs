@@ -3,8 +3,8 @@
 use crate::compute_build::shape;
 use ptxc_core::{DType, Dim};
 use ptxc_loop::{
-    ArgKind, BinaryOp, ComputeBuilder, ComputeError, ComputeName, InfSign, ReduceOp, Scalar,
-    TensorExpr, TensorName, TieBreak, UnaryOp, VarName,
+    ArgKind, BinaryOp, ComputeBuilder, ComputeError, ComputeName, Constant, InfSign, ReduceOp,
+    Scalar, TensorExpr, TensorName, TieBreak, UnaryOp, VarName,
 };
 
 /// The type an output of `expr(x)` has, where `x` is a `dtype` load inside
@@ -163,30 +163,40 @@ fn a_cast_gives_its_target_from_any_type() {
 #[test]
 fn scalars_hold_values_their_type_can_represent() {
     assert!(Scalar::float(DType::I32, 1.0).is_none());
-    assert_eq!(Scalar::float(DType::Bf16, 0.5).unwrap().as_f64(), Some(0.5));
+    assert_eq!(Scalar::float(DType::Bf16, 0.5).unwrap().constant(), Constant::Float(0.5));
     assert_eq!(Scalar::f32(0.1), Scalar::float(DType::F32, f64::from(0.1_f32)).unwrap());
     assert_eq!(Scalar::i64(i64::MIN), Scalar::int(DType::I64, i64::MIN).unwrap());
-    assert_eq!(Scalar::f32(0.5).constant(), ptxc_loop::Constant::Float(0.5));
-    assert_eq!(Scalar::i64(-3).constant(), ptxc_loop::Constant::Int(-3));
-    assert_eq!(Scalar::bool(true).constant(), ptxc_loop::Constant::Bool(true));
+    assert_eq!(Scalar::f32(0.5).constant(), Constant::Float(0.5));
+    assert_eq!(Scalar::i64(-3).constant(), Constant::Int(-3));
     assert!(Scalar::int(DType::I8, 128).is_none());
     assert!(Scalar::int(DType::U8, -1).is_none());
-    assert_eq!(Scalar::int(DType::U8, 255).unwrap().as_i64(), Some(255));
+    assert_eq!(Scalar::int(DType::U8, 255).unwrap().constant(), Constant::Int(255));
     assert!(Scalar::int(DType::F32, 1).is_none());
-    assert_eq!(Scalar::int(DType::I8, -128).unwrap().as_i64(), Some(-128));
-    assert_eq!(Scalar::bool(true).as_bool(), Some(true));
-    assert_eq!(Scalar::bool(false).as_bool(), Some(false));
-    assert_eq!(Scalar::int(DType::I32, 0).unwrap().as_bool(), None);
-    assert_eq!(Scalar::bool(true).as_i64(), None);
+    assert_eq!(Scalar::int(DType::I8, -128).unwrap().constant(), Constant::Int(-128));
+    assert_eq!(Scalar::bool(true).constant(), Constant::Bool(true));
+    assert_eq!(Scalar::bool(false).constant(), Constant::Bool(false));
     assert_eq!(Scalar::int(DType::I64, -3).unwrap().to_string(), "-3:i64");
     assert_eq!(Scalar::float(DType::F32, 1.5).unwrap().to_string(), "1.5:f32");
 }
 
+/// Floats round to nearest even, and FP8 beyond its largest finite value
+/// saturates, as the interpreters and codegen read constants.
+#[test]
+fn float_constants_round_to_their_type_when_built() {
+    let built = |dtype, value| Scalar::float(dtype, value).unwrap().constant();
+
+    assert_eq!(built(DType::F32, 0.1), Constant::Float(f64::from(0.1_f32)));
+    assert_eq!(built(DType::F16, 0.1), Constant::Float(0.099_975_585_937_5));
+    assert_eq!(built(DType::Bf16, 0.1), Constant::Float(0.100_097_656_25));
+    assert_eq!(built(DType::F8E4M3Fn, -1000.0), Constant::Float(-448.0));
+    assert_eq!(built(DType::F8E5M2, 1e9), Constant::Float(57_344.0));
+}
+
 #[test]
 fn every_type_has_its_identities_and_extremes() {
-    let value = |scalar: Scalar| (scalar.as_f64(), scalar.as_i64(), scalar.as_bool());
-    let int = |value: i64| (None, Some(value), None);
-    let float = |value: f64| (Some(value), None, None);
+    let value = |scalar: Scalar| scalar.constant();
+    let int = Constant::Int;
+    let float = Constant::Float;
     let cases = [
         (DType::I8, int(-128), int(127)),
         (DType::U8, int(0), int(255)),
@@ -195,7 +205,7 @@ fn every_type_has_its_identities_and_extremes() {
         (DType::F32, float(f64::NEG_INFINITY), float(f64::INFINITY)),
         (DType::F8E4M3Fn, float(-448.0), float(448.0)),
         (DType::F8E5M2, float(f64::NEG_INFINITY), float(f64::INFINITY)),
-        (DType::Bool, (None, None, Some(false)), (None, None, Some(true))),
+        (DType::Bool, Constant::Bool(false), Constant::Bool(true)),
     ];
     for (dtype, lowest, highest) in cases {
         assert_eq!(value(Scalar::lowest(dtype)), lowest, "{dtype:?}");
@@ -204,5 +214,5 @@ fn every_type_has_its_identities_and_extremes() {
     }
     assert_eq!(value(Scalar::zero(DType::U8)), int(0));
     assert_eq!(value(Scalar::one(DType::Bf16)), float(1.0));
-    assert_eq!(value(Scalar::one(DType::Bool)), (None, None, Some(true)));
+    assert_eq!(value(Scalar::one(DType::Bool)), Constant::Bool(true));
 }
