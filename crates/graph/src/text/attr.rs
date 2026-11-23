@@ -4,7 +4,7 @@ use super::cursor::Cursor;
 use super::error::{ParseError, ParseErrorKind, Position};
 use super::lexer::Token;
 use crate::ops::F32Attr;
-use ptxc_core::{Axis, Dim};
+use ptxc_core::{Axis, Dim, Rank};
 
 /// An attribute value: a word, a number or a list of values.
 #[derive(Clone, PartialEq, Debug)]
@@ -189,6 +189,10 @@ impl Attr {
 
     pub(super) fn axis(&self) -> Result<Axis, ParseError> {
         self.number_as("an axis index").map(Axis::new)
+    }
+
+    pub(super) fn rank(&self) -> Result<Rank, ParseError> {
+        self.number_as("a number of axes").map(Rank::new)
     }
 
     pub(super) fn f32(&self) -> Result<f32, ParseError> {

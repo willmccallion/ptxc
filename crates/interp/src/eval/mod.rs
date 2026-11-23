@@ -59,6 +59,7 @@ pub(crate) fn evaluate(
         Op::Trilu(attrs) => single(shape::trilu(attrs, operands)),
         Op::Gather(axis) => single(gather::gather(*axis, operands, output)),
         Op::GatherElements(axis) => single(gather::gather_elements(*axis, operands, output)),
+        Op::GatherNd(batch_dims) => single(gather::gather_nd(*batch_dims, operands)),
         Op::Quantize(attrs) => single(quant::quantize(attrs, operands)),
         Op::Dequantize(attrs) => single(quant::dequantize(attrs, operands)),
         Op::QMatMul(attrs) => single(quant::qmatmul(attrs, operands, output)),

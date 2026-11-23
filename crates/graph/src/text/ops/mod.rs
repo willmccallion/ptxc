@@ -65,6 +65,7 @@ pub(super) fn encode(op: &Op) -> OpText {
         Op::Trilu(attrs) => shape::encode_trilu(*attrs),
         Op::Gather(axis) => shape::encode_axis("gather", *axis),
         Op::GatherElements(axis) => shape::encode_axis("gather_elements", *axis),
+        Op::GatherNd(batch_dims) => shape::encode_gather_nd(*batch_dims),
         Op::Quantize(attrs) => quant::encode_quantize(attrs),
         Op::Dequantize(attrs) => quant::encode_dequantize(attrs),
         Op::QMatMul(attrs) => quant::encode_qmatmul(attrs),

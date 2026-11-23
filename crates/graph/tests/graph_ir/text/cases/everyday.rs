@@ -3,7 +3,7 @@
 use super::{AWKWARD, f, window};
 use crate::common::{f32_type, shape, tensor_type};
 use ptxc_core::float::Overflow;
-use ptxc_core::{Axis, DType, Dim};
+use ptxc_core::{Axis, DType, Dim, Rank};
 use ptxc_graph::{
     Activation, ArgKind, ArgReduceAttrs, AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs,
     ConvAttrs, DiagonalOffset, GeluApproximation, GemmAttrs, GlobalPoolKind, Groups, InfDetection,
@@ -247,6 +247,7 @@ pub(in crate::text) fn shape_ops() -> Vec<(Op, Vec<TensorType>)> {
             Op::GatherElements(Axis::new(2)),
             vec![input.clone(), tensor_type(DType::I32, &[2, 3, 1])],
         ),
+        (Op::GatherNd(Rank::new(1)), vec![input.clone(), tensor_type(DType::I64, &[2, 5, 2])]),
     ];
     for mode in [PadMode::Reflect, PadMode::Edge, PadMode::Wrap] {
         cases.push((Op::Pad(pads(mode)), vec![input.clone()]));

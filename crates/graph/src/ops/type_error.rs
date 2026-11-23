@@ -80,6 +80,15 @@ pub enum TypeError {
         /// The target shape.
         to: Shape,
     },
+    /// `GatherND` index tuples longer than the data's axes after the batch
+    /// axes, or empty.
+    #[error("index tuples of length {} do not fit {} axes", .length.get(), .axes.get())]
+    IndexTupleLength {
+        /// The indices' last extent.
+        length: Dim,
+        /// The data's axes after the batch axes.
+        axes: Rank,
+    },
     /// Operands that must agree on an axis do not.
     #[error("axis {} has extent {} where {} was expected", .axis.index(), .actual.get(), .expected.get())]
     DimMismatch {

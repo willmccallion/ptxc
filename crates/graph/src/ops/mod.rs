@@ -114,6 +114,9 @@ pub enum Op {
     Gather(Axis),
     /// Single elements of data selected along an axis by an index tensor.
     GatherElements(Axis),
+    /// Slices of data selected by index tuples, after this many leading
+    /// batch axes that data and indices share.
+    GatherNd(Rank),
     /// A float tensor rounded onto a quantization grid.
     Quantize(QuantizeAttrs),
     /// A quantized tensor mapped back to floats.
@@ -167,6 +170,7 @@ impl TypeRule for Op {
             Self::Trilu(attrs) => attrs.infer(operands),
             Self::Gather(axis) => gather::infer_gather(*axis, operands),
             Self::GatherElements(axis) => gather::infer_gather_elements(*axis, operands),
+            Self::GatherNd(batch_dims) => gather::infer_gather_nd(*batch_dims, operands),
             Self::Quantize(attrs) => attrs.infer(operands),
             Self::Dequantize(attrs) => attrs.infer(operands),
             Self::QMatMul(attrs) => attrs.infer(operands),

@@ -1,6 +1,6 @@
 //! Text for shape ops and single-axis ops: `reshape<shape=[6, 4]>`,
 //! `slice<axes=[[axis, start, step, length], ...]>`, `concat<axis=1>`,
-//! `gather<axis=0>`.
+//! `gather<axis=0>`, `gather_nd<batch_dims=1>`.
 
 use super::OpText;
 use crate::ops::{
@@ -9,7 +9,7 @@ use crate::ops::{
 };
 use crate::text::attr::{Attr, AttrValue, Attrs, TextWord, text_words};
 use crate::text::error::ParseError;
-use ptxc_core::{Axis, Shape};
+use ptxc_core::{Axis, Rank, Shape};
 
 text_words! {
     PadMode {
@@ -37,6 +37,10 @@ pub(super) fn encode_target(name: &'static str, target: &Shape) -> OpText {
 
 pub(super) fn encode_axis(name: &'static str, axis: Axis) -> OpText {
     OpText::new(name, vec![("axis", AttrValue::int(axis.index()))])
+}
+
+pub(super) fn encode_gather_nd(batch_dims: Rank) -> OpText {
+    OpText::new("gather_nd", vec![("batch_dims", AttrValue::int(batch_dims.get()))])
 }
 
 pub(super) fn encode_transpose(attrs: &TransposeAttrs) -> OpText {
@@ -102,6 +106,7 @@ pub(super) fn decode(name: &str, attrs: &mut Attrs) -> Option<Result<Op, ParseEr
         "concat" => decode_axis(attrs).map(Op::Concat),
         "gather" => decode_axis(attrs).map(Op::Gather),
         "gather_elements" => decode_axis(attrs).map(Op::GatherElements),
+        "gather_nd" => attrs.take("batch_dims").and_then(|attr| attr.rank()).map(Op::GatherNd),
         "transpose" => decode_axes(attrs, "permutation")
             .map(|permutation| Op::Transpose(TransposeAttrs { permutation })),
         "tile" => decode_tile(attrs),
