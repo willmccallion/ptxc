@@ -1,0 +1,14 @@
+compute pow_0(%in0: f16[3], %in1: i32[3]) {
+  %i0 = spatial 3
+  %out0: f16[3] = cast<f16>(pow(cast<f32>(%in0[%i0]), cast<f32>(%in1[%i0])))
+}
+
+compute pow_0(%in0: i32[3], %in1: i8[3]) {
+  %i0 = spatial 3
+  %out0: i32[3] = cast<i32>(pow(cast<i64>(%in0[%i0]), cast<i64>(%in1[%i0])))
+}
+
+compute pow_0(%in0: i32[3], %in1: f32[3]) {
+  %i0 = spatial 3
+  %out0: i32[3] = cast<i32>(cast<i64>(pow(cast<f32>(%in0[%i0]), %in1[%i0])))
+}

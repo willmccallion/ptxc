@@ -1,0 +1,20 @@
+compute where_0(%in0: bool[2, 1], %in1: f16[2, 2], %in2: f16[]) {
+  %i0 = spatial 2
+  %i1 = spatial 2
+  %out0: f16[2, 2] = select(%in0[%i0, 0], %in1[%i0, %i1], %in2[])
+}
+
+compute cast_0(%in0: f32[2]) {
+  %i0 = spatial 2
+  %out0: f8e4m3fn[2] = cast<f8e4m3fn, saturate>(%in0[%i0])
+}
+
+compute cast_0(%in0: i32[2]) {
+  %i0 = spatial 2
+  %out0: i32[2] = %in0[%i0]
+}
+
+compute is_inf_0(%in0: f32[2]) {
+  %i0 = spatial 2
+  %out0: bool[2] = false
+}

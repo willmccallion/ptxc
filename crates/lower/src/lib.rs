@@ -1,5 +1,12 @@
 //! Lowering from graph IR fused groups to loop IR compute definitions.
 
 mod epilogue;
+mod error;
 mod group;
 mod ops;
+mod precision;
+mod stage;
+
+pub use error::LowerError;
+pub use group::lower;
+pub use stage::Stage;

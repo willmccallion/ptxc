@@ -1,0 +1,14 @@
+compute mean_0(%in0: f16[2], %in1: f16[2], %in2: f16[1]) {
+  %i0 = spatial 2
+  %out0: f16[2] = cast<f16>(div(add(add(cast<f32>(%in0[%i0]), cast<f32>(%in1[%i0])), cast<f32>(%in2[0])), 3.0:f32))
+}
+
+compute max_0(%in0: i32[2], %in1: i32[2]) {
+  %i0 = spatial 2
+  %out0: i32[2] = max(%in0[%i0], %in1[%i0])
+}
+
+compute sum_0(%in0: f32[2]) {
+  %i0 = spatial 2
+  %out0: f32[2] = %in0[%i0]
+}

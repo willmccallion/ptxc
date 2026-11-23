@@ -964,6 +964,8 @@ dependencies = [
  "ptxc-core",
  "ptxc-graph",
  "ptxc-loop",
+ "ptxc-testkit",
+ "thiserror",
 ]
 
 [[package]]
@@ -1024,12 +1026,16 @@ dependencies = [
 name = "ptxc-testkit"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "prost",
  "ptxc-core",
  "ptxc-graph",
  "ptxc-interp",
+ "ptxc-loop",
+ "ptxc-lower",
  "ptxc-onnx",
  "ptxc-onnx-proto",
+ "ptxc-target",
  "sha2",
  "tempfile",
  "thiserror",
