@@ -1,0 +1,63 @@
+kernel argmax(%x: f32[200] read, %position: i64[5] write)
+  grid(1, 1, 1) block(16, 1, 1) smem 192
+  %k.1 = threadIdx.x
+  alloc %partials: f32[16] shared {
+    alloc %partial_positions: i64[16] shared {
+      for %row in 5 {
+        alloc %partial: f32[1] local {
+          alloc %partial_position: i64[1] local {
+            alloc %replace: bool[1] local {
+              %partial[0] = -inf:f32
+              %partial_position[0] = -9223372036854775808:i64
+              for %k.0 in 3 {
+                if %k.1 + %k.0 * 16 < 40 {
+                  %replace[0] = select(isnan(%partial[0]), and(isnan(%x[%row * 40 + %k.1 + %k.0 * 16]), lt(index<i64>(%k.1 + %k.0 * 16), %partial_position[0])), or(isnan(%x[%row * 40 + %k.1 + %k.0 * 16]), or(gt(%x[%row * 40 + %k.1 + %k.0 * 16], %partial[0]), and(eq(%x[%row * 40 + %k.1 + %k.0 * 16], %partial[0]), gt(index<i64>(%k.1 + %k.0 * 16), %partial_position[0])))))
+                  %partial[0] = select(%replace[0], %x[%row * 40 + %k.1 + %k.0 * 16], %partial[0])
+                  %partial_position[0] = select(%replace[0], index<i64>(%k.1 + %k.0 * 16), %partial_position[0])
+                }
+              }
+              %partials[%k.1] = %partial[0]
+              %partial_positions[%k.1] = %partial_position[0]
+              barrier
+              if %k.1 < 8 {
+                if %k.1 + 8 < 16 {
+                  %replace[0] = select(isnan(%partials[%k.1]), and(isnan(%partials[%k.1 + 8]), lt(%partial_positions[%k.1 + 8], %partial_positions[%k.1])), or(isnan(%partials[%k.1 + 8]), or(gt(%partials[%k.1 + 8], %partials[%k.1]), and(eq(%partials[%k.1 + 8], %partials[%k.1]), gt(%partial_positions[%k.1 + 8], %partial_positions[%k.1])))))
+                  %partials[%k.1] = select(%replace[0], %partials[%k.1 + 8], %partials[%k.1])
+                  %partial_positions[%k.1] = select(%replace[0], %partial_positions[%k.1 + 8], %partial_positions[%k.1])
+                }
+              }
+              barrier
+              if %k.1 < 4 {
+                if %k.1 + 4 < 16 {
+                  %replace[0] = select(isnan(%partials[%k.1]), and(isnan(%partials[%k.1 + 4]), lt(%partial_positions[%k.1 + 4], %partial_positions[%k.1])), or(isnan(%partials[%k.1 + 4]), or(gt(%partials[%k.1 + 4], %partials[%k.1]), and(eq(%partials[%k.1 + 4], %partials[%k.1]), gt(%partial_positions[%k.1 + 4], %partial_positions[%k.1])))))
+                  %partials[%k.1] = select(%replace[0], %partials[%k.1 + 4], %partials[%k.1])
+                  %partial_positions[%k.1] = select(%replace[0], %partial_positions[%k.1 + 4], %partial_positions[%k.1])
+                }
+              }
+              barrier
+              if %k.1 < 2 {
+                if %k.1 + 2 < 16 {
+                  %replace[0] = select(isnan(%partials[%k.1]), and(isnan(%partials[%k.1 + 2]), lt(%partial_positions[%k.1 + 2], %partial_positions[%k.1])), or(isnan(%partials[%k.1 + 2]), or(gt(%partials[%k.1 + 2], %partials[%k.1]), and(eq(%partials[%k.1 + 2], %partials[%k.1]), gt(%partial_positions[%k.1 + 2], %partial_positions[%k.1])))))
+                  %partials[%k.1] = select(%replace[0], %partials[%k.1 + 2], %partials[%k.1])
+                  %partial_positions[%k.1] = select(%replace[0], %partial_positions[%k.1 + 2], %partial_positions[%k.1])
+                }
+              }
+              barrier
+              if %k.1 < 1 {
+                if %k.1 + 1 < 16 {
+                  %replace[0] = select(isnan(%partials[%k.1]), and(isnan(%partials[%k.1 + 1]), lt(%partial_positions[%k.1 + 1], %partial_positions[%k.1])), or(isnan(%partials[%k.1 + 1]), or(gt(%partials[%k.1 + 1], %partials[%k.1]), and(eq(%partials[%k.1 + 1], %partials[%k.1]), gt(%partial_positions[%k.1 + 1], %partial_positions[%k.1])))))
+                  %partials[%k.1] = select(%replace[0], %partials[%k.1 + 1], %partials[%k.1])
+                  %partial_positions[%k.1] = select(%replace[0], %partial_positions[%k.1 + 1], %partial_positions[%k.1])
+                }
+              }
+              barrier
+              if %k.1 < 1 {
+                %position[%row] = %partial_positions[%k.1]
+              }
+              barrier
+            }
+          }
+        }
+      }
+    }
+  }

@@ -1,0 +1,13 @@
+kernel gathered_sum(%data: f32[30] read, %indices: i32[5] read, %out: f32[3] write)
+  grid(1, 1, 1) block(1, 1, 1) smem 0
+  for %i in 3 {
+    alloc %acc: f32[1] local {
+      %acc[0] = 0.0:f32
+      for %k in 5 {
+        let %row = %indices[%k] {
+          %acc[0] = add(%acc[0], %data[%i + %row * 3])
+        }
+      }
+      %out[%i] = %acc[0]
+    }
+  }

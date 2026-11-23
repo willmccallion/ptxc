@@ -1,0 +1,17 @@
+kernel argmax(%x: f32[35] read, %position: i64[5] write)
+  grid(5, 1, 1) block(1, 1, 1) smem 0
+  %row = blockIdx.x
+  alloc %acc: f32[1] local {
+    alloc %acc_position: i64[1] local {
+      alloc %replace: bool[1] local {
+        %acc[0] = -inf:f32
+        %acc_position[0] = 9223372036854775807:i64
+        for %k in 7 {
+          %replace[0] = select(isnan(%acc[0]), and(isnan(%x[%row * 7 + %k]), lt(index<i64>(%k), %acc_position[0])), or(isnan(%x[%row * 7 + %k]), or(gt(%x[%row * 7 + %k], %acc[0]), and(eq(%x[%row * 7 + %k], %acc[0]), lt(index<i64>(%k), %acc_position[0])))))
+          %acc[0] = select(%replace[0], %x[%row * 7 + %k], %acc[0])
+          %acc_position[0] = select(%replace[0], index<i64>(%k), %acc_position[0])
+        }
+        %position[%row] = %acc_position[0]
+      }
+    }
+  }

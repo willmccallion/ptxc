@@ -19,4 +19,9 @@ pub use schedule::{
     Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Open, Primitive, Schedule,
     ScheduleError, SplitFactor, ThreadAxis, Trace, Validated,
 };
-pub use text::{print_compute, print_schedule};
+pub use stmt::{
+    Access, Buffer, BufferId, Condition, ForKind, KernelParam, KernelVar, LaunchShape,
+    LoweredKernel, MemScope, Stmt, ValueExpr,
+};
+pub use text::{print_compute, print_kernel, print_schedule};
+pub use verify::{VerifyError, verify};

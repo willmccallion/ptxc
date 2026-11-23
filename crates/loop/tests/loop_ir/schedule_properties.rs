@@ -9,13 +9,13 @@ use ptxc_loop::{Primitive, SplitFactor};
 /// A primitive on whichever loops are at the given nest positions when it
 /// is applied, so random steps stay meaningful as the nest changes.
 #[derive(Clone, Debug)]
-enum Step {
+pub(crate) enum Step {
     Split { position: usize, factors: Vec<u64> },
     Fuse { position: usize, count: usize },
     Reorder { positions: Vec<usize> },
 }
 
-fn step() -> impl Strategy<Value = Step> {
+pub(crate) fn step() -> impl Strategy<Value = Step> {
     prop_oneof![
         (0_usize..8, prop::collection::vec(1_u64..=5, 1..=2))
             .prop_map(|(position, factors)| Step::Split { position, factors }),
@@ -25,7 +25,7 @@ fn step() -> impl Strategy<Value = Step> {
 }
 
 /// The step as a primitive on the current nest, if its positions exist.
-fn primitive(step: &Step, nest: &[ptxc_loop::LoopId]) -> Option<Primitive> {
+pub(crate) fn primitive(step: &Step, nest: &[ptxc_loop::LoopId]) -> Option<Primitive> {
     let at = |position: usize| nest.get(position).copied();
     match step {
         Step::Split { position, factors } => Some(Primitive::Split {

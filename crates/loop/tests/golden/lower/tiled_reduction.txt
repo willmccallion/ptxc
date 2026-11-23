@@ -1,0 +1,29 @@
+kernel reduction(%x: f32[61440] read, %out: f32[1920] write)
+  grid(4, 4, 1) block(1, 1, 1) smem 0
+  %i.0 = blockIdx.x
+  %j.0 = blockIdx.y
+  alloc %acc: f32[128] local {
+    for %i.1 in 16 {
+      for %j.1 in 8 {
+        %acc[%i.1 * 8 + %j.1] = 0.0:f32
+      }
+    }
+    for %k.0 in 8 {
+      for %i.1 in 16 {
+        for %j.1 in 8 {
+          for %k.1 in 4 unroll {
+            if %j.1 + %j.0 * 8 < 30 {
+              %acc[%i.1 * 8 + %j.1] = add(%acc[%i.1 * 8 + %j.1], %x[%i.1 * 960 + %i.0 * 15360 + %j.1 * 32 + %j.0 * 256 + %k.1 + %k.0 * 4])
+            }
+          }
+        }
+      }
+    }
+    for %i.1 in 16 {
+      for %j.1 in 8 {
+        if %j.1 + %j.0 * 8 < 30 {
+          %out[%i.1 * 30 + %i.0 * 480 + %j.1 + %j.0 * 8] = %acc[%i.1 * 8 + %j.1]
+        }
+      }
+    }
+  }
