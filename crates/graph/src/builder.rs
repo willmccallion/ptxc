@@ -35,7 +35,7 @@ impl GraphBuilder {
     }
 
     /// The type of `value`, a value of this graph.
-    pub(crate) fn value_type(&self, value: ValueId) -> &TensorType {
+    pub fn value_type(&self, value: ValueId) -> &TensorType {
         &self.graph.values[value].ty
     }
 
