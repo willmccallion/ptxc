@@ -5,7 +5,7 @@
 use crate::cases::{graphs, single_node};
 use proptest::strategy::{BoxedStrategy, Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
-use ptxc_codegen::{CodegenError, generate};
+use ptxc_codegen::generate;
 use ptxc_core::HostTensor;
 use ptxc_graph::{Graph, Op, Partitioned};
 use ptxc_target::{SmVersion, preset};
@@ -13,9 +13,6 @@ use std::sync::Arc;
 
 /// Graphs drawn per family; each stage is one ptxas run.
 const CASES_PER_FAMILY: usize = 6;
-
-/// What codegen does not emit yet: the remaining math programs.
-const PENDING: [&str; 1] = ["pow"];
 
 fn from_cases(
     cases: impl Strategy<Value = (Op, Vec<HostTensor>)> + 'static,
@@ -74,8 +71,7 @@ fn families() -> Vec<(&'static str, BoxedStrategy<Graph>)> {
     ]
 }
 
-/// Emits and assembles every stage of `graph`; codegen may only decline
-/// the pending operations.
+/// Emits and assembles every stage of `graph`.
 fn assemble_stages(family: &str, graph: Graph) {
     let target = preset(SmVersion::SM_89).unwrap();
     let gpu = target.sm().to_string();
@@ -84,14 +80,10 @@ fn assemble_stages(family: &str, graph: Graph) {
         for stage in group.stages() {
             let schedule = ptxc_schedule::default_schedule(Arc::clone(stage.compute()), &target);
             let kernel = schedule.unwrap().lower();
-            match generate(&kernel, &target) {
-                Ok(module) => {
-                    if let Err(error) = ptxc_testkit::ptxas::assemble(&module.to_string(), &gpu) {
-                        panic!("{family}: {error}");
-                    }
-                }
-                Err(CodegenError::Unsupported { op }) if PENDING.contains(&op) => {}
-                Err(error) => panic!("{family}: {error}"),
+            let module =
+                generate(&kernel, &target).unwrap_or_else(|error| panic!("{family}: {error}"));
+            if let Err(error) = ptxc_testkit::ptxas::assemble(&module.to_string(), &gpu) {
+                panic!("{family}: {error}");
             }
         }
     }

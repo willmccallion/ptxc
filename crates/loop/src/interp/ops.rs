@@ -121,7 +121,7 @@ fn float_binary(op: BinaryOp, a: f64, b: f64) -> f64 {
         BinaryOp::Sub => a - b,
         BinaryOp::Mul => a * b,
         BinaryOp::Div => a / b,
-        BinaryOp::Pow => a.powf(b),
+        BinaryOp::Pow => f64::from(math::pow().eval(f64_to_f32(a), f64_to_f32(b))),
         BinaryOp::Max => {
             if a.is_nan() || b.is_nan() {
                 f64::NAN

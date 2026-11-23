@@ -30,7 +30,7 @@ const FUNCTIONS: [Function; 8] = [
 
 /// The distance from `actual` to the exact `reference`, in ulps of f32 at
 /// `reference`; zero when both are the same infinity or both NaN.
-fn ulps(actual: f32, reference: f64) -> f64 {
+pub(crate) fn ulps(actual: f32, reference: f64) -> f64 {
     let rounded = f64_to_f32(reference);
     if actual.is_nan() || rounded.is_nan() {
         return if actual.is_nan() && rounded.is_nan() { 0.0 } else { f64::INFINITY };

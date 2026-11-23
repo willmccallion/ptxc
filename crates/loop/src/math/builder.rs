@@ -74,6 +74,12 @@ impl ProgramBuilder {
         self.define_float(FloatDef::Binary(FloatOp::Div, a, b))
     }
 
+    /// `-a`, exactly, signed zeros included.
+    pub(super) fn negate(&mut self, a: FloatSlot) -> FloatSlot {
+        let minus_one = self.float(-1.0);
+        self.mul(a, minus_one)
+    }
+
     /// `a * b + c`, rounded once.
     pub(super) fn fma(&mut self, a: FloatSlot, b: FloatSlot, c: FloatSlot) -> FloatSlot {
         self.define_float(FloatDef::Fma(a, b, c))
