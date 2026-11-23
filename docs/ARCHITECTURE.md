@@ -301,22 +301,39 @@ vector widths are allowed.
 **3. Lowered kernel: an explicit loop nest.** This is a tree of owned
 statements, as in TVM's TIR. Index arithmetic and data arithmetic are
 different types, so an address can never be computed from loaded data by
-accident (gathers go through an explicit `Load` into an index).
+accident (gathers go through an explicit `LoadIndex` into an index).
 
 ```rust
-pub struct LoweredKernel { name: KernelName, params: Vec<KernelParam>, launch: LaunchShape, smem: SmemBytes, body: Stmt, exprs: ExprArena }
+pub struct LoweredKernel {
+    name: KernelName, params: Vec<KernelParam>,                 // global buffers, each Read or Write
+    buffers: IndexVec<BufferId, Buffer>,                        // name, dtype, MemScope::{Global, Shared, Local}, size
+    vars: IndexVec<VarId, KernelVar>,                           // Loop, Thread { axis }, Loaded
+    launch: LaunchShape, smem: SmemBytes, body: Stmt, exprs: ExprArena,
+}
 pub enum Stmt {
     Seq(Vec<Stmt>),
-    For { var: LoopVarId, extent: ExprId, kind: ForKind, body: Box<Stmt> },   // Serial, Unrolled, Vectorized(VectorWidth), Bound(ThreadAxis)
-    If { cond: ExprId, then: Box<Stmt> },
-    Alloc { buffer: BufferId, scope: MemScope, size: ElementCount, body: Box<Stmt> },
+    For { var: VarId, extent: Dim, kind: ForKind, body: Box<Stmt> },     // Serial, Unrolled, Vectorized
+    If { condition: Condition, then: Box<Stmt> },                       // index < bound
+    Alloc { buffer: BufferId, body: Box<Stmt> },                        // shared or local
+    LoadIndex { var: VarId, buffer: BufferId, index: ExprId, body: Box<Stmt> },
     Store { buffer: BufferId, index: ExprId, value: ValueExpr },
     Barrier,
-    AsyncCopy { dst: BufferRegion, src: BufferRegion, bytes: CopyBytes }, AsyncCommit, AsyncWait { pending: GroupCount },
-    LdMatrix { dst: FragmentId, src: BufferRegion, shape: LdMatrixShape, transposed: Transposed },
-    Mma { intrinsic: MmaIntrinsic, d: FragmentId, a: FragmentId, b: FragmentId, c: FragmentId },
+    // M3: AsyncCopy, AsyncCommit, AsyncWait, LdMatrix, Mma
 }
 ```
+
+`Schedule<Validated>::lower` turns loops bound to grid and block axes into
+those indices and guards into `If`s. A reduction keeps an accumulator per
+spatial point inside its first reduction loop, as TVM's
+`decompose_reduction` does. A reduction bound to a thread axis combines the
+threads' partials in shared memory with a halving tree, with barriers only
+where every thread reaches them, as TVM's cross-thread allreduce does.
+Arg-reductions combine (value, position) pairs by a rule that depends only
+on both, so any loop order or thread split gives the same position.
+`verify` checks what code generation relies on: variables bound where read,
+buffers used as their scope and access allow, shared and local accesses
+provably in bounds (with `If` conditions narrowing ranges), no barrier under
+a thread-dependent condition, and well-typed values.
 
 Index expressions (`Expr::{Var, Const, Add, Mul, FloorDiv, FloorMod, Min, Max}`)
 are hash-consed in an `ExprArena` and addressed by `ExprId`, so structural
