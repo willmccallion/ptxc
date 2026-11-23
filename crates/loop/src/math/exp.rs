@@ -18,7 +18,7 @@ const OVERFLOW: f32 = 89.0;
 const DEGREE: u32 = 7;
 
 /// `1 / n!`, to f32.
-fn inverse_factorial(n: u32) -> f32 {
+pub(super) fn inverse_factorial(n: u32) -> f32 {
     f64_to_f32(1.0 / (1..=n).map(f64::from).product::<f64>())
 }
 

@@ -33,18 +33,25 @@ pub enum FloatOp {
     Div,
 }
 
-/// A 32-bit integer operation; additions and subtractions wrap, and shift
-/// amounts are below 32.
+/// A 32-bit integer operation. Additions, subtractions and products wrap;
+/// a shift by 32 or more gives 0, or the sign bit everywhere for an
+/// arithmetic right shift, as PTX clamps shift amounts.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IntOp {
     /// Wrapping addition.
     Add,
     /// Wrapping subtraction.
     Sub,
+    /// The low 32 bits of the product.
+    Mul,
+    /// The high 32 bits of the unsigned product.
+    MulHiUnsigned,
     /// Bitwise and.
     And,
     /// Bitwise or.
     Or,
+    /// Bitwise exclusive or.
+    Xor,
     /// Shift left.
     Shl,
     /// Shift right, copying the sign bit.
@@ -53,8 +60,7 @@ pub enum IntOp {
     ShrLogical,
 }
 
-/// A comparison: ordered on floats, so false when either is NaN, and
-/// signed on integers.
+/// A comparison: ordered on floats, so false when either is NaN.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Comparison {
     /// Less than.
@@ -82,6 +88,8 @@ pub enum FloatDef {
     RoundToInteger(FloatSlot),
     /// A two's complement integer, rounded to nearest even.
     FromInt(IntSlot),
+    /// An unsigned integer, rounded to nearest even.
+    FromUnsigned(IntSlot),
     /// The float whose bits these are.
     FromBits(IntSlot),
     /// The first float where the predicate holds, else the second.
@@ -97,6 +105,8 @@ pub enum IntDef {
     FromFloat(FloatSlot),
     /// A float's bits.
     Bits(FloatSlot),
+    /// The number of leading zero bits, 32 for zero.
+    LeadingZeros(IntSlot),
     /// `a op b`.
     Binary(IntOp, IntSlot, IntSlot),
     /// The first integer where the predicate holds, else the second.
@@ -108,8 +118,10 @@ pub enum IntDef {
 pub enum PredDef {
     /// Two floats compared.
     CompareFloat(Comparison, FloatSlot, FloatSlot),
-    /// Two integers compared.
+    /// Two integers compared, signed.
     CompareInt(Comparison, IntSlot, IntSlot),
+    /// Two integers compared, unsigned.
+    CompareUnsigned(Comparison, IntSlot, IntSlot),
 }
 
 /// One step: the definition of the next slot of its kind.

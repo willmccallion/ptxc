@@ -95,6 +95,10 @@ impl ProgramBuilder {
         self.define_float(FloatDef::FromBits(bits))
     }
 
+    pub(super) fn unsigned_to_float(&mut self, n: IntSlot) -> FloatSlot {
+        self.define_float(FloatDef::FromUnsigned(n))
+    }
+
     pub(super) fn select(&mut self, p: PredSlot, a: FloatSlot, b: FloatSlot) -> FloatSlot {
         self.define_float(FloatDef::Select(p, a, b))
     }
@@ -111,6 +115,10 @@ impl ProgramBuilder {
         self.define_int(IntDef::Bits(x))
     }
 
+    pub(super) fn leading_zeros(&mut self, n: IntSlot) -> IntSlot {
+        self.define_int(IntDef::LeadingZeros(n))
+    }
+
     pub(super) fn int_op(&mut self, op: IntOp, a: IntSlot, b: IntSlot) -> IntSlot {
         self.define_int(IntDef::Binary(op, a, b))
     }
@@ -125,5 +133,9 @@ impl ProgramBuilder {
 
     pub(super) fn compare_int(&mut self, cmp: Comparison, a: IntSlot, b: IntSlot) -> PredSlot {
         self.define_pred(PredDef::CompareInt(cmp, a, b))
+    }
+
+    pub(super) fn compare_unsigned(&mut self, cmp: Comparison, a: IntSlot, b: IntSlot) -> PredSlot {
+        self.define_pred(PredDef::CompareUnsigned(cmp, a, b))
     }
 }
