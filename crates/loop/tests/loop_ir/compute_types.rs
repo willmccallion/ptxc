@@ -175,3 +175,28 @@ fn scalars_hold_values_their_type_can_represent() {
     assert_eq!(Scalar::int(DType::I64, -3).unwrap().to_string(), "-3:i64");
     assert_eq!(Scalar::float(DType::F32, 1.5).unwrap().to_string(), "1.5:f32");
 }
+
+#[test]
+fn every_type_has_its_identities_and_extremes() {
+    let value = |scalar: Scalar| (scalar.as_f64(), scalar.as_i64(), scalar.as_bool());
+    let int = |value: i64| (None, Some(value), None);
+    let float = |value: f64| (Some(value), None, None);
+    let cases = [
+        (DType::I8, int(-128), int(127)),
+        (DType::U8, int(0), int(255)),
+        (DType::I32, int(i64::from(i32::MIN)), int(i64::from(i32::MAX))),
+        (DType::I64, int(i64::MIN), int(i64::MAX)),
+        (DType::F32, float(f64::NEG_INFINITY), float(f64::INFINITY)),
+        (DType::F8E4M3Fn, float(-448.0), float(448.0)),
+        (DType::F8E5M2, float(f64::NEG_INFINITY), float(f64::INFINITY)),
+        (DType::Bool, (None, None, Some(false)), (None, None, Some(true))),
+    ];
+    for (dtype, lowest, highest) in cases {
+        assert_eq!(value(Scalar::lowest(dtype)), lowest, "{dtype:?}");
+        assert_eq!(value(Scalar::highest(dtype)), highest, "{dtype:?}");
+        assert_eq!(Scalar::lowest(dtype).dtype(), dtype);
+    }
+    assert_eq!(value(Scalar::zero(DType::U8)), int(0));
+    assert_eq!(value(Scalar::one(DType::Bf16)), float(1.0));
+    assert_eq!(value(Scalar::one(DType::Bool)), (None, None, Some(true)));
+}
