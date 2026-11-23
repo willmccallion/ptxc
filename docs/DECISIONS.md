@@ -411,3 +411,33 @@ the old one.
   rewrite rule handle one case, and structural equality (CSE) sees equal
   ops as equal.
 
+## D33. The node tests v0.1.0 leaves unsupported
+
+- **Context:** M1's exit criteria ask for the unsupported node tests to be
+  reviewed. `ptxc conformance --backend interp` on the 1765 ONNX v1.22.0
+  node tests gives 979 passed, 0 failed and 786 unsupported.
+- **Choice:** these stay unsupported for v0.1.0:
+  - 345 tests of ops outside the v0.1.0 set: training losses
+    (`NegativeLogLikelihoodLoss`, `SoftmaxCrossEntropyLoss`) and optimisers,
+    recurrent ops (`RNN`, `LSTM`, `GRU`), signal processing (`DFT`, `STFT`,
+    window functions), image ops (`GridSample`, `RoiAlign`,
+    `ImageDecoder`, `Col2Im`, `DeformConv`), scatter and `GatherND`,
+    `TopK`, `ConvTranspose`, `LpPool`, the newest attention variants
+    (`LinearAttention`, `FlexAttention`, `RotaryEmbedding`), random ops,
+    bitwise ops, the less common unary ops (`Tan`, `Asin`, `Cosh`, …) and
+    the `ai.onnx.ml` domain;
+  - 289 tests of element types outside `DType`: f64, strings, the 16-bit,
+    unsigned 32- and 64-bit and sub-byte integers, FP8 FNUZ, FP4 and E8M0,
+    sequence and optional types, and `Range` on f16 and bf16;
+  - 107 tests at opsets below 13 (D28);
+  - 24 tests of control flow (`If`, `Loop`, `Scan`, D18);
+  - 15 tests of attribute values ptxc does not support: training-mode
+    `Dropout` and `BatchNormalization`, `Dropout`'s mask and `MaxPool`'s
+    indices outputs, and blocked quantization;
+  - 6 tests whose shapes are computed through float ops from inputs, which
+    the importer cannot resolve even with the inputs bound.
+- **Reason:** v0.1.0's target models (MLP, ResNet-50, BERT-base, GPT-2)
+  are not expected to need any of these; M1 task 12 exports them, and the
+  exit criteria check that they import. Each category maps to one importer
+  error, so a model that needs one fails at import with its reason rather
+  than running wrongly.
