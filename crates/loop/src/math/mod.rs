@@ -13,6 +13,8 @@ mod expm1;
 mod fmod;
 mod log;
 mod log1p;
+mod pow;
+mod pow_specials;
 mod program;
 mod reduce;
 mod sincos;
@@ -37,6 +39,7 @@ static ERF: LazyLock<MathProgram> = LazyLock::new(erf::erf);
 static SIN: LazyLock<MathProgram> = LazyLock::new(sincos::sin);
 static COS: LazyLock<MathProgram> = LazyLock::new(sincos::cos);
 static FMOD: LazyLock<MathProgram<Binary>> = LazyLock::new(fmod::fmod);
+static POW: LazyLock<MathProgram<Binary>> = LazyLock::new(pow::pow);
 
 /// `e^x`, within 1.06 ulps.
 pub fn exp() -> &'static MathProgram {
@@ -81,4 +84,10 @@ pub fn cos() -> &'static MathProgram {
 /// The remainder of `x / y` truncated, exactly, with `x`'s sign.
 pub fn fmod() -> &'static MathProgram<Binary> {
     &FMOD
+}
+
+/// `x` to the power `y`, within 1.5 ulps over 200 million sampled pairs,
+/// C's special cases included.
+pub fn pow() -> &'static MathProgram<Binary> {
+    &POW
 }

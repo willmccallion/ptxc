@@ -10,5 +10,6 @@
 )]
 
 mod accuracy;
+mod power;
 mod remainder;
 mod specials;

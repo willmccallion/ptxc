@@ -160,7 +160,8 @@ impl Selector<'_> {
             BinaryOp::Greater => return Ok(compare(b, Compare::Gt)),
             BinaryOp::GreaterOrEqual => return Ok(compare(b, Compare::Ge)),
             BinaryOp::TruncatedRem => self.math_binary(math::fmod(), (x, y)),
-            BinaryOp::Pow | BinaryOp::FlooredRem | BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => {
+            BinaryOp::Pow => self.math_binary(math::pow(), (x, y)),
+            BinaryOp::FlooredRem | BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => {
                 return Err(unsupported(op.name()));
             }
         };

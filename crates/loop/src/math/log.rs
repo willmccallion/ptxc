@@ -19,10 +19,10 @@ const MANTISSA_MASK: i32 = 0x007F_FFFF;
 
 /// The number of atanh series terms after `2s`: with `|s| <= 0.1716`, the
 /// first left out, `2 s^13 / 13`, is below `2^-36` of the result.
-const TERMS: i32 = 5;
+pub(super) const TERMS: i32 = 5;
 
 /// `2 / (2n + 1)`, the series coefficient of `s^(2n+1)`, to f32.
-fn atanh_coefficient(n: i32) -> f32 {
+pub(super) fn atanh_coefficient(n: i32) -> f32 {
     f64_to_f32(2.0 / f64::from(2 * n + 1))
 }
 
@@ -44,7 +44,7 @@ pub(super) fn log_of(code: &mut ProgramBuilder, x: FloatSlot) -> FloatSlot {
 
 /// `m` and `e` with `x = 2^e m` and `m` in `[sqrt(1/2), sqrt 2)`, for a
 /// positive finite `x`; a subnormal is scaled into the normal range first.
-fn decompose(code: &mut ProgramBuilder, x: FloatSlot) -> (FloatSlot, IntSlot) {
+pub(super) fn decompose(code: &mut ProgramBuilder, x: FloatSlot) -> (FloatSlot, IntSlot) {
     let min_normal = code.float(f32::MIN_POSITIVE);
     let tiny = code.compare(Comparison::Lt, x, min_normal);
     let factor = code.float(SUBNORMAL_SCALE);
