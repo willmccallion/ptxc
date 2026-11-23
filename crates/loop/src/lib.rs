@@ -8,3 +8,5 @@ mod schedule;
 mod stmt;
 mod text;
 mod verify;
+
+pub use expr::{Expr, ExprArena, ExprId, VarId};
