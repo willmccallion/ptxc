@@ -50,6 +50,7 @@ pub(super) fn encode(op: &Op) -> OpText {
         Op::GlobalPool(kind) => window::encode_global_pool(*kind),
         Op::Reduce(attrs) => reduce::encode_reduce(attrs),
         Op::ArgReduce(attrs) => reduce::encode_arg_reduce(*attrs),
+        Op::CumSum(attrs) => reduce::encode_cum_sum(*attrs),
         Op::Softmax(attrs) => norm::encode_softmax(*attrs),
         Op::LayerNorm(attrs) => norm::encode_layer_norm(*attrs),
         Op::BatchNorm(attrs) => norm::encode_epsilon("batch_norm", attrs.epsilon),

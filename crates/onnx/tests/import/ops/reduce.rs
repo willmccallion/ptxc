@@ -1,9 +1,11 @@
-//! Reductions and arg-reductions.
+//! Reductions, arg-reductions and `CumSum`.
 
 use crate::builders::{
-    FLOAT, assert_lines, fixed, i64_tensor, int, ints, line_at, model, model_at, node, op_line,
-    text,
+    FLOAT, assert_lines, fixed, i64_tensor, import, int, ints, line_at, model, model_at, node,
+    op_line, text,
 };
+use ptxc_onnx::ImportErrorKind;
+use ptxc_onnx_proto::{AttributeProto, ModelProto};
 
 #[test]
 fn every_reduction_reads_its_axes_input() {
@@ -81,4 +83,35 @@ fn a_noop_reduction_imports_as_nothing() {
     ));
 
     assert_eq!(graph, "graph(%x: f32[2]) {\n  return %x\n}\n");
+}
+
+fn cum_sum(attrs: Vec<AttributeProto>, axis: &[i64]) -> ModelProto {
+    let axis_dims: &[i64] = if axis.len() == 1 { &[] } else { &[2] };
+    model(
+        vec![node("CumSum", &["x", "a"], &["y"], attrs)],
+        vec![fixed("x", FLOAT, &[2, 3])],
+        vec![i64_tensor("a", axis_dims, axis)],
+        vec![],
+    )
+}
+
+#[test]
+fn cum_sum_reads_its_axis_input_and_direction_attributes() {
+    let flags = vec![int("exclusive", 1), int("reverse", 1)];
+
+    assert_eq!(
+        op_line(&cum_sum(vec![], &[0])),
+        "cum_sum<axis=0, inclusion=inclusive, direction=forward> %x : f32[2, 3]"
+    );
+    assert_eq!(
+        op_line(&cum_sum(flags, &[-1])),
+        "cum_sum<axis=1, inclusion=exclusive, direction=reverse> %x : f32[2, 3]"
+    );
+}
+
+#[test]
+fn a_cum_sum_axis_of_several_values_is_invalid() {
+    let error = import(&cum_sum(vec![], &[0, 1])).unwrap_err();
+
+    assert!(matches!(error.kind(), ImportErrorKind::Invalid { field: "axis", .. }), "{error}");
 }

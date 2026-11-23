@@ -1,8 +1,8 @@
 use crate::common::{f32_type, tensor_type};
 use ptxc_core::{Axis, DType, Rank};
 use ptxc_graph::{
-    ArgKind, ArgReduceAttrs, KeepDims, ReduceAttrs, ReduceOp, TensorType, TieBreak, TypeError,
-    TypeRule,
+    ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, Op, ReduceAttrs, ReduceOp,
+    ScanDirection, TensorType, TieBreak, TypeError, TypeRule,
 };
 
 const ALL_OPS: [ReduceOp; 10] = [
@@ -140,6 +140,37 @@ fn arg_reductions_reject_bool_and_out_of_range_axes() {
     assert_eq!(error, Err(TypeError::UnsupportedDType(DType::Bool)));
     assert!(matches!(
         argmax(1, KeepDims::Keep).infer(&[&f32_type(&[4])]),
+        Err(TypeError::AxisOutOfRange { .. })
+    ));
+}
+
+const fn cum_sum(axis: usize) -> Op {
+    Op::CumSum(CumSumAttrs {
+        axis: Axis::new(axis),
+        inclusion: Inclusion::Inclusive,
+        direction: ScanDirection::Forward,
+    })
+}
+
+#[test]
+fn cum_sum_keeps_its_operands_type() {
+    for dtype in [DType::F32, DType::Bf16, DType::I32, DType::I64] {
+        let input = tensor_type(dtype, &[2, 3]);
+
+        assert_eq!(cum_sum(1).infer(&[&input]), Ok(vec![input.clone()]));
+    }
+}
+
+#[test]
+fn cum_sum_needs_a_summable_type_and_its_axis() {
+    for dtype in [DType::I8, DType::U8, DType::Bool] {
+        assert_eq!(
+            cum_sum(0).infer(&[&tensor_type(dtype, &[2])]),
+            Err(TypeError::UnsupportedDType(dtype))
+        );
+    }
+    assert!(matches!(
+        cum_sum(2).infer(&[&f32_type(&[2, 3])]),
         Err(TypeError::AxisOutOfRange { .. })
     ));
 }

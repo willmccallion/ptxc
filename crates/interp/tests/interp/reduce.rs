@@ -1,4 +1,5 @@
-//! Reductions and arg-reductions, including empty reductions.
+//! Reductions and arg-reductions, including empty reductions, and running
+//! sums.
 
 use crate::builders::{assert_close, assert_exact, bools, f32s, i64s, op, tensor};
 
@@ -193,4 +194,42 @@ fn arg_min_breaks_ties_by_first_or_last() {
 
     assert_exact(&arg("arg_min", 0, "drop", "first", "i64[]", tied()), &[], &[1]);
     assert_exact(&arg("arg_min", 0, "drop", "last", "i64[]", tied()), &[], &[2]);
+}
+
+fn cum_sum(attrs: &str, input: ptxc_core::HostTensor, result: &str) -> ptxc_core::HostTensor {
+    op(&format!("cum_sum<{attrs}>"), result, &[input])
+}
+
+#[test]
+fn cum_sum_includes_or_excludes_each_element_going_either_way() {
+    let sums = |inclusion, direction| {
+        let attrs = format!("axis=1, inclusion={inclusion}, direction={direction}");
+        cum_sum(&attrs, x(), "f32[2, 3]")
+    };
+
+    assert_close(&sums("inclusive", "forward"), &[2, 3], &[1.0, 3.0, 6.0, 4.0, 9.0, 15.0]);
+    assert_close(&sums("exclusive", "forward"), &[2, 3], &[0.0, 1.0, 3.0, 0.0, 4.0, 9.0]);
+    assert_close(&sums("inclusive", "reverse"), &[2, 3], &[6.0, 5.0, 3.0, 15.0, 11.0, 6.0]);
+    assert_close(&sums("exclusive", "reverse"), &[2, 3], &[5.0, 3.0, 0.0, 11.0, 6.0, 0.0]);
+}
+
+#[test]
+fn cum_sum_runs_along_its_axis_only() {
+    let down = cum_sum("axis=0, inclusion=inclusive, direction=forward", x(), "f32[2, 3]");
+
+    assert_close(&down, &[2, 3], &[1.0, 2.0, 3.0, 5.0, 7.0, 9.0]);
+}
+
+#[test]
+fn integer_cum_sums_wrap_in_their_type() {
+    let attrs = "axis=0, inclusion=inclusive, direction=forward";
+    let narrow = cum_sum(attrs, tensor(&[3], vec![i32::MAX, 1, 1]), "i32[3]");
+    let wide = cum_sum(attrs, i64s(&[2], &[i64::MAX, 1]), "i64[2]");
+
+    assert_exact(
+        &narrow,
+        &[3],
+        &[i64::from(i32::MAX), i64::from(i32::MIN), i64::from(i32::MIN) + 1],
+    );
+    assert_exact(&wide, &[2], &[i64::MAX, i64::MIN]);
 }
