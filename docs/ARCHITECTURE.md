@@ -300,7 +300,14 @@ pub enum Stmt {
 
 Index expressions (`Expr::{Var, Const, Add, Mul, FloorDiv, FloorMod, Min, Max}`)
 are hash-consed in an `ExprArena` and addressed by `ExprId`, so structural
-equality is id equality and `simplify.rs` can memoise.
+equality is id equality and `simplify.rs` can memoise. Division and modulo
+round toward negative infinity, as TVM's `floordiv` and `floormod` do. The
+simplifier folds sums into a canonical affine form and, given each
+variable's range (`VarRanges`, from loop extents), applies TVM's floor
+division and modulo rules: `floordiv(c*q + r, c) = q + floordiv(r, c)`,
+settled to a constant when `r`'s bounds stay within one multiple of `c`, and
+`c*floordiv(x, c) + floormod(x, c) = x`, so split and fuse leave plain
+indices.
 
 **Loop-IR interpreter.** `interp/` runs a `LoweredKernel` on the CPU. Each
 thread block executes its threads in lockstep, phase by phase between
