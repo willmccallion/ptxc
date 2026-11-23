@@ -744,3 +744,26 @@ the old one.
   - f32 epilogues are what int8 GPU kernels use. A rounding tie can land
     one step apart once a sum passes 2^24, which testkit's `QUANTIZED`
     tolerance of one step already allows for.
+
+## D47. Resize reads selected elements directly and interpolates from tables
+
+- **Context:** ONNX's reference resize multiplies every tap by its weight,
+  zero weights included, so a NaN or an infinity beside a selected element
+  spreads to it. Following it literally reads every tap of every axis: the
+  batch and channel axes of an image tensor, which resizing leaves
+  unchanged, would multiply a 2-D linear resize's 4 taps to 16.
+- **Options:** follow the reference tap for tap; or read an axis directly
+  where every output position selects one element, as ONNX Runtime and
+  PyTorch do.
+- **Choice:** lowering computes each axis's taps once, in f64, from ONNX's
+  definitions. An axis whose every position selects one element with
+  weight 1 is a direct read: the identity, or an index table. Any other axis
+  interpolates over its taps, read from index and weight tables (D46).
+  `tf_crop_and_resize` positions outside the region read a flag table and
+  give the extrapolation value. Integer results interpolate in f32 and
+  truncate (a `NOTE`).
+- **Reason:** direct reads cost one load and no arithmetic, where the
+  reference's form multiplies the work by two per unchanged axis. The
+  results differ only where a zero-weight neighbour is NaN or infinite,
+  which no model relies on; the differential test uses finite inputs and
+  says why.
