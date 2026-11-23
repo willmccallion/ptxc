@@ -77,3 +77,15 @@ fn a_count_converts_to_the_nearest_f32() {
     assert_eq!(ElementCount::new(3).to_f32(), 3.0);
     assert_eq!(ElementCount::new(16_777_217).to_f32(), 16_777_216.0);
 }
+
+#[test]
+fn an_offset_is_aligned_exactly_at_multiples() {
+    let alignment = Alignment::CUDA_MALLOC;
+
+    assert_eq!(alignment.get(), 256);
+    assert!(ByteOffset::new(0).is_aligned(alignment));
+    assert!(ByteOffset::new(512).is_aligned(alignment));
+    assert!(!ByteOffset::new(255).is_aligned(alignment));
+    assert!(!ByteOffset::new(257).is_aligned(alignment));
+    assert!(!ByteOffset::new(2).is_aligned(alignment));
+}

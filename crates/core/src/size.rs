@@ -89,6 +89,11 @@ impl ByteOffset {
         self.0
     }
 
+    /// Whether `self` is a multiple of `alignment`.
+    pub const fn is_aligned(self, alignment: Alignment) -> bool {
+        self.0 & (alignment.0 - 1) == 0
+    }
+
     /// The smallest offset at or after `self` that is a multiple of
     /// `alignment`.
     pub const fn align_up(self, alignment: Alignment) -> Result<Self, SizeError> {
@@ -105,6 +110,9 @@ impl ByteOffset {
 pub struct Alignment(u64);
 
 impl Alignment {
+    /// The alignment `cudaMalloc` guarantees, 256 bytes.
+    pub const CUDA_MALLOC: Self = Self(256);
+
     /// Parses an alignment in bytes.
     pub const fn new(bytes: u64) -> Result<Self, SizeError> {
         if bytes.is_power_of_two() { Ok(Self(bytes)) } else { Err(SizeError::NotPowerOfTwo(bytes)) }
