@@ -5,8 +5,7 @@
 
 use super::fp8::{Fp8, narrow_fp8, widen_fp8};
 use crate::ast::{
-    B16, B32, B64, BinaryOp, Compare, CvtMode, F32, FunctionBuilder, Pred, PtxType, Reg,
-    Signedness, Value,
+    B16, B32, B64, BinaryOp, CvtMode, F32, FunctionBuilder, Pred, PtxType, Reg, Signedness, Value,
 };
 use ptxc_core::DType;
 use ptxc_core::float::Overflow;
@@ -41,12 +40,12 @@ impl Narrow {
     }
 }
 
-/// An element in memory form, as loaded or about to be stored.
+/// An element in memory form, about to be stored.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Stored {
     F32(Reg<F32>),
     /// f16 or bf16, or an FP8 byte in the low half.
-    Half(Reg<B16>, Narrow),
+    Half(Reg<B16>),
     Int32(Reg<B32>),
     Int64(Reg<B64>),
 }
@@ -64,22 +63,13 @@ pub(super) const fn memory_type(dtype: DType) -> PtxType {
     }
 }
 
-/// `value`, in f32, rounded to the float type `dtype`, then held in f32
-/// again; f32 itself is unchanged. FP8 overflow follows `overflow`.
-pub(super) fn round_float(
+/// An f32 rounded into the memory form of `kind`.
+pub(super) fn narrow(
     b: &mut FunctionBuilder,
     value: Reg<F32>,
-    dtype: DType,
+    kind: Narrow,
     overflow: Overflow,
-) -> Reg<F32> {
-    Narrow::of(dtype).map_or(value, |kind| {
-        let bits = narrow(b, value, kind, overflow);
-        widen(b, bits, kind)
-    })
-}
-
-/// An f32 rounded into the memory form of `kind`.
-fn narrow(b: &mut FunctionBuilder, value: Reg<F32>, kind: Narrow, overflow: Overflow) -> Reg<B16> {
+) -> Reg<B16> {
     match kind {
         Narrow::F16 => b.convert(CvtMode::Rn, (PtxType::F16, PtxType::F32), value.into()),
         Narrow::Bf16 => b.convert(CvtMode::Rn, (PtxType::Bf16, PtxType::F32), value.into()),
@@ -88,7 +78,7 @@ fn narrow(b: &mut FunctionBuilder, value: Reg<F32>, kind: Narrow, overflow: Over
 }
 
 /// The f32 holding a value in the memory form of `kind`.
-fn widen(b: &mut FunctionBuilder, value: Reg<B16>, kind: Narrow) -> Reg<F32> {
+pub(super) fn widen(b: &mut FunctionBuilder, value: Reg<B16>, kind: Narrow) -> Reg<F32> {
     match kind {
         Narrow::F16 => b.convert(CvtMode::Plain, (PtxType::F32, PtxType::F16), value.into()),
         Narrow::Bf16 => {
@@ -102,29 +92,13 @@ fn widen(b: &mut FunctionBuilder, value: Reg<B16>, kind: Narrow) -> Reg<F32> {
     }
 }
 
-/// A loaded element of `dtype` as a held value.
-pub(super) fn held(b: &mut FunctionBuilder, stored: Stored, dtype: DType) -> Held {
-    match stored {
-        Stored::F32(value) => Held::Float(value),
-        Stored::Half(value, kind) => Held::Float(widen(b, value, kind)),
-        Stored::Int64(value) => Held::Int64(value),
-        Stored::Int32(value) if dtype == DType::Bool => Held::Bool(b.compare_int(
-            Compare::Ne,
-            Signedness::Unsigned,
-            value.into(),
-            Value::<B32>::int(0),
-        )),
-        Stored::Int32(value) => Held::Int32(value),
-    }
-}
-
 /// A held value of `dtype` in memory form, for a store. Narrow floats
 /// overflow to their non-finite values, as every rounding but a saturating
 /// cast does.
 pub(super) fn stored(b: &mut FunctionBuilder, value: Held, dtype: DType) -> Stored {
     match value {
         Held::Float(value) => Narrow::of(dtype).map_or(Stored::F32(value), |kind| {
-            Stored::Half(narrow(b, value, kind, Overflow::NonFinite), kind)
+            Stored::Half(narrow(b, value, kind, Overflow::NonFinite))
         }),
         Held::Int32(value) => Stored::Int32(value),
         Held::Int64(value) => Stored::Int64(value),

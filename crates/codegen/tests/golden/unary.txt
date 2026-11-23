@@ -8,8 +8,7 @@ Abs f16
 	abs.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Abs bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -20,8 +19,7 @@ Abs bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Abs i8
 	ld.global.s8 %r0, [%rd1];
 	abs.s32 %r1, %r0;
@@ -50,8 +48,7 @@ Neg f16
 	neg.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Neg bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -62,8 +59,7 @@ Neg bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Neg i8
 	ld.global.s8 %r0, [%rd1];
 	neg.s32 %r1, %r0;
@@ -178,8 +174,7 @@ Exp f16
 	mul.rn.f32 %f30, %f29, %f28;
 	cvt.rn.f16.f32 %h1, %f30;
 	cvt.f32.f16 %f31, %h1;
-	cvt.rn.f16.f32 %h2, %f31;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Exp bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -233,8 +228,7 @@ Exp bf16
 	cvt.u32.u16 %r14, %h1;
 	shl.b32 %r15, %r14, 16;
 	mov.b32 %f31, %r15;
-	cvt.rn.bf16.f32 %h2, %f31;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Expm1 f32
 	ld.global.f32 %f0, [%rd1];
 	mov.f32 %f1, 0fC1F00000;
@@ -363,8 +357,7 @@ Expm1 f16
 	selp.f32 %f39, %f0, %f37, %p3;
 	cvt.rn.f16.f32 %h1, %f39;
 	cvt.f32.f16 %f40, %h1;
-	cvt.rn.f16.f32 %h2, %f40;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Expm1 bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -434,8 +427,7 @@ Expm1 bf16
 	cvt.u32.u16 %r19, %h1;
 	shl.b32 %r20, %r19, 16;
 	mov.b32 %f40, %r20;
-	cvt.rn.bf16.f32 %h2, %f40;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Log f32
 	ld.global.f32 %f0, [%rd1];
 	mov.f32 %f1, 0f00800000;
@@ -574,8 +566,7 @@ Log f16
 	selp.f32 %f40, %f38, %f39, %p4;
 	cvt.rn.f16.f32 %h1, %f40;
 	cvt.f32.f16 %f41, %h1;
-	cvt.rn.f16.f32 %h2, %f41;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Log bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -650,8 +641,7 @@ Log bf16
 	cvt.u32.u16 %r22, %h1;
 	shl.b32 %r23, %r22, 16;
 	mov.b32 %f41, %r23;
-	cvt.rn.bf16.f32 %h2, %f41;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Log1p f32
 	ld.global.f32 %f0, [%rd1];
 	mov.f32 %f1, 0f3F800000;
@@ -834,8 +824,7 @@ Log1p f16
 	selp.f32 %f58, %f0, %f56, %p8;
 	cvt.rn.f16.f32 %h1, %f58;
 	cvt.f32.f16 %f59, %h1;
-	cvt.rn.f16.f32 %h2, %f59;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Log1p bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -932,8 +921,7 @@ Log1p bf16
 	cvt.u32.u16 %r22, %h1;
 	shl.b32 %r23, %r22, 16;
 	mov.b32 %f59, %r23;
-	cvt.rn.bf16.f32 %h2, %f59;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sqrt f32
 	ld.global.f32 %f0, [%rd1];
 	sqrt.rn.f32 %f1, %f0;
@@ -944,8 +932,7 @@ Sqrt f16
 	sqrt.rn.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sqrt bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -956,8 +943,7 @@ Sqrt bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Reciprocal f32
 	ld.global.f32 %f0, [%rd1];
 	rcp.rn.f32 %f1, %f0;
@@ -968,8 +954,7 @@ Reciprocal f16
 	rcp.rn.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Reciprocal bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -980,8 +965,7 @@ Reciprocal bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Floor f32
 	ld.global.f32 %f0, [%rd1];
 	cvt.rmi.f32.f32 %f1, %f0;
@@ -992,8 +976,7 @@ Floor f16
 	cvt.rmi.f32.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Floor bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1004,8 +987,7 @@ Floor bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Ceil f32
 	ld.global.f32 %f0, [%rd1];
 	cvt.rpi.f32.f32 %f1, %f0;
@@ -1016,8 +998,7 @@ Ceil f16
 	cvt.rpi.f32.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Ceil bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1028,8 +1009,7 @@ Ceil bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Round f32
 	ld.global.f32 %f0, [%rd1];
 	cvt.rni.f32.f32 %f1, %f0;
@@ -1040,8 +1020,7 @@ Round f16
 	cvt.rni.f32.f32 %f1, %f0;
 	cvt.rn.f16.f32 %h1, %f1;
 	cvt.f32.f16 %f2, %h1;
-	cvt.rn.f16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Round bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1052,8 +1031,7 @@ Round bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f2, %r3;
-	cvt.rn.bf16.f32 %h2, %f2;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sign f32
 	ld.global.f32 %f0, [%rd1];
 	setp.gt.f32 %p0, %f0, 0f00000000;
@@ -1070,8 +1048,7 @@ Sign f16
 	selp.f32 %f2, 0f3F800000, %f1, %p0;
 	cvt.rn.f16.f32 %h1, %f2;
 	cvt.f32.f16 %f3, %h1;
-	cvt.rn.f16.f32 %h2, %f3;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sign bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1085,8 +1062,7 @@ Sign bf16
 	cvt.u32.u16 %r2, %h1;
 	shl.b32 %r3, %r2, 16;
 	mov.b32 %f3, %r3;
-	cvt.rn.bf16.f32 %h2, %f3;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sign i8
 	ld.global.s8 %r0, [%rd1];
 	setp.gt.s32 %p0, %r0, 0;
@@ -1323,8 +1299,7 @@ Erf f16
 	mov.b32 %f76, %r18;
 	cvt.rn.f16.f32 %h1, %f76;
 	cvt.f32.f16 %f77, %h1;
-	cvt.rn.f16.f32 %h2, %f77;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Erf bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1433,8 +1408,7 @@ Erf bf16
 	cvt.u32.u16 %r21, %h1;
 	shl.b32 %r22, %r21, 16;
 	mov.b32 %f77, %r22;
-	cvt.rn.bf16.f32 %h2, %f77;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sin f32
 	ld.global.f32 %f0, [%rd1];
 	mov.b32 %r0, %f0;
@@ -1849,8 +1823,7 @@ Sin f16
 	selp.f32 %f45, %f42, %f44, %p15;
 	cvt.rn.f16.f32 %h1, %f45;
 	cvt.f32.f16 %f46, %h1;
-	cvt.rn.f16.f32 %h2, %f46;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Sin bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -2063,8 +2036,7 @@ Sin bf16
 	cvt.u32.u16 %r144, %h1;
 	shl.b32 %r145, %r144, 16;
 	mov.b32 %f46, %r145;
-	cvt.rn.bf16.f32 %h2, %f46;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Cos f32
 	ld.global.f32 %f0, [%rd1];
 	mov.b32 %r0, %f0;
@@ -2475,8 +2447,7 @@ Cos f16
 	selp.f32 %f45, %f42, %f44, %p15;
 	cvt.rn.f16.f32 %h1, %f45;
 	cvt.f32.f16 %f46, %h1;
-	cvt.rn.f16.f32 %h2, %f46;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Cos bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -2687,8 +2658,7 @@ Cos bf16
 	cvt.u32.u16 %r142, %h1;
 	shl.b32 %r143, %r142, 16;
 	mov.b32 %f46, %r143;
-	cvt.rn.bf16.f32 %h2, %f46;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Tanh f32
 	ld.global.f32 %f0, [%rd1];
 	mov.b32 %r0, %f0;
@@ -2849,8 +2819,7 @@ Tanh f16
 	mov.b32 %f47, %r23;
 	cvt.rn.f16.f32 %h1, %f47;
 	cvt.f32.f16 %f48, %h1;
-	cvt.rn.f16.f32 %h2, %f48;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Tanh bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -2936,8 +2905,7 @@ Tanh bf16
 	cvt.u32.u16 %r26, %h1;
 	shl.b32 %r27, %r26, 16;
 	mov.b32 %f48, %r27;
-	cvt.rn.bf16.f32 %h2, %f48;
-	st.global.b16 [%rd3], %h2;
+	st.global.b16 [%rd3], %h1;
 Not bool
 	ld.global.u8 %r0, [%rd1];
 	setp.ne.u32 %p0, %r0, 0;

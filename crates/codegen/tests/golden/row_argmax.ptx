@@ -8,7 +8,7 @@
 )
 {
 	.reg .pred %p<145>;
-	.reg .b16 %h<30>;
+	.reg .b16 %h<29>;
 	.reg .b32 %r<20>;
 	.reg .b64 %rd<107>;
 	.reg .f32 %f<29>;
@@ -79,8 +79,7 @@ $L__2:
 	mul.lo.s64 %rd17, %rd5, 2;
 	mov.u64 %rd18, shared_0;
 	add.s64 %rd19, %rd18, %rd17;
-	cvt.rn.f16.f32 %h5, %f4;
-	st.shared.b16 [%rd19], %h5;
+	st.shared.b16 [%rd19], %h4;
 	ld.local.s64 %rd20, [local_3];
 	mul.lo.s64 %rd21, %rd5, 8;
 	mov.u64 %rd22, shared_1;
@@ -92,14 +91,14 @@ $L__2:
 	add.s64 %rd24, %rd5, 128;
 	setp.ge.s64 %p17, %rd24, 256;
 	@%p17 bra $L__5;
-	ld.shared.b16 %h6, [%rd19];
-	cvt.f32.f16 %f5, %h6;
+	ld.shared.b16 %h5, [%rd19];
+	cvt.f32.f16 %f5, %h5;
 	setp.nan.f32 %p18, %f5, %f5;
 	mul.lo.s64 %rd25, %rd24, 2;
 	mov.u64 %rd26, shared_0;
 	add.s64 %rd27, %rd26, %rd25;
-	ld.shared.b16 %h7, [%rd27];
-	cvt.f32.f16 %f6, %h7;
+	ld.shared.b16 %h6, [%rd27];
+	cvt.f32.f16 %f6, %h6;
 	setp.nan.f32 %p19, %f6, %f6;
 	mul.lo.s64 %rd28, %rd24, 8;
 	mov.u64 %rd29, shared_1;
@@ -122,8 +121,8 @@ $L__2:
 	ld.local.u8 %r5, [local_4];
 	setp.ne.u32 %p31, %r5, 0;
 	selp.f32 %f7, %f6, %f5, %p31;
-	cvt.rn.f16.f32 %h8, %f7;
-	st.shared.b16 [%rd19], %h8;
+	cvt.rn.f16.f32 %h7, %f7;
+	st.shared.b16 [%rd19], %h7;
 	selp.b64 %rd33, %rd31, %rd32, %p31;
 	st.shared.s64 [%rd23], %rd33;
 $L__5:
@@ -134,14 +133,14 @@ $L__4:
 	add.s64 %rd34, %rd5, 64;
 	setp.ge.s64 %p33, %rd34, 256;
 	@%p33 bra $L__7;
-	ld.shared.b16 %h9, [%rd19];
-	cvt.f32.f16 %f8, %h9;
+	ld.shared.b16 %h8, [%rd19];
+	cvt.f32.f16 %f8, %h8;
 	setp.nan.f32 %p34, %f8, %f8;
 	mul.lo.s64 %rd35, %rd34, 2;
 	mov.u64 %rd36, shared_0;
 	add.s64 %rd37, %rd36, %rd35;
-	ld.shared.b16 %h10, [%rd37];
-	cvt.f32.f16 %f9, %h10;
+	ld.shared.b16 %h9, [%rd37];
+	cvt.f32.f16 %f9, %h9;
 	setp.nan.f32 %p35, %f9, %f9;
 	mul.lo.s64 %rd38, %rd34, 8;
 	mov.u64 %rd39, shared_1;
@@ -164,8 +163,8 @@ $L__4:
 	ld.local.u8 %r7, [local_4];
 	setp.ne.u32 %p47, %r7, 0;
 	selp.f32 %f10, %f9, %f8, %p47;
-	cvt.rn.f16.f32 %h11, %f10;
-	st.shared.b16 [%rd19], %h11;
+	cvt.rn.f16.f32 %h10, %f10;
+	st.shared.b16 [%rd19], %h10;
 	selp.b64 %rd43, %rd41, %rd42, %p47;
 	st.shared.s64 [%rd23], %rd43;
 $L__7:
@@ -176,14 +175,14 @@ $L__6:
 	add.s64 %rd44, %rd5, 32;
 	setp.ge.s64 %p49, %rd44, 256;
 	@%p49 bra $L__9;
-	ld.shared.b16 %h12, [%rd19];
-	cvt.f32.f16 %f11, %h12;
+	ld.shared.b16 %h11, [%rd19];
+	cvt.f32.f16 %f11, %h11;
 	setp.nan.f32 %p50, %f11, %f11;
 	mul.lo.s64 %rd45, %rd44, 2;
 	mov.u64 %rd46, shared_0;
 	add.s64 %rd47, %rd46, %rd45;
-	ld.shared.b16 %h13, [%rd47];
-	cvt.f32.f16 %f12, %h13;
+	ld.shared.b16 %h12, [%rd47];
+	cvt.f32.f16 %f12, %h12;
 	setp.nan.f32 %p51, %f12, %f12;
 	mul.lo.s64 %rd48, %rd44, 8;
 	mov.u64 %rd49, shared_1;
@@ -206,8 +205,8 @@ $L__6:
 	ld.local.u8 %r9, [local_4];
 	setp.ne.u32 %p63, %r9, 0;
 	selp.f32 %f13, %f12, %f11, %p63;
-	cvt.rn.f16.f32 %h14, %f13;
-	st.shared.b16 [%rd19], %h14;
+	cvt.rn.f16.f32 %h13, %f13;
+	st.shared.b16 [%rd19], %h13;
 	selp.b64 %rd53, %rd51, %rd52, %p63;
 	st.shared.s64 [%rd23], %rd53;
 $L__9:
@@ -218,14 +217,14 @@ $L__8:
 	add.s64 %rd54, %rd5, 16;
 	setp.ge.s64 %p65, %rd54, 256;
 	@%p65 bra $L__11;
-	ld.shared.b16 %h15, [%rd19];
-	cvt.f32.f16 %f14, %h15;
+	ld.shared.b16 %h14, [%rd19];
+	cvt.f32.f16 %f14, %h14;
 	setp.nan.f32 %p66, %f14, %f14;
 	mul.lo.s64 %rd55, %rd54, 2;
 	mov.u64 %rd56, shared_0;
 	add.s64 %rd57, %rd56, %rd55;
-	ld.shared.b16 %h16, [%rd57];
-	cvt.f32.f16 %f15, %h16;
+	ld.shared.b16 %h15, [%rd57];
+	cvt.f32.f16 %f15, %h15;
 	setp.nan.f32 %p67, %f15, %f15;
 	mul.lo.s64 %rd58, %rd54, 8;
 	mov.u64 %rd59, shared_1;
@@ -248,8 +247,8 @@ $L__8:
 	ld.local.u8 %r11, [local_4];
 	setp.ne.u32 %p79, %r11, 0;
 	selp.f32 %f16, %f15, %f14, %p79;
-	cvt.rn.f16.f32 %h17, %f16;
-	st.shared.b16 [%rd19], %h17;
+	cvt.rn.f16.f32 %h16, %f16;
+	st.shared.b16 [%rd19], %h16;
 	selp.b64 %rd63, %rd61, %rd62, %p79;
 	st.shared.s64 [%rd23], %rd63;
 $L__11:
@@ -260,14 +259,14 @@ $L__10:
 	add.s64 %rd64, %rd5, 8;
 	setp.ge.s64 %p81, %rd64, 256;
 	@%p81 bra $L__13;
-	ld.shared.b16 %h18, [%rd19];
-	cvt.f32.f16 %f17, %h18;
+	ld.shared.b16 %h17, [%rd19];
+	cvt.f32.f16 %f17, %h17;
 	setp.nan.f32 %p82, %f17, %f17;
 	mul.lo.s64 %rd65, %rd64, 2;
 	mov.u64 %rd66, shared_0;
 	add.s64 %rd67, %rd66, %rd65;
-	ld.shared.b16 %h19, [%rd67];
-	cvt.f32.f16 %f18, %h19;
+	ld.shared.b16 %h18, [%rd67];
+	cvt.f32.f16 %f18, %h18;
 	setp.nan.f32 %p83, %f18, %f18;
 	mul.lo.s64 %rd68, %rd64, 8;
 	mov.u64 %rd69, shared_1;
@@ -290,8 +289,8 @@ $L__10:
 	ld.local.u8 %r13, [local_4];
 	setp.ne.u32 %p95, %r13, 0;
 	selp.f32 %f19, %f18, %f17, %p95;
-	cvt.rn.f16.f32 %h20, %f19;
-	st.shared.b16 [%rd19], %h20;
+	cvt.rn.f16.f32 %h19, %f19;
+	st.shared.b16 [%rd19], %h19;
 	selp.b64 %rd73, %rd71, %rd72, %p95;
 	st.shared.s64 [%rd23], %rd73;
 $L__13:
@@ -302,14 +301,14 @@ $L__12:
 	add.s64 %rd74, %rd5, 4;
 	setp.ge.s64 %p97, %rd74, 256;
 	@%p97 bra $L__15;
-	ld.shared.b16 %h21, [%rd19];
-	cvt.f32.f16 %f20, %h21;
+	ld.shared.b16 %h20, [%rd19];
+	cvt.f32.f16 %f20, %h20;
 	setp.nan.f32 %p98, %f20, %f20;
 	mul.lo.s64 %rd75, %rd74, 2;
 	mov.u64 %rd76, shared_0;
 	add.s64 %rd77, %rd76, %rd75;
-	ld.shared.b16 %h22, [%rd77];
-	cvt.f32.f16 %f21, %h22;
+	ld.shared.b16 %h21, [%rd77];
+	cvt.f32.f16 %f21, %h21;
 	setp.nan.f32 %p99, %f21, %f21;
 	mul.lo.s64 %rd78, %rd74, 8;
 	mov.u64 %rd79, shared_1;
@@ -332,8 +331,8 @@ $L__12:
 	ld.local.u8 %r15, [local_4];
 	setp.ne.u32 %p111, %r15, 0;
 	selp.f32 %f22, %f21, %f20, %p111;
-	cvt.rn.f16.f32 %h23, %f22;
-	st.shared.b16 [%rd19], %h23;
+	cvt.rn.f16.f32 %h22, %f22;
+	st.shared.b16 [%rd19], %h22;
 	selp.b64 %rd83, %rd81, %rd82, %p111;
 	st.shared.s64 [%rd23], %rd83;
 $L__15:
@@ -344,14 +343,14 @@ $L__14:
 	add.s64 %rd84, %rd5, 2;
 	setp.ge.s64 %p113, %rd84, 256;
 	@%p113 bra $L__17;
-	ld.shared.b16 %h24, [%rd19];
-	cvt.f32.f16 %f23, %h24;
+	ld.shared.b16 %h23, [%rd19];
+	cvt.f32.f16 %f23, %h23;
 	setp.nan.f32 %p114, %f23, %f23;
 	mul.lo.s64 %rd85, %rd84, 2;
 	mov.u64 %rd86, shared_0;
 	add.s64 %rd87, %rd86, %rd85;
-	ld.shared.b16 %h25, [%rd87];
-	cvt.f32.f16 %f24, %h25;
+	ld.shared.b16 %h24, [%rd87];
+	cvt.f32.f16 %f24, %h24;
 	setp.nan.f32 %p115, %f24, %f24;
 	mul.lo.s64 %rd88, %rd84, 8;
 	mov.u64 %rd89, shared_1;
@@ -374,8 +373,8 @@ $L__14:
 	ld.local.u8 %r17, [local_4];
 	setp.ne.u32 %p127, %r17, 0;
 	selp.f32 %f25, %f24, %f23, %p127;
-	cvt.rn.f16.f32 %h26, %f25;
-	st.shared.b16 [%rd19], %h26;
+	cvt.rn.f16.f32 %h25, %f25;
+	st.shared.b16 [%rd19], %h25;
 	selp.b64 %rd93, %rd91, %rd92, %p127;
 	st.shared.s64 [%rd23], %rd93;
 $L__17:
@@ -386,14 +385,14 @@ $L__16:
 	add.s64 %rd94, %rd5, 1;
 	setp.ge.s64 %p129, %rd94, 256;
 	@%p129 bra $L__19;
-	ld.shared.b16 %h27, [%rd19];
-	cvt.f32.f16 %f26, %h27;
+	ld.shared.b16 %h26, [%rd19];
+	cvt.f32.f16 %f26, %h26;
 	setp.nan.f32 %p130, %f26, %f26;
 	mul.lo.s64 %rd95, %rd94, 2;
 	mov.u64 %rd96, shared_0;
 	add.s64 %rd97, %rd96, %rd95;
-	ld.shared.b16 %h28, [%rd97];
-	cvt.f32.f16 %f27, %h28;
+	ld.shared.b16 %h27, [%rd97];
+	cvt.f32.f16 %f27, %h27;
 	setp.nan.f32 %p131, %f27, %f27;
 	mul.lo.s64 %rd98, %rd94, 8;
 	mov.u64 %rd99, shared_1;
@@ -416,8 +415,8 @@ $L__16:
 	ld.local.u8 %r19, [local_4];
 	setp.ne.u32 %p143, %r19, 0;
 	selp.f32 %f28, %f27, %f26, %p143;
-	cvt.rn.f16.f32 %h29, %f28;
-	st.shared.b16 [%rd19], %h29;
+	cvt.rn.f16.f32 %h28, %f28;
+	st.shared.b16 [%rd19], %h28;
 	selp.b64 %rd103, %rd101, %rd102, %p143;
 	st.shared.s64 [%rd23], %rd103;
 $L__19:

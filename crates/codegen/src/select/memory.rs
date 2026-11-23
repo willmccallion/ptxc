@@ -1,8 +1,10 @@
 //! Where each buffer lives, element addresses, and loads and stores.
 
-use super::values::{Held, Narrow, Stored, held, memory_type, stored};
+use super::values::{Held, Narrow, Stored, memory_type, stored};
 use super::{CodegenError, Selector};
-use crate::ast::{Address, B16, B32, B64, BinaryOp, F32, PtxType, Reg, Signedness, Space, Value};
+use crate::ast::{
+    Address, B16, B32, B64, BinaryOp, Compare, F32, PtxType, Reg, Signedness, Space, Value,
+};
 use ptxc_core::DType;
 use ptxc_loop::{BufferId, Expr, ExprId, MemScope};
 
@@ -91,13 +93,25 @@ impl Selector<'_> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let (space, addr) = self.element(buffer, index)?;
         let ty = memory_type(dtype);
-        let loaded = match (dtype, Narrow::of(dtype)) {
-            (DType::F32, _) => Stored::F32(self.builder.load::<F32>(space, ty, addr)),
-            (_, Some(kind)) => Stored::Half(self.builder.load::<B16>(space, ty, addr), kind),
-            (DType::I64, _) => Stored::Int64(self.builder.load::<B64>(space, ty, addr)),
-            _ => Stored::Int32(self.builder.load::<B32>(space, ty, addr)),
-        };
-        Ok(held(&mut self.builder, loaded, dtype))
+        Ok(match (dtype, Narrow::of(dtype)) {
+            (DType::F32, _) => Held::Float(self.builder.load::<F32>(space, ty, addr)),
+            (_, Some(kind)) => {
+                let bits = self.builder.load::<B16>(space, ty, addr);
+                Held::Float(self.widened(bits, kind))
+            }
+            (DType::I64, _) => Held::Int64(self.builder.load::<B64>(space, ty, addr)),
+            (DType::Bool, _) => {
+                let byte = self.builder.load::<B32>(space, ty, addr);
+                let zero = Value::<B32>::int(0);
+                Held::Bool(self.builder.compare_int(
+                    Compare::Ne,
+                    Signedness::Unsigned,
+                    byte.into(),
+                    zero,
+                ))
+            }
+            _ => Held::Int32(self.builder.load::<B32>(space, ty, addr)),
+        })
     }
 
     /// Stores `value` as element `index` of `buffer`.
@@ -110,12 +124,21 @@ impl Selector<'_> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let (space, addr) = self.element(buffer, index)?;
         let ty = memory_type(dtype);
-        match stored(&mut self.builder, value, dtype) {
+        let form = self.narrow_form(value, dtype);
+        match form.unwrap_or_else(|| stored(&mut self.builder, value, dtype)) {
             Stored::F32(value) => self.builder.store(space, ty, addr, value.into()),
-            Stored::Half(value, _) => self.builder.store(space, ty, addr, value.into()),
+            Stored::Half(value) => self.builder.store(space, ty, addr, value.into()),
             Stored::Int32(value) => self.builder.store(space, ty, addr, value.into()),
             Stored::Int64(value) => self.builder.store(space, ty, addr, value.into()),
         }
         Ok(())
+    }
+
+    /// `value`'s memory form if it was widened from `dtype`'s: storing it
+    /// then needs no rounding, rounding a widened value being exact.
+    fn narrow_form(&self, value: Held, dtype: DType) -> Option<Stored> {
+        let Held::Float(wide) = value else { return None };
+        let &(bits, kind) = self.narrow_forms.get(&wide)?;
+        (Narrow::of(dtype) == Some(kind)).then_some(Stored::Half(bits))
     }
 }

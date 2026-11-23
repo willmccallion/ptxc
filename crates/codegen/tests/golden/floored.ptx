@@ -8,7 +8,7 @@
 )
 {
 	.reg .pred %p<6>;
-	.reg .b16 %h<2>;
+	.reg .b16 %h<1>;
 	.reg .b32 %r<2>;
 	.reg .b64 %rd<31>;
 	.reg .f32 %f<1>;
@@ -53,7 +53,6 @@
 	cvt.f32.f16 %f0, %h0;
 	mul.lo.s64 %rd29, %rd7, 2;
 	add.s64 %rd30, %rd3, %rd29;
-	cvt.rn.f16.f32 %h1, %f0;
-	st.global.b16 [%rd30], %h1;
+	st.global.b16 [%rd30], %h0;
 	ret;
 }

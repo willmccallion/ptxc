@@ -11,8 +11,7 @@ add f16
 	add.rn.f32 %f2, %f0, %f1;
 	cvt.rn.f16.f32 %h2, %f2;
 	cvt.f32.f16 %f3, %h2;
-	cvt.rn.f16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 add bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -27,8 +26,7 @@ add bf16
 	cvt.u32.u16 %r4, %h2;
 	shl.b32 %r5, %r4, 16;
 	mov.b32 %f3, %r5;
-	cvt.rn.bf16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 add i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -64,8 +62,7 @@ sub f16
 	sub.rn.f32 %f2, %f0, %f1;
 	cvt.rn.f16.f32 %h2, %f2;
 	cvt.f32.f16 %f3, %h2;
-	cvt.rn.f16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 sub bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -80,8 +77,7 @@ sub bf16
 	cvt.u32.u16 %r4, %h2;
 	shl.b32 %r5, %r4, 16;
 	mov.b32 %f3, %r5;
-	cvt.rn.bf16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 sub i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -117,8 +113,7 @@ mul f16
 	mul.rn.f32 %f2, %f0, %f1;
 	cvt.rn.f16.f32 %h2, %f2;
 	cvt.f32.f16 %f3, %h2;
-	cvt.rn.f16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 mul bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -133,8 +128,7 @@ mul bf16
 	cvt.u32.u16 %r4, %h2;
 	shl.b32 %r5, %r4, 16;
 	mov.b32 %f3, %r5;
-	cvt.rn.bf16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 mul i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -170,8 +164,7 @@ div f16
 	div.rn.f32 %f2, %f0, %f1;
 	cvt.rn.f16.f32 %h2, %f2;
 	cvt.f32.f16 %f3, %h2;
-	cvt.rn.f16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 div bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -186,8 +179,7 @@ div bf16
 	cvt.u32.u16 %r4, %h2;
 	shl.b32 %r5, %r4, 16;
 	mov.b32 %f3, %r5;
-	cvt.rn.bf16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 div i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -635,8 +627,7 @@ pow f16
 	selp.f32 %f124, %f119, %f122, %p19;
 	cvt.rn.f16.f32 %h2, %f124;
 	cvt.f32.f16 %f125, %h2;
-	cvt.rn.f16.f32 %h3, %f125;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 pow bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -857,8 +848,7 @@ pow bf16
 	cvt.u32.u16 %r68, %h2;
 	shl.b32 %r69, %r68, 16;
 	mov.b32 %f125, %r69;
-	cvt.rn.bf16.f32 %h3, %f125;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 pow i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -1898,8 +1888,7 @@ max f16
 	max.NaN.f32 %f2, %f0, %f1;
 	cvt.rn.f16.f32 %h2, %f2;
 	cvt.f32.f16 %f3, %h2;
-	cvt.rn.f16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 max bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1914,8 +1903,7 @@ max bf16
 	cvt.u32.u16 %r4, %h2;
 	shl.b32 %r5, %r4, 16;
 	mov.b32 %f3, %r5;
-	cvt.rn.bf16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 max i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -1951,8 +1939,7 @@ min f16
 	min.NaN.f32 %f2, %f0, %f1;
 	cvt.rn.f16.f32 %h2, %f2;
 	cvt.f32.f16 %f3, %h2;
-	cvt.rn.f16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 min bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -1967,8 +1954,7 @@ min bf16
 	cvt.u32.u16 %r4, %h2;
 	shl.b32 %r5, %r4, 16;
 	mov.b32 %f3, %r5;
-	cvt.rn.bf16.f32 %h3, %f3;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 min i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];
@@ -3602,8 +3588,7 @@ truncated_rem f16
 	selp.f32 %f169, %f168, %f165, %p87;
 	cvt.rn.f16.f32 %h2, %f169;
 	cvt.f32.f16 %f170, %h2;
-	cvt.rn.f16.f32 %h3, %f170;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 truncated_rem bf16
 	ld.global.b16 %h0, [%rd1];
 	cvt.u32.u16 %r0, %h0;
@@ -4417,8 +4402,7 @@ truncated_rem bf16
 	cvt.u32.u16 %r548, %h2;
 	shl.b32 %r549, %r548, 16;
 	mov.b32 %f170, %r549;
-	cvt.rn.bf16.f32 %h3, %f170;
-	st.global.b16 [%rd5], %h3;
+	st.global.b16 [%rd5], %h2;
 truncated_rem i8
 	ld.global.s8 %r0, [%rd1];
 	ld.global.s8 %r1, [%rd3];

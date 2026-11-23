@@ -1,8 +1,8 @@
 //! Selects instructions for index and value expressions.
 
-use super::values::{Held, round_float};
+use super::values::{Held, Narrow, narrow, widen};
 use super::{CodegenError, Selector};
-use crate::ast::{B32, B64, BinaryOp, Compare, CvtMode, F32, PtxType, Reg, Signedness, Value};
+use crate::ast::{B16, B32, B64, BinaryOp, Compare, CvtMode, F32, PtxType, Reg, Signedness, Value};
 use ptxc_core::DType;
 use ptxc_core::convert::f64_to_f32;
 use ptxc_core::float::Overflow;
@@ -214,6 +214,16 @@ impl Selector<'_> {
         dtype: DType,
         overflow: Overflow,
     ) -> Reg<F32> {
-        round_float(&mut self.builder, value, dtype, overflow)
+        let Some(kind) = Narrow::of(dtype) else { return value };
+        let bits = narrow(&mut self.builder, value, kind, overflow);
+        self.widened(bits, kind)
+    }
+
+    /// `bits`, in the memory form of `kind`, held in f32. The form is kept,
+    /// so a store of the result to `kind` reuses `bits`.
+    pub(super) fn widened(&mut self, bits: Reg<B16>, kind: Narrow) -> Reg<F32> {
+        let wide = widen(&mut self.builder, bits, kind);
+        let _new = self.narrow_forms.insert(wide, (bits, kind));
+        wide
     }
 }
