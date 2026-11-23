@@ -3,6 +3,7 @@
 //! whether another compute process is using it (BENCHMARKING.md,
 //! Methodology).
 
+use serde::{Deserialize, Serialize};
 use std::process::Command;
 use thiserror::Error;
 
@@ -10,15 +11,19 @@ use thiserror::Error;
 const GPU: &str = "0";
 
 /// A clock frequency in MHz.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct Megahertz(pub(crate) u32);
 
 /// A temperature in degrees Celsius.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct Celsius(pub(crate) u32);
 
-/// A reason the driver holds the clocks below their maximum.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// A reason the driver holds the clocks below their maximum, serialized
+/// as `nvidia-smi` names it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum ClockEvent {
     GpuIdle,
     SwPowerCap,
@@ -46,13 +51,39 @@ const EVENTS: [(ClockEvent, &str); 8] = [
 const CLOCK_FIELDS: [&str; 3] = ["clocks.sm", "clocks.mem", "temperature.gpu"];
 
 /// The GPU's clocks and temperature at one moment.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub(crate) struct GpuState {
+    #[serde(rename = "sm_mhz")]
     pub(crate) sm: Megahertz,
+    #[serde(rename = "mem_mhz")]
     pub(crate) memory: Megahertz,
+    #[serde(rename = "temperature_c")]
     pub(crate) temperature: Celsius,
     /// The reasons active, in `EVENTS` order.
     pub(crate) events: Vec<ClockEvent>,
+}
+
+/// Which GPU and driver ran a suite.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct GpuIdentity {
+    pub(crate) name: String,
+    pub(crate) driver: String,
+}
+
+impl GpuIdentity {
+    /// The benchmark GPU's name and driver version.
+    pub(crate) fn read() -> Result<Self, ClockError> {
+        parse_identity(&nvidia_smi(&["--query-gpu=name,driver_version", "--format=csv,noheader"])?)
+    }
+}
+
+/// The identity in one line of `--query-gpu=name,driver_version` output.
+fn parse_identity(line: &str) -> Result<GpuIdentity, ClockError> {
+    let (name, driver) = line.trim().split_once(", ").ok_or_else(|| ClockError::Field {
+        field: "name,driver_version",
+        value: line.trim().to_owned(),
+    })?;
+    Ok(GpuIdentity { name: name.to_owned(), driver: driver.to_owned() })
 }
 
 /// A compute process using the GPU.
@@ -168,8 +199,8 @@ fn list(processes: &[ComputeProcess]) -> String {
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod tests {
     use super::{
-        Celsius, ClockError, ClockEvent, ComputeProcess, GpuState, Megahertz, clocks_held,
-        other_processes, parse_state,
+        Celsius, ClockError, ClockEvent, ComputeProcess, GpuIdentity, GpuState, Megahertz,
+        clocks_held, other_processes, parse_identity, parse_state,
     };
 
     /// `nvidia-smi`'s answer on an idle RTX 4060 Ti.
@@ -224,6 +255,18 @@ mod tests {
     }
 
     #[test]
+    fn the_identity_is_the_gpus_name_and_driver() {
+        let identity = parse_identity("NVIDIA GeForce RTX 4060 Ti, 595.112.07\n").unwrap();
+
+        let expected = GpuIdentity {
+            name: "NVIDIA GeForce RTX 4060 Ti".to_owned(),
+            driver: "595.112.07".to_owned(),
+        };
+        assert_eq!(identity, expected);
+        assert!(parse_identity("no comma").is_err());
+    }
+
+    #[test]
     fn clocks_hold_only_if_both_are_unchanged() {
         assert!(clocks_held(&state(2520, 9001), &state(2520, 9001)));
         assert!(!clocks_held(&state(2520, 9001), &state(2505, 9001)));
@@ -251,7 +294,7 @@ mod tests {
 #[cfg(all(test, feature = "gpu"))]
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod gpu {
-    use super::{ClockError, GpuState, ensure_idle};
+    use super::{ClockError, GpuIdentity, GpuState, ensure_idle};
     use ptxc_cuda::{DeviceOrdinal, Driver};
     use std::io::{BufRead, BufReader, Write};
     use std::process::{Command, Stdio};
@@ -272,6 +315,7 @@ mod gpu {
     #[test]
     fn the_gpu_reports_its_clocks_and_a_gpu_another_process_uses_is_refused() {
         let state = GpuState::read().unwrap();
+        let identity = GpuIdentity::read().unwrap();
         ensure_idle().unwrap();
         let mut child = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "clocks::gpu::hold_a_context_until_stdin_closes"])
@@ -288,6 +332,7 @@ mod gpu {
         drop(child.stdin.take());
         let _status = child.wait().unwrap();
         assert!(state.sm.0 > 0 && state.memory.0 > 0, "{state:?}");
+        assert!(identity.name.starts_with("NVIDIA"), "{identity:?}");
         let Err(ClockError::Busy(others)) = busy else { panic!("{busy:?}") };
         assert!(others.iter().any(|process| process.pid == child.id()), "{others:?}");
     }

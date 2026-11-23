@@ -842,6 +842,9 @@ dependencies = [
  "ptxc-program",
  "ptxc-runtime",
  "ptxc-target",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
