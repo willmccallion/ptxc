@@ -43,6 +43,12 @@ impl ElementCount {
         self.0
     }
 
+    /// The count as the nearest `f32`, for averages; exact below 2^24.
+    #[expect(clippy::cast_precision_loss, reason = "rounds to nearest, as an average needs")]
+    pub const fn to_f32(self) -> f32 {
+        self.0 as f32
+    }
+
     /// The bytes `self` elements of `dtype` occupy.
     pub const fn in_bytes(self, dtype: DType) -> Result<ByteSize, SizeError> {
         match self.0.checked_mul(dtype.element_size().get()) {
