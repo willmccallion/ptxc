@@ -220,3 +220,10 @@ pub(crate) fn output_line(
     let line = text.lines().map(str::trim).find(|line| line.starts_with(&prefix));
     line.unwrap_or_else(|| panic!("no definition of {name} in\n{text}"))[prefix.len()..].to_owned()
 }
+
+/// A node's input names: `data`, then each constant's name.
+pub(crate) fn input_names<'a>(data: &'a str, constants: &'a [TensorProto]) -> Vec<&'a str> {
+    std::iter::once(data)
+        .chain(constants.iter().map(|constant| constant.name.as_deref().unwrap()))
+        .collect()
+}

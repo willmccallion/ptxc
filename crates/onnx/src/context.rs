@@ -103,6 +103,11 @@ impl<'a> NodeContext<'a> {
         self.node.output.get(index).is_some_and(|name| !name.is_empty())
     }
 
+    /// How many outputs the node lists, unwanted optional ones included.
+    pub(crate) const fn output_count(&self) -> usize {
+        self.node.output.len()
+    }
+
     pub(crate) fn input_name(&self, index: usize) -> Result<&'a str, ImportError> {
         self.node
             .input
