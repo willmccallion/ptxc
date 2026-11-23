@@ -4,7 +4,9 @@
 use super::RunError;
 use super::value::{Value, round, round_int, saturate, wrap};
 use crate::compute::{BinaryOp, InfSign, UnaryOp};
+use crate::math;
 use ptxc_core::DType;
+use ptxc_core::convert::f64_to_f32;
 use ptxc_core::float::Overflow;
 use std::cmp::Ordering::{self, Equal, Greater, Less};
 
@@ -39,9 +41,9 @@ pub(super) fn unary(op: UnaryOp, value: Value, dtype: DType) -> Value {
         }
         UnaryOp::Abs => x.abs(),
         UnaryOp::Neg => -x,
-        UnaryOp::Exp => x.exp(),
+        UnaryOp::Exp => f64::from(math::exp().eval(f64_to_f32(x))),
         UnaryOp::Expm1 => x.exp_m1(),
-        UnaryOp::Log => x.ln(),
+        UnaryOp::Log => f64::from(math::log().eval(f64_to_f32(x))),
         UnaryOp::Log1p => x.ln_1p(),
         UnaryOp::Sqrt => x.sqrt(),
         UnaryOp::Reciprocal => 1.0 / x,
