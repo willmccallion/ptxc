@@ -1,6 +1,6 @@
 //! `CudaError`: the driver error name, the call that failed and its context.
 
-use ptxc_core::{ByteSize, KernelName};
+use ptxc_core::{ByteOffset, ByteSize, KernelName};
 use thiserror::Error;
 
 /// Why a CUDA operation failed.
@@ -20,6 +20,32 @@ pub enum CudaError {
         name: String,
         /// What the driver said beyond the code, such as the JIT's log.
         detail: Option<String>,
+    },
+    /// A device attribute outside the range the driver documents.
+    #[error("device attribute {attribute} is {value}, out of range")]
+    Attribute {
+        /// The attribute's number.
+        attribute: i32,
+        /// Its value.
+        value: i32,
+    },
+    /// A slice that runs past its buffer's end.
+    #[error("bytes {} to {} are past the end of a {}-byte buffer", .offset.get(), .offset.get().saturating_add(.size.get()), .buffer.get())]
+    SliceBounds {
+        /// The slice's start.
+        offset: ByteOffset,
+        /// The slice's length.
+        size: ByteSize,
+        /// The buffer's length.
+        buffer: ByteSize,
+    },
+    /// A device-to-device copy between slices of different lengths.
+    #[error("cannot copy {} bytes into {}", .from.get(), .to.get())]
+    SliceSizes {
+        /// The source's length.
+        from: ByteSize,
+        /// The destination's length.
+        to: ByteSize,
     },
     /// A kernel launched with the wrong number of arguments.
     #[error("kernel {kernel} takes {expected} arguments, but {actual} were given")]

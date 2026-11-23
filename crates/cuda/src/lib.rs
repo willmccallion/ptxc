@@ -25,11 +25,11 @@ mod stream;
 mod sys;
 
 pub use context::Context;
-pub use device::{Device, DeviceOrdinal};
+pub use device::{ComputeCapability, Device, DeviceOrdinal};
 pub use driver::Driver;
 pub use error::CudaError;
 pub use event::Event;
 pub use launch::{BlockDim, GridDim, KernelArg, Launch, Unset};
-pub use memory::DeviceBuffer;
+pub use memory::{DeviceBuffer, DeviceSlice};
 pub use module::{Function, Module};
 pub use stream::Stream;

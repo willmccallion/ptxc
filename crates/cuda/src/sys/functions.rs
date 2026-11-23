@@ -44,6 +44,8 @@ api! {
     get_error_name = c"cuGetErrorName": fn(CuResult, *mut *const c_char);
     /// `cuDeviceGet`.
     device_get = c"cuDeviceGet": fn(*mut CuDevice, c_int);
+    /// `cuDeviceGetAttribute`.
+    device_get_attribute = c"cuDeviceGetAttribute": fn(*mut c_int, c_int, CuDevice);
     /// `cuDevicePrimaryCtxRetain`.
     primary_ctx_retain = c"cuDevicePrimaryCtxRetain": fn(*mut CuContext, CuDevice);
     /// `cuDevicePrimaryCtxRelease`.
@@ -67,6 +69,8 @@ api! {
     memcpy_htod = c"cuMemcpyHtoD_v2": fn(CuDevicePtr, *const c_void, usize);
     /// `cuMemcpyDtoH`.
     memcpy_dtoh = c"cuMemcpyDtoH_v2": fn(*mut c_void, CuDevicePtr, usize);
+    /// `cuMemcpyDtoDAsync`.
+    memcpy_dtod_async = c"cuMemcpyDtoDAsync_v2": fn(CuDevicePtr, CuDevicePtr, usize, CuStream);
     /// `cuStreamCreate`.
     stream_create = c"cuStreamCreate": fn(*mut CuStream, c_uint);
     /// `cuStreamDestroy`.

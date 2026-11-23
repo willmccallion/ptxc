@@ -2,6 +2,7 @@
 
 use crate::context::Context;
 use crate::error::CudaError;
+use crate::memory::DeviceSlice;
 use crate::sys::{CU_STREAM_DEFAULT, CuStream};
 
 /// A queue of device work, destroyed on drop.
@@ -30,6 +31,28 @@ impl Stream {
             unsafe { (api.stream_create)(&raw mut raw, CU_STREAM_DEFAULT) }
         })?;
         Ok(Self { context: context.clone(), raw })
+    }
+
+    /// Queues a copy of `from`'s bytes into `to`, which must be as long,
+    /// after the work queued before it.
+    pub fn copy(&self, from: DeviceSlice<'_>, to: DeviceSlice<'_>) -> Result<(), CudaError> {
+        if !self.context.is(from.context()) || !self.context.is(to.context()) {
+            return Err(CudaError::ForeignContext("a copied buffer"));
+        }
+        if from.size() != to.size() {
+            return Err(CudaError::SliceSizes { from: from.size(), to: to.size() });
+        }
+        let bytes =
+            usize::try_from(from.size().get()).map_err(|_| CudaError::TooLarge(from.size()))?;
+        if bytes == 0 {
+            return Ok(());
+        }
+        self.context.call("cuMemcpyDtoDAsync", |api| {
+            // SAFETY: both slices lie within live allocations of this
+            // context, each `bytes` long, and the copy touches only device
+            // memory, none of which is host memory mapped into the device.
+            unsafe { (api.memcpy_dtod_async)(to.address(), from.address(), bytes, self.raw) }
+        })
     }
 
     /// Waits for everything queued on the stream to finish.

@@ -1,7 +1,7 @@
 //! Launching the vector add and timing it.
 
 use crate::{SPIN, VECTOR_ADD, context, f32_bytes, from_f32_bytes};
-use ptxc_core::{ByteSize, KernelName};
+use ptxc_core::{ByteOffset, ByteSize, KernelName};
 use ptxc_cuda::{BlockDim, Context, CudaError, Event, GridDim, Module, Stream};
 use std::time::{Duration, Instant};
 
@@ -133,4 +133,37 @@ fn events_time_the_work_between_them() {
     end.synchronize().unwrap();
 
     assert!(end.elapsed_since(&start).unwrap().get() >= 0.0);
+}
+
+/// The vector add over slices of larger buffers, offset as an arena's
+/// buffers are.
+#[test]
+fn a_kernel_reads_and_writes_through_slices() {
+    let context = context();
+    let module = context.load_ptx(VECTOR_ADD).unwrap();
+    let kernel = module.function(&KernelName::new("vector_add")).unwrap();
+    let a: Vec<f32> = (0..8_u16).map(f32::from).collect();
+    let mut arena = context.alloc(ByteSize::new(512 + 32 * 3)).unwrap();
+    let mut host = vec![0_u8; 512 + 96];
+    host[512..544].copy_from_slice(&f32_bytes(&a));
+    host[544..576].copy_from_slice(&f32_bytes(&a));
+    arena.copy_from_host(&host).unwrap();
+    let at = |offset| arena.slice(ByteOffset::new(offset), ByteSize::new(32)).unwrap();
+    let stream = context.stream().unwrap();
+
+    kernel
+        .launch()
+        .grid(GridDim::new(1, 1, 1))
+        .block(BlockDim::new(8, 1, 1))
+        .arg(at(512))
+        .arg(at(544))
+        .arg(at(576))
+        .arg(8_u32)
+        .launch(&stream)
+        .unwrap();
+    stream.synchronize().unwrap();
+
+    arena.copy_to_host(&mut host).unwrap();
+    let doubled: Vec<f32> = a.iter().map(|x| x * 2.0).collect();
+    assert_eq!(from_f32_bytes(&host[576..]), doubled);
 }
