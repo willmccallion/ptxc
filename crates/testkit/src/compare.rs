@@ -54,6 +54,17 @@ impl Tolerance {
     }
 }
 
+impl fmt::Display for Tolerance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Relative { atol, rtol } => write!(f, "atol {atol:e}, rtol {rtol:e}"),
+            Self::Steps(1) => write!(f, "within 1 step"),
+            Self::Steps(steps) => write!(f, "within {steps} steps"),
+            Self::Exact => write!(f, "exact"),
+        }
+    }
+}
+
 #[expect(clippy::cast_precision_loss, reason = "a reduction length is far below 2^53")]
 const fn wide(count: u64) -> f64 {
     count as f64
