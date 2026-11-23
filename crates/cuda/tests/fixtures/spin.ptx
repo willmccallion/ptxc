@@ -1,0 +1,22 @@
+// Busy-waits for at least `cycles` SM clock cycles, so a test can tell
+// whether the host waited for it.
+.version 7.8
+.target sm_89
+.address_size 64
+
+.visible .entry spin(
+    .param .u64 cycles
+)
+{
+    .reg .pred %p<2>;
+    .reg .b64 %rd<5>;
+
+    ld.param.u64 %rd1, [cycles];
+    mov.u64 %rd2, %clock64;
+LOOP:
+    mov.u64 %rd3, %clock64;
+    sub.s64 %rd4, %rd3, %rd2;
+    setp.lt.u64 %p1, %rd4, %rd1;
+    @%p1 bra LOOP;
+    ret;
+}
