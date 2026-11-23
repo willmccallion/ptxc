@@ -672,3 +672,33 @@ the old one.
   - The masked sum needs nothing new in schedules or codegen. The
     sequences ptxc meets are short, such as positions along a sequence
     axis. A scan schedule comes when a model needs long scans.
+
+## D44. Softmax and normalisation are chains of f32 statistics stages
+
+- **Context:** softmax and the normalisations each need two or three
+  reductions in sequence. D40 makes each reduction its own stage, and D43
+  keeps statistics in f32.
+- **Options:** one-pass statistics (Welford's variance, the online
+  softmax), or two-pass statistics, a stage per statistic; an f32 mean, or
+  a compensated one.
+- **Choice:**
+  - `Softmax` and `LogSoftmax` are three stages: the row maximum, the sum of
+    `e^(x - max)`, then the elementwise result.
+  - Layer and instance normalisation take the mean, then the inverse
+    deviation `1 / sqrt(variance + epsilon)` from squared deviations about
+    that mean, then the normalised tensor. RMS normalisation skips the mean.
+  - A statistics stage writes `LayerNormalization`'s mean and inverse
+    standard deviation outputs in their stash type, only when they are read.
+  - Inference batch normalisation is one elementwise stage.
+- **Reason:**
+  - Each stage is a plain reduction or elementwise kernel, which M2's
+    default schedules handle. Two passes are the reference's algorithm and
+    the most accurate uncompensated one.
+  - The online softmax and Welford fusion arrive with M3's `compute_at` and
+    M6's fused attention, where they save memory passes.
+  - An f32 mean rounds by half an ulp of the inputs, and normalising
+    multiplies that by up to `1 / sqrt(epsilon)` when a block barely varies.
+    That is f32's conditioning, shared by ONNX Runtime and PyTorch.
+    Compensating would cost another pass of every block for inputs that
+    are ill-conditioned anyway. The differential tests draw normalisation
+    inputs from whole numbers, which keeps them well-conditioned.

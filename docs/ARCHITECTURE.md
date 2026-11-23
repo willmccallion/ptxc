@@ -377,7 +377,8 @@ fragment layout) are caught by `cargo test`.
   (D43).
 - Each op family has one file, mirroring `ptxc-graph/src/ops`. Each produces
   `TensorExpr`s for its stages; an op with several reductions in sequence
-  (softmax, layer norm, log-sum-exp) is several stages.
+  (softmax, layer norm, log-sum-exp) is several stages, built with
+  `GroupBuilder` over f32 intermediates (D44).
 - `epilogue.rs` substitutes injective consumers into the producing stage's
   output expression. In M2 every stage is its own kernel; M3's `compute_at`
   places a stage inside another's loop nest, so a group becomes one kernel.
