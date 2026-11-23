@@ -15,7 +15,7 @@ use std::sync::Arc;
 const CASES_PER_FAMILY: usize = 6;
 
 /// What codegen does not emit yet: the remaining math programs.
-const PENDING: [&str; 8] = ["expm1", "log1p", "erf", "sin", "cos", "tanh", "pow", "truncated_rem"];
+const PENDING: [&str; 5] = ["erf", "sin", "cos", "pow", "truncated_rem"];
 
 fn from_cases(
     cases: impl Strategy<Value = (Op, Vec<HostTensor>)> + 'static,
