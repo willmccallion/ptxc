@@ -3,6 +3,8 @@
 //! directory with its seed.
 
 mod check;
+pub(super) mod export;
+pub(super) mod ort;
 
 use super::runner::Runner;
 use crate::args::{Backend as BackendArg, FuzzArgs};
@@ -19,6 +21,15 @@ use std::process::ExitCode;
 /// The exit code when a case mismatches.
 const MISMATCHED: u8 = 1;
 
+/// The backend checked beyond the interpreters: `on_runner` for the GPU,
+/// none for the interpreters alone.
+fn selected<'a>(backend: BackendArg, on_runner: &'a Backend<'a>) -> Option<&'a Backend<'a>> {
+    match backend {
+        BackendArg::Interp => None,
+        BackendArg::Gpu => Some(on_runner),
+    }
+}
+
 /// Runs `args.cases` seeds from `args.seed`, shrinking and writing every
 /// mismatch, and fails if there was one.
 pub(crate) fn run(args: &FuzzArgs) -> anyhow::Result<ExitCode> {
@@ -28,10 +39,7 @@ pub(crate) fn run(args: &FuzzArgs) -> anyhow::Result<ExitCode> {
     let end = args.seed.checked_add(args.cases).context("the seeds run past u64::MAX")?;
     let runner = Runner::new(args.backend)?;
     let on_runner = |graph: &Graph, inputs: &[_]| runner.evaluate(graph, inputs);
-    let backend: Option<&Backend<'_>> = match args.backend {
-        BackendArg::Interp => None,
-        BackendArg::Gpu => Some(&on_runner),
-    };
+    let backend = selected(args.backend, &on_runner);
     let tally = fuzz(args.seed..end, backend, &args.out)?;
     ui::stat("agreed", &tally.agreed.to_string());
     ui::stat("of them against the reference", &tally.against_reference.to_string());

@@ -114,6 +114,16 @@ right value.
   - the loop-IR interpreter;
   - the GPU runtime;
   - cached ONNX Runtime outputs, for cases exported to ONNX.
+- ONNX Runtime checks the cases the reference can (D54):
+  - `ptxc fuzz-export` writes the first such seeds as `seed-<n>/model.onnx`
+    and an input set. It skips cases with bf16 values, for which ONNX
+    Runtime's CPU provider has no kernels, and cases that take the mean of
+    no elements, which ONNX leaves undefined;
+  - `ptxc-baselines fuzz-reference` caches ONNX Runtime's outputs for
+    each, listing any case it has no kernel for;
+  - `ptxc fuzz-ort` imports each model with ptxc's own importer and checks
+    the loop interpreter against ONNX Runtime within tolerance, and the
+    backend against the loop interpreter exactly.
 - On a mismatch, `shrink.rs` tries, until nothing smaller still fails:
   - bypassing a node, its readers reading one of its operands instead;
   - dropping an input nothing reads;
@@ -180,6 +190,14 @@ uv run --project baselines ptxc-baselines images --source imagenetv2 --count 16
 uv run --project baselines ptxc-baselines random --model gpt2 --batch 1 --sequence 128 --seed 0
 uv run --project baselines ptxc-baselines reference --model resnet50 --inputs imagenetv2-16
 cargo test --release -p ptxc-testkit --test models -- --ignored
+```
+
+The fuzz cases are checked against ONNX Runtime the same way:
+
+```
+cargo run --release -p ptxc-cli -- fuzz-export --cases 1000           # data/fuzz-ort/
+uv run --project baselines ptxc-baselines fuzz-reference
+cargo run --release -p ptxc-cli -- fuzz-ort --backend gpu
 ```
 
 `random` makes MLP inputs with `--batch 4` and BERT and GPT-2 inputs with

@@ -24,6 +24,35 @@ pub(crate) enum Command {
     Conformance(ConformanceArgs),
     /// Run random graphs on every executor and shrink any mismatch.
     Fuzz(FuzzArgs),
+    /// Write fuzz cases the reference can check as ONNX models and inputs.
+    FuzzExport(FuzzExportArgs),
+    /// Check exported fuzz cases against ONNX Runtime's cached outputs.
+    FuzzOrt(FuzzOrtArgs),
+}
+
+/// `ptxc fuzz-export`'s arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct FuzzExportArgs {
+    /// The first seed tried.
+    #[arg(long, default_value_t = 0)]
+    pub(crate) seed: u64,
+    /// How many cases to write.
+    #[arg(long, default_value_t = 1000)]
+    pub(crate) cases: u64,
+    /// Where the cases are written, one directory each; new or empty.
+    #[arg(long, default_value = "data/fuzz-ort")]
+    pub(crate) out: PathBuf,
+}
+
+/// `ptxc fuzz-ort`'s arguments.
+#[derive(Debug, clap::Args)]
+pub(crate) struct FuzzOrtArgs {
+    /// The executor checked beyond the interpreters.
+    #[arg(long, value_enum)]
+    pub(crate) backend: Backend,
+    /// The exported cases.
+    #[arg(long, default_value = "data/fuzz-ort")]
+    pub(crate) dir: PathBuf,
 }
 
 /// `ptxc fuzz`'s arguments.
