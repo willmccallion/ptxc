@@ -11,8 +11,6 @@ use ptxc_onnx_proto::ModelProto;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-const NODE_TESTS: &str = "../../data/onnx/v1.22.0/node";
-
 /// The outcome of importing one test.
 enum Outcome {
     Imported,
@@ -23,7 +21,10 @@ enum Outcome {
 #[test]
 #[ignore = "needs the ONNX node tests: cargo xtask fetch onnx-tests"]
 fn every_node_test_imports_or_is_reported_unsupported() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(NODE_TESTS);
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/onnx")
+        .join(ptxc_onnx_proto::ONNX_TAG)
+        .join("node");
     let mut tests: Vec<PathBuf> = std::fs::read_dir(&root)
         .unwrap_or_else(|error| {
             panic!("{}: {error}; run `cargo xtask fetch onnx-tests`", root.display())
