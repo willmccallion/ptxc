@@ -3,3 +3,5 @@
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
 mod expressions;
+mod simplify_properties;
+mod simplify_rules;

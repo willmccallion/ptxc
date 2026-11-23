@@ -28,6 +28,13 @@ exclude_re = [
     # The driver sets the name to NULL exactly when the lookup fails, so the
     # two conditions always agree.
     "replace \\|\\| with && in error_name",
+    # Sign tests where zero cannot reach them: floor_div and floor_mod
+    # reject a zero divisor and short-circuit a zero remainder first, and a
+    # divisor range that touches zero only adds assignments where the
+    # division is undefined (interval corners at zero fail on their own).
+    "replace < with <= in (floor_div|floor_mod)",
+    "replace > with >= in (Interval::excludes_zero|modulo_bounds)",
+    "replace < with <= in (Interval::excludes_zero|modulo_bounds)",
     # OR of bit fields that cannot overlap (sign and magnitude, implicit bit and
     # mantissa, exponent and mantissa), where XOR gives the same result.
     "replace \\| with \\^ in (FloatFormat::(encode|decode_magnitude|pack)|decompose)",
