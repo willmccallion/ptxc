@@ -1,6 +1,7 @@
 //! `ptxc conformance`: runs the ONNX backend node tests.
 
 mod outcome;
+mod runner;
 
 use crate::args::ConformanceArgs;
 use crate::report::{Report, TestResult, markdown};
@@ -8,6 +9,7 @@ use crate::ui;
 use anyhow::Context;
 use ptxc_testkit::data::onnx_node_tests;
 use ptxc_testkit::onnx_tests::{TestCase, TestOp, case_dirs};
+use runner::Runner;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -26,7 +28,8 @@ pub(crate) fn run(args: &ConformanceArgs) -> anyhow::Result<ExitCode> {
     ui::header("Tests", &root.display().to_string());
     let dirs = case_dirs(&root)
         .with_context(|| format!("listing the node tests in {}", root.display()))?;
-    let results: Vec<TestResult> = dirs.iter().map(|dir| result(dir, args.backend)).collect();
+    let runner = Runner::new(args.backend)?;
+    let results: Vec<TestResult> = dirs.iter().map(|dir| result(dir, &runner)).collect();
     let report = Report::new(args.backend.name(), outcome::TOLERANCE.to_string(), results);
     write_reports(args, &report)?;
     summarise(&report);
@@ -34,7 +37,7 @@ pub(crate) fn run(args: &ConformanceArgs) -> anyhow::Result<ExitCode> {
 }
 
 /// One case's result; a case that cannot be loaded fails.
-fn result(dir: &Path, backend: crate::args::Backend) -> TestResult {
+fn result(dir: &Path, runner: &Runner) -> TestResult {
     let name = dir.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
     match TestCase::load(dir) {
         Ok(case) => TestResult {
@@ -43,7 +46,7 @@ fn result(dir: &Path, backend: crate::args::Backend) -> TestResult {
                 TestOp::Single(op) => op.clone(),
                 TestOp::Composite => "composite".to_owned(),
             },
-            outcome: outcome::of_case(&case, backend),
+            outcome: outcome::of_case(&case, runner),
         },
         Err(error) => {
             TestResult { name, op: "unknown".to_owned(), outcome: outcome::of_load_error(&error) }
