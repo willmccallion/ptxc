@@ -17,12 +17,13 @@ struct Function {
     bound_ulps: f64,
 }
 
-const FUNCTIONS: [Function; 5] = [
+const FUNCTIONS: [Function; 6] = [
     Function { name: "exp", program: math::exp, reference: f64::exp, bound_ulps: 1.06 },
     Function { name: "log", program: math::log, reference: f64::ln, bound_ulps: 0.84 },
     Function { name: "expm1", program: math::expm1, reference: f64::exp_m1, bound_ulps: 1.65 },
     Function { name: "log1p", program: math::log1p, reference: f64::ln_1p, bound_ulps: 1.44 },
     Function { name: "tanh", program: math::tanh, reference: f64::tanh, bound_ulps: 2.42 },
+    Function { name: "erf", program: math::erf, reference: libm::erf, bound_ulps: 1.03 },
 ];
 
 /// The distance from `actual` to the exact `reference`, in ulps of f32 at

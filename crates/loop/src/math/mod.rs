@@ -6,6 +6,7 @@
 
 mod builder;
 mod constants;
+mod erf;
 mod eval;
 mod exp;
 mod expm1;
@@ -29,6 +30,7 @@ static LOG: LazyLock<MathProgram> = LazyLock::new(log::log);
 static EXPM1: LazyLock<MathProgram> = LazyLock::new(expm1::expm1);
 static LOG1P: LazyLock<MathProgram> = LazyLock::new(log1p::log1p);
 static TANH: LazyLock<MathProgram> = LazyLock::new(tanh::tanh);
+static ERF: LazyLock<MathProgram> = LazyLock::new(erf::erf);
 
 /// `e^x`, within 1.06 ulps.
 pub fn exp() -> &'static MathProgram {
@@ -53,4 +55,9 @@ pub fn log1p() -> &'static MathProgram {
 /// The hyperbolic tangent, within 2.42 ulps.
 pub fn tanh() -> &'static MathProgram {
     &TANH
+}
+
+/// The error function, within 1.03 ulps.
+pub fn erf() -> &'static MathProgram {
+    &ERF
 }

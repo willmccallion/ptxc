@@ -72,3 +72,17 @@ fn tanh_meets_ieee_special_cases() {
     assert_eq!(tanh(f32::from_bits(1)), f32::from_bits(1));
     assert_eq!(tanh(-9.5), -1.0);
 }
+
+#[test]
+fn erf_meets_ieee_special_cases() {
+    let erf = |x| math::erf().eval(x);
+
+    assert!(erf(f32::NAN).is_nan());
+    assert_eq!(erf(f32::INFINITY), 1.0);
+    assert_eq!(erf(f32::NEG_INFINITY), -1.0);
+    assert_eq!(erf(0.0).to_bits(), 0.0_f32.to_bits());
+    assert_eq!(erf(-0.0).to_bits(), (-0.0_f32).to_bits());
+    assert_eq!(erf(f32::from_bits(1)), f32::from_bits(1));
+    assert_eq!(erf(3.95), 1.0);
+    assert!(erf(3.9) < 1.0);
+}
