@@ -102,3 +102,53 @@ fn inputs_of_the_wrong_count_type_or_shape_are_refused() {
     assert!(matches!(shape, RuntimeError::Input { .. }), "{shape}");
     assert_eq!(executor.evaluate(&[x()]).unwrap().len(), 1);
 }
+
+/// `softmax(relu(x w1 + b1) w2 + b2)`: a multi-node graph whose
+/// intermediates live in the arena and whose weights are constants.
+fn mlp() -> (ptxc_graph::Graph, Vec<HostTensor>) {
+    use ptxc_core::{DType, Dim, Shape};
+    use ptxc_graph::{
+        Activation, BinaryOp, GraphBuilder, Layout, Op, SoftmaxAttrs, SoftmaxKind, TensorType,
+        ValueName,
+    };
+    let shape = |dims: &[u64]| Shape::new(dims.iter().copied().map(Dim::new).collect()).unwrap();
+    let tensor = |dims: &[u64], seed: u16| {
+        let count = shape(dims).element_count().get();
+        let values: Vec<f32> = (0..u16::try_from(count).unwrap())
+            .map(|n| f32::from((n * 7 + seed) % 11).mul_add(0.125, -0.6))
+            .collect();
+        HostTensor::new(shape(dims), values.into()).unwrap()
+    };
+    let mut builder = GraphBuilder::new();
+    let x = builder.add_input(TensorType::new(DType::F32, shape(&[5, 16]), Layout::RowMajor));
+    builder.set_name(x, ValueName::new("x".into()));
+    let node =
+        |builder: &mut GraphBuilder, op, operands| builder.add_node(op, operands).unwrap()[0];
+    let (w1, b1) =
+        (builder.add_constant(tensor(&[16, 32], 1)), builder.add_constant(tensor(&[32], 2)));
+    let (w2, b2) =
+        (builder.add_constant(tensor(&[32, 10], 3)), builder.add_constant(tensor(&[10], 4)));
+    let h = node(&mut builder, Op::MatMul, vec![x, w1]);
+    let h = node(&mut builder, Op::Binary(BinaryOp::Add), vec![h, b1]);
+    let h = node(&mut builder, Op::Activation(Activation::Relu), vec![h]);
+    let o = node(&mut builder, Op::MatMul, vec![h, w2]);
+    let o = node(&mut builder, Op::Binary(BinaryOp::Add), vec![o, b2]);
+    let axis = ptxc_core::Axis::new(1);
+    let y =
+        node(&mut builder, Op::Softmax(SoftmaxAttrs { kind: SoftmaxKind::Softmax, axis }), vec![o]);
+    builder.set_name(y, ValueName::new("y".into()));
+    (builder.finish(vec![y]).unwrap(), vec![tensor(&[5, 16], 5)])
+}
+
+#[test]
+fn an_mlp_matches_the_interpreter_exactly_and_the_reference_within_tolerance() {
+    let (graph, inputs) = mlp();
+    let lowered = run_lowered(graph.clone(), &inputs, ptxc_loop::run).unwrap();
+    let reference = ptxc_interp::Interpreter::new(&graph).evaluate(&inputs).unwrap();
+
+    let actual = run_program(graph, &inputs);
+
+    assert_eq!(actual.len(), 1);
+    compare(&actual[0], &lowered[0], Tolerance::Exact).unwrap();
+    compare(&actual[0], &reference[0], Tolerance::for_dtype(ptxc_core::DType::F32)).unwrap();
+}
