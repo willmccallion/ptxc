@@ -110,3 +110,14 @@ fn iterating_by_reference_visits_each_element_in_id_order() {
 
     assert_eq!(visited, "abc");
 }
+
+#[test]
+fn the_length_counts_pushed_elements() {
+    let mut elements = IndexVec::<TestId, char>::new();
+    assert_eq!(elements.len(), 0);
+
+    let _first = elements.push('a');
+    let _second = elements.push('b');
+
+    assert_eq!(elements.len(), 2);
+}

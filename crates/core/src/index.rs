@@ -78,6 +78,11 @@ impl<I: Idx, T> IndexVec<I, T> {
         self.raw.get_mut(id.index())
     }
 
+    /// The number of elements.
+    pub const fn len(&self) -> usize {
+        self.raw.len()
+    }
+
     /// Whether the vector has no elements.
     pub const fn is_empty(&self) -> bool {
         self.raw.is_empty()
