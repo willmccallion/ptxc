@@ -44,6 +44,15 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::LayerNorm(attrs) => norm::layer_norm(cx, *attrs),
         Op::BatchNorm(attrs) => norm::batch_norm(cx, *attrs),
         Op::InstanceNorm(attrs) => norm::instance_norm(cx, *attrs),
+        Op::Reshape(target) => shape::reshape(cx, target),
+        Op::Expand(_) => shape::expand(cx),
+        Op::Transpose(attrs) => shape::transpose(cx, attrs),
+        Op::Tile(_) => shape::tile(cx),
+        Op::Concat(axis) => shape::concat(cx, *axis),
+        Op::Slice(attrs) => shape::slice(cx, attrs),
+        Op::Split(attrs) => shape::split(cx, attrs),
+        Op::Pad(attrs) => shape::pad(cx, attrs),
+        Op::Trilu(attrs) => shape::trilu(cx, *attrs),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }

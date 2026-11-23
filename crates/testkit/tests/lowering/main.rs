@@ -9,6 +9,7 @@ mod elementwise;
 mod harness;
 mod norm;
 mod reduce;
+mod shape;
 mod values;
 
 /// Property-test cases: `PROPTEST_CASES` if set, else `default`.

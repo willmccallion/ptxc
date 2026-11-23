@@ -1,0 +1,24 @@
+compute reshape_0(%in0: f32[2, 3]) {
+  %i0 = spatial 3
+  %i1 = spatial 2
+  %out0: f32[3, 2] = %in0[floormod(floordiv(%i0 * 2 + %i1, 3), 2), floormod(%i0 * 2 + %i1, 3)]
+}
+
+compute transpose_0(%in0: i8[2, 3, 4]) {
+  %i0 = spatial 4
+  %i1 = spatial 2
+  %i2 = spatial 3
+  %out0: i8[4, 2, 3] = %in0[%i1, %i2, %i0]
+}
+
+compute expand_0(%in0: bool[3]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %out0: bool[2, 3] = %in0[%i1]
+}
+
+compute tile_0(%in0: f16[0, 2]) {
+  %i0 = spatial 0
+  %i1 = spatial 6
+  %out0: f16[0, 6] = %in0[%i0, floormod(%i1, 2)]
+}
