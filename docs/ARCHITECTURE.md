@@ -420,6 +420,12 @@ fragment layout) are caught by `cargo test`.
   - `cp.async` requires sm_80 or later;
   - `ldmatrix` requires sm_75 or later;
   - FP8 `mma` requires sm_89.
+- Values are held by type: floats in f32 registers (narrower ones rounded
+  to their type after every operation, D42), 8- and 32-bit integers in
+  32-bit registers, wrapped after every operation, `i64` in 64-bit, and
+  booleans as predicates. Index arithmetic is `s64`.
+- FP8 converts in hardware, which needs PTX ISA 8.1 on `sm_89`; the
+  `sm_89` preset declares 8.4 (D50).
 - **Validation:** in tests every emitted module is assembled by ptxas
   (D11). At runtime the driver JIT-compiles the PTX (`cuModuleLoadDataEx`).
   ptxas is never on the compiler path.

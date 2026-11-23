@@ -5,3 +5,9 @@ mod instr;
 mod module;
 mod operand;
 mod reg;
+
+pub(crate) use function::{Array, Function, FunctionBuilder, Int, Signedness};
+pub(crate) use instr::{BinaryOp, Compare, CvtMode, Instr, Label, PtxType, Space, UnaryOp};
+pub use module::PtxModule;
+pub(crate) use operand::{Address, Operand, Special, Value};
+pub(crate) use reg::{B16, B32, B64, Class, F32, Pred, Reg, RegClass, RegId};

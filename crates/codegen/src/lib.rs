@@ -3,3 +3,6 @@
 mod ast;
 mod print;
 mod select;
+
+pub use ast::PtxModule;
+pub use select::{CodegenError, generate};

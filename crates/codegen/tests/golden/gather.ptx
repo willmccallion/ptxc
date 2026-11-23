@@ -1,0 +1,44 @@
+.version 8.4
+.target sm_89
+.address_size 64
+
+.visible .entry gather(
+	.param .u64 gather_param_0,
+	.param .u64 gather_param_1,
+	.param .u64 gather_param_2
+)
+{
+	.reg .b16 %h<2>;
+	.reg .b32 %r<5>;
+	.reg .b64 %rd<19>;
+	.reg .f32 %f<1>;
+	ld.param.u64 %rd0, [gather_param_0];
+	cvta.to.global.u64 %rd1, %rd0;
+	ld.param.u64 %rd2, [gather_param_1];
+	cvta.to.global.u64 %rd3, %rd2;
+	ld.param.u64 %rd4, [gather_param_2];
+	cvta.to.global.u64 %rd5, %rd4;
+	mov.u32 %r0, %ctaid.x;
+	cvt.s64.u32 %rd6, %r0;
+	mov.u32 %r1, %tid.x;
+	cvt.s64.u32 %rd7, %r1;
+	mul.lo.s64 %rd8, %rd6, 6;
+	add.s64 %rd9, %rd7, %rd8;
+	mul.lo.s64 %rd10, %rd9, 4;
+	add.s64 %rd11, %rd3, %rd10;
+	ld.global.s32 %r2, [%rd11];
+	cvt.s64.s32 %rd12, %r2;
+	mul.lo.s64 %rd13, %rd12, 2;
+	add.s64 %rd14, %rd1, %rd13;
+	ld.global.b16 %h0, [%rd14];
+	cvt.u32.u16 %r3, %h0;
+	shl.b32 %r4, %r3, 16;
+	mov.b32 %f0, %r4;
+	mul.lo.s64 %rd15, %rd6, 6;
+	add.s64 %rd16, %rd7, %rd15;
+	mul.lo.s64 %rd17, %rd16, 2;
+	add.s64 %rd18, %rd5, %rd17;
+	cvt.rn.bf16.f32 %h1, %f0;
+	st.global.b16 [%rd18], %h1;
+	ret;
+}

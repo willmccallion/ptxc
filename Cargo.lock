@@ -875,7 +875,10 @@ version = "0.1.0"
 dependencies = [
  "ptxc-core",
  "ptxc-loop",
+ "ptxc-schedule",
  "ptxc-target",
+ "ptxc-testkit",
+ "thiserror",
 ]
 
 [[package]]

@@ -61,4 +61,9 @@ exclude_re = [
     # Negating every float's ordinal keeps the distances between them, which
     # is all the comparison uses.
     "replace == with != in ordinal",
+    # The FP8 sign bit and non-finite encodings share no bits, so `|` and
+    # `^` combine them alike.
+    "replace \\| with \\^ in non_finite_on_overflow",
+    # Loop IR's type rules admit no unary operation on bool but Not.
+    "replace match guard op == UnaryOp::Not with true in Selector<'_>::unary",
 ]
