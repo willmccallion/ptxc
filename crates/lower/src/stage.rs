@@ -2,7 +2,7 @@
 //! read and write, and the builder lowering uses to make a stage.
 
 use ptxc_core::{DType, Dim, IndexVec, Shape, define_index};
-use ptxc_graph::{Graph, TensorType, ValueId};
+use ptxc_graph::{Graph, Layout, TensorType, ValueId};
 use ptxc_loop::{
     ComputeBuilder, ComputeDef, ComputeError, ComputeName, ExprId, IterVarId, TensorExpr,
     TensorName, TensorParamId, VarName,
@@ -77,6 +77,38 @@ impl LoweredGroup {
     }
 }
 
+/// Builds a group stage by stage, declaring each intermediate before the
+/// stages that write and read it.
+pub(crate) struct GroupBuilder<'g> {
+    graph: &'g Graph,
+    intermediates: IndexVec<IntermediateId, TensorType>,
+    stages: Vec<Stage>,
+}
+
+impl<'g> GroupBuilder<'g> {
+    pub(crate) const fn new(graph: &'g Graph) -> Self {
+        Self { graph, intermediates: IndexVec::new(), stages: Vec::new() }
+    }
+
+    /// A new f32 intermediate of `shape`: statistics stay in f32.
+    pub(crate) fn intermediate(&mut self, shape: &Shape) -> IntermediateId {
+        self.intermediates.push(TensorType::new(DType::F32, shape.clone(), Layout::RowMajor))
+    }
+
+    /// A stage over `shape` that may read the intermediates declared so far.
+    pub(crate) fn stage(&self, name: ComputeName, shape: &Shape) -> StageBuilder<'g> {
+        StageBuilder::new(self.graph, self.intermediates.clone(), name, shape)
+    }
+
+    pub(crate) fn push(&mut self, stage: Stage) {
+        self.stages.push(stage);
+    }
+
+    pub(crate) fn finish(self) -> LoweredGroup {
+        LoweredGroup::new(self.intermediates, self.stages)
+    }
+}
+
 /// An operand loaded at an element of the stage's output.
 #[derive(Clone, Debug)]
 pub(crate) struct Operand {
@@ -87,7 +119,7 @@ pub(crate) struct Operand {
 /// Builds a stage whose spatial axes are an output shape's dimensions.
 pub(crate) struct StageBuilder<'g> {
     graph: &'g Graph,
-    intermediates: &'g IndexVec<IntermediateId, TensorType>,
+    intermediates: IndexVec<IntermediateId, TensorType>,
     compute: ComputeBuilder,
     inputs: IndexVec<TensorParamId, Binding>,
     outputs: Vec<Binding>,
@@ -100,7 +132,7 @@ impl<'g> StageBuilder<'g> {
     /// reading graph values and `intermediates`.
     pub(crate) fn new(
         graph: &'g Graph,
-        intermediates: &'g IndexVec<IntermediateId, TensorType>,
+        intermediates: IndexVec<IntermediateId, TensorType>,
         name: ComputeName,
         shape: &Shape,
     ) -> Self {
@@ -134,7 +166,7 @@ impl<'g> StageBuilder<'g> {
         self.compute.exprs().constant(value)
     }
 
-    fn type_of(&self, binding: Binding) -> &'g TensorType {
+    fn type_of(&self, binding: Binding) -> &TensorType {
         match binding {
             Binding::Value(value) => self.graph.value(value).ty(),
             Binding::Intermediate(id) => &self.intermediates[id],
@@ -148,7 +180,7 @@ impl<'g> StageBuilder<'g> {
         {
             return tensor;
         }
-        let ty = self.type_of(binding);
+        let ty = self.type_of(binding).clone();
         let name = TensorName::new(format!("in{}", self.inputs.iter().len()));
         let tensor = self.compute.input(name, ty.dtype(), ty.shape().clone());
         let _bound = self.inputs.push(binding);
