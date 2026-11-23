@@ -529,3 +529,24 @@ the old one.
 - **Consequence:** copies are synchronous and run on the legacy default
   stream, so ptxc's streams are created blocking (`CU_STREAM_DEFAULT`) to
   keep copies ordered after the kernels queued before them.
+
+## D38. A range-aware index simplifier, property-tested with proptest
+
+- **Context:** split and fuse produce index arithmetic such as
+  `floordiv(io*4 + ii, 4)`, which is `io` only because `0 <= ii < 4`.
+- **Options:** algebraic simplification only (folding, identities, like
+  terms), or also TVM's floor division and modulo rules, which need each
+  variable's range; for the property tests, `proptest` or a seeded
+  generator of our own, as D13 has for graphs.
+- **Choice:** range-aware simplification, with ranges passed in as
+  `VarRanges`; random expressions from `proptest`, a dev-dependency of
+  `ptxc-loop` only.
+- **Reason:** without the range rules every split and fuse leaves a
+  division and a modulo in the index, which M3's kernels pay for in every
+  thread. proptest generates expression trees from a strategy and shrinks a
+  failure to a minimal expression, which a hand-written generator would
+  have to reimplement; D13's generator stays for graphs, whose shrinking is
+  domain-specific.
+- **Properties:** for every expression and every assignment within the
+  ranges under which it evaluates, the simplified expression evaluates to
+  the same value; and simplifying twice changes nothing.
