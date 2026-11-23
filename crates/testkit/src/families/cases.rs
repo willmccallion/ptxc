@@ -5,7 +5,7 @@ use super::values::{Domain, operand_dims, output_dims, shape, tensor};
 use proptest::prelude::*;
 use proptest::sample::select;
 use ptxc_core::{DType, HostTensor};
-use ptxc_graph::{Graph, GraphBuilder, Layout, Op, TensorType, TypeRule};
+use ptxc_graph::{Graph, GraphBuilder, Layout, Op, TensorType, TypeRule, ValueName};
 
 /// How an operand's shape relates to the output's.
 #[derive(Clone, Copy, Debug)]
@@ -109,10 +109,11 @@ pub fn graphs(cases: Vec<Case>) -> impl Strategy<Value = (Graph, Vec<HostTensor>
         .prop_map(|(op, inputs)| (single_node(op, &inputs), inputs))
 }
 
-/// A graph whose one node is `op` on inputs typed as `inputs`.
+/// A graph whose one node is `op` on inputs typed as `inputs`, the inputs
+/// named `x0`, `x1`, ... and the outputs `y0`, `y1`, ...
 pub fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
     let mut builder = GraphBuilder::new();
-    let operands = inputs
+    let operands: Vec<_> = inputs
         .iter()
         .map(|input| {
             builder.add_input(TensorType::new(
@@ -122,6 +123,12 @@ pub fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
             ))
         })
         .collect();
+    for (n, &operand) in operands.iter().enumerate() {
+        builder.set_name(operand, ValueName::new(format!("x{n}")));
+    }
     let outputs = builder.add_node(op, operands).unwrap();
+    for (n, &output) in outputs.iter().enumerate() {
+        builder.set_name(output, ValueName::new(format!("y{n}")));
+    }
     builder.finish(outputs).unwrap()
 }
