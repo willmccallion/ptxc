@@ -71,3 +71,37 @@ def test_the_cache_is_keyed_by_model_input_set_and_tool_version(tmp_path, monkey
     assert manifest["provider"] == "CPUExecutionProvider"
     assert manifest["graph_optimization"] == "ORT_DISABLE_ALL"
     assert manifest["outputs"] == ["y"]
+
+
+def fuzz_case(directory, dtype, x):
+    """An exported fuzz case: `y = relu(x)` on `x`, of ONNX type `dtype`."""
+    graph = helper.make_graph(
+        [helper.make_node("Relu", ["x"], ["y"])],
+        "case",
+        [helper.make_tensor_value_info("x", dtype, list(x.shape))],
+        [helper.make_tensor_value_info("y", dtype, list(x.shape))],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 21)], ir_version=10)
+    directory.mkdir(parents=True)
+    onnx.save(model, directory / reference.CASE_MODEL)
+    inputs.write_set(directory / reference.CASE_INPUTS, [x], {"case": directory.name})
+
+
+def test_every_fuzz_case_is_cached_and_cases_without_a_kernel_are_listed(tmp_path, monkeypatch):
+    monkeypatch.setattr(reference, "REFERENCE", tmp_path / "reference")
+    cases = tmp_path / "cases"
+    fuzz_case(cases / "seed-1", TensorProto.FLOAT, np.array([-1.0, 2.0], dtype=np.float32))
+    bf16 = numpy_helper.to_array(helper.make_tensor("x", TensorProto.BFLOAT16, [2], [1.0, -2.0]))
+    fuzz_case(cases / "seed-2", TensorProto.BFLOAT16, bf16)
+
+    cached, without_kernel = reference.cache_cases(cases)
+
+    assert cached == 1
+    assert [reason.split(":")[0] for reason in without_kernel] == ["seed-2"]
+    model, set_dir = (
+        cases / "seed-1" / reference.CASE_MODEL,
+        cases / "seed-1" / reference.CASE_INPUTS,
+    )
+    np.testing.assert_array_equal(
+        read_output(reference.reference_dir(model, set_dir), 0), [0.0, 2.0]
+    )

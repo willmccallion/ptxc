@@ -9,12 +9,18 @@ from pathlib import Path
 
 import onnxruntime as ort
 from onnx import numpy_helper
+from onnxruntime.capi.onnxruntime_pybind11_state import NotImplemented as NoKernel
 
 from .inputs import input_set_id, read_set
 from .paths import REFERENCE
 
 #: The file each reference's provenance is written to.
 MANIFEST = "manifest.json"
+
+#: Each exported fuzz case's model and input set, in its directory, as
+#: `ptxc fuzz-export` writes them (D54).
+CASE_MODEL = "model.onnx"
+CASE_INPUTS = "inputs"
 
 #: No graph rewrites, so ONNX Runtime computes the model as written.
 OPTIMIZATION = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
@@ -73,3 +79,19 @@ def cache(model: Path, inputs: Path) -> Path:
     }
     (out / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
     return out
+
+
+def cache_cases(directory: Path) -> tuple[int, list[str]]:
+    """Caches ONNX Runtime's outputs for every exported fuzz case under
+    `directory`. Returns how many were cached, and each case ONNX Runtime has
+    no kernel for, with its reason. Any other failure is raised."""
+    cached = 0
+    without_kernel = []
+    for case in sorted(path for path in directory.iterdir() if path.is_dir()):
+        try:
+            cache(case / CASE_MODEL, case / CASE_INPUTS)
+        except NoKernel as error:
+            without_kernel.append(f"{case.name}: {error}")
+            continue
+        cached += 1
+    return cached, without_kernel
