@@ -52,8 +52,8 @@ pub(super) fn unary(op: UnaryOp, value: Value, dtype: DType) -> Value {
         UnaryOp::Round => x.round_ties_even(),
         UnaryOp::Sign => sign(x),
         UnaryOp::Erf => f64::from(math::erf().eval(f64_to_f32(x))),
-        UnaryOp::Sin => x.sin(),
-        UnaryOp::Cos => x.cos(),
+        UnaryOp::Sin => f64::from(math::sin().eval(f64_to_f32(x))),
+        UnaryOp::Cos => f64::from(math::cos().eval(f64_to_f32(x))),
         UnaryOp::Tanh => f64::from(math::tanh().eval(f64_to_f32(x))),
         UnaryOp::Not => x,
     };
