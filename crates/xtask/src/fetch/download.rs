@@ -1,14 +1,12 @@
 //! Downloading an archive into memory and hashing it.
 
+use crate::pin::ArchiveSize;
 use sha2::{Digest, Sha256};
 
-/// 64 MiB, larger than any archive we pin; a response past it is an error,
-/// not a truncated archive.
-const MAX_ARCHIVE_BYTES: u64 = 67_108_864;
-
-/// The body of a GET of `url`; HTTP error statuses are errors.
-pub(super) fn download(url: &str) -> Result<Vec<u8>, ureq::Error> {
-    ureq::get(url).call()?.body_mut().with_config().limit(MAX_ARCHIVE_BYTES).read_to_vec()
+/// The body of a GET of `url`, at most `limit`; HTTP error statuses, and a
+/// body past the limit, are errors rather than a truncated archive.
+pub(super) fn download(url: &str, limit: ArchiveSize) -> Result<Vec<u8>, ureq::Error> {
+    ureq::get(url).call()?.body_mut().with_config().limit(limit.0).read_to_vec()
 }
 
 /// The SHA-256 of `bytes` in lowercase hex.

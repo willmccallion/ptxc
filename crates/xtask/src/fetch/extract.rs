@@ -1,6 +1,7 @@
-//! Unpacking one directory of a gzipped tarball.
+//! Unpacking one directory of a tarball.
 
 use super::FetchError;
+use crate::pin::Packing;
 use flate2::read::GzDecoder;
 use std::io::Read;
 use std::path::{Component, Path};
@@ -13,15 +14,20 @@ enum Unpacked {
     Directory,
 }
 
-/// Unpacks every entry under `prefix` in the gzipped tarball `archive` into
+/// Unpacks every entry under `prefix` in the tarball `archive` into
 /// `destination`, with `prefix` removed from its path. Entries elsewhere are
 /// skipped; it is an error if no file is under `prefix`.
 pub(super) fn extract_prefix(
     archive: &[u8],
+    packing: Packing,
     prefix: &'static str,
     destination: &Path,
 ) -> Result<(), FetchError> {
-    let mut tarball = Archive::new(GzDecoder::new(archive));
+    let reader: Box<dyn Read + '_> = match packing {
+        Packing::TarGz => Box::new(GzDecoder::new(archive)),
+        Packing::Tar => Box::new(archive),
+    };
+    let mut tarball = Archive::new(reader);
     let mut has_files = false;
     for entry in tarball.entries().map_err(FetchError::ReadArchive)? {
         let mut entry = entry.map_err(FetchError::ReadArchive)?;
@@ -80,7 +86,7 @@ mod tests {
         ]);
         let destination = tempfile::tempdir().unwrap();
 
-        extract_prefix(&archive, PREFIX, destination.path()).unwrap();
+        extract_prefix(&archive, Packing::TarGz, PREFIX, destination.path()).unwrap();
 
         let read = |path: &str| std::fs::read_to_string(destination.path().join(path)).unwrap();
         assert_eq!(read("test_abs/model.onnx"), "model");
@@ -96,7 +102,7 @@ mod tests {
         ]);
         let destination = tempfile::tempdir().unwrap();
 
-        extract_prefix(&archive, PREFIX, destination.path()).unwrap();
+        extract_prefix(&archive, Packing::TarGz, PREFIX, destination.path()).unwrap();
 
         let mut names: Vec<_> = std::fs::read_dir(destination.path())
             .unwrap()
@@ -111,7 +117,8 @@ mod tests {
         let archive = tarball(&[(&format!("{PREFIX}/../../escaped"), "x")]);
         let destination = tempfile::tempdir().unwrap();
 
-        let error = extract_prefix(&archive, PREFIX, destination.path()).unwrap_err();
+        let error =
+            extract_prefix(&archive, Packing::TarGz, PREFIX, destination.path()).unwrap_err();
 
         assert!(matches!(error, FetchError::UnsafePath(_)), "{error}");
     }
@@ -127,7 +134,8 @@ mod tests {
         let archive = builder.into_inner().unwrap().finish().unwrap();
         let destination = tempfile::tempdir().unwrap();
 
-        let error = extract_prefix(&archive, PREFIX, destination.path()).unwrap_err();
+        let error =
+            extract_prefix(&archive, Packing::TarGz, PREFIX, destination.path()).unwrap_err();
 
         assert!(matches!(error, FetchError::UnsupportedEntry { .. }), "{error}");
     }
@@ -137,7 +145,8 @@ mod tests {
         let archive = tarball(&[("onnx-1.22.0/setup.py", "setup")]);
         let destination = tempfile::tempdir().unwrap();
 
-        let error = extract_prefix(&archive, PREFIX, destination.path()).unwrap_err();
+        let error =
+            extract_prefix(&archive, Packing::TarGz, PREFIX, destination.path()).unwrap_err();
 
         assert!(matches!(error, FetchError::NothingUnderPrefix { .. }), "{error}");
     }
@@ -146,8 +155,27 @@ mod tests {
     fn rejects_a_corrupt_archive() {
         let destination = tempfile::tempdir().unwrap();
 
-        let error = extract_prefix(b"not gzip", PREFIX, destination.path()).unwrap_err();
+        let error =
+            extract_prefix(b"not gzip", Packing::TarGz, PREFIX, destination.path()).unwrap_err();
 
         assert!(matches!(error, FetchError::ReadArchive(_)), "{error}");
+    }
+
+    #[test]
+    fn unpacks_a_plain_tarball() {
+        let mut builder = Builder::new(Vec::new());
+        let mut header = file_header(&format!("{PREFIX}/test_abs/model.onnx"), EntryType::Regular);
+        header.set_size(5);
+        header.set_cksum();
+        builder.append(&header, &b"model"[..]).unwrap();
+        let archive = builder.into_inner().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+
+        extract_prefix(&archive, Packing::Tar, PREFIX, destination.path()).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(destination.path().join("test_abs/model.onnx")).unwrap(),
+            "model"
+        );
     }
 }

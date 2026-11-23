@@ -12,11 +12,11 @@ exclude_re = [
     # logic lives in functions that are tested.
     "replace main -> ExitCode with",
     "delete match arm .* in main",
-    # The HTTP download needs the network; the fetch was checked by hand
-    # against PyPI.
+    # The HTTP download needs the network; it was checked by hand against PyPI
+    # and Hugging Face.
     "replace download -> Result<Vec<u8>, ureq::Error>",
-    # Downloads, then calls code that is tested; the fetch was checked by hand.
-    "replace onnx_tests -> Result<\\(\\), FetchError> with Ok\\(\\(\\)\\)",
+    # Download, then call code that is tested; each fetch was checked by hand.
+    "replace (onnx_tests|imagenet_v2|fetch) -> Result<\\(\\), FetchError> with Ok\\(\\(\\)\\)",
     # OR of bit fields that cannot overlap (sign and magnitude, implicit bit and
     # mantissa, exponent and mantissa), where XOR gives the same result.
     "replace \\| with \\^ in (FloatFormat::(encode|decode_magnitude|pack)|decompose)",
