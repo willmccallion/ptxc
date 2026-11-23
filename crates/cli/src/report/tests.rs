@@ -92,4 +92,8 @@ fn reasons_and_failures_read_as_sentences() {
     assert_eq!(count.to_string(), "data set 1: 1 outputs where 2 were expected");
     assert_eq!(Failure::Load { message: "x".to_owned() }.to_string(), "loading: x");
     assert_eq!(Failure::Import { message: "x".to_owned() }.to_string(), "importing: x");
+    assert_eq!(
+        Failure::LoopInterpreter { data_set: 2, message: "x".to_owned() }.to_string(),
+        "data set 2: the GPU differs from the loop interpreter: x"
+    );
 }

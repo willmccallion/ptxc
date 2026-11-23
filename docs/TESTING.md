@@ -86,6 +86,10 @@ right value.
   `|actual - expected| <= atol + rtol * |expected|`.
 - The GPU report is diffed against the interpreter report. Any test that
   passes on one backend and not the other is a bug.
+- On the GPU, each data set's outputs must also match the loop
+  interpreter exactly, running the same lowered stages, before they are
+  compared with the expected ones. A difference is a
+  `loop_interpreter` failure.
 
 ## Differential fuzzing
 
