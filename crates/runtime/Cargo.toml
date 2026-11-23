@@ -26,6 +26,7 @@ proptest.workspace = true
 ptxc-codegen.workspace = true
 ptxc-compiler.workspace = true
 ptxc-graph.workspace = true
+ptxc-interp.workspace = true
 ptxc-loop.workspace = true
 ptxc-schedule.workspace = true
 ptxc-testkit.workspace = true
