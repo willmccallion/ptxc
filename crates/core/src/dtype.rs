@@ -63,6 +63,11 @@ impl DType {
         Self::ALL.into_iter().find(|dtype| dtype.name() == name)
     }
 
+    /// Whether the type is a floating-point format, FP8 included.
+    pub const fn is_float(self) -> bool {
+        matches!(self, Self::F32 | Self::F16 | Self::Bf16 | Self::F8E4M3Fn | Self::F8E5M2)
+    }
+
     /// The bytes one element occupies in device memory and in ONNX
     /// `raw_data`.
     pub const fn element_size(self) -> ByteSize {
