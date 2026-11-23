@@ -13,7 +13,7 @@ fn target() -> Target {
 }
 
 fn context() -> Context {
-    Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context().unwrap()
+    Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap().primary_context()
 }
 
 /// `compute` under its default schedule.

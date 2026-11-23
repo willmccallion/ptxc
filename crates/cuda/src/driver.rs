@@ -34,13 +34,13 @@ impl Driver {
         }
     }
 
-    /// The device numbered `ordinal`.
+    /// The device numbered `ordinal`, its primary context retained.
     pub fn device(self, ordinal: DeviceOrdinal) -> Result<Device, CudaError> {
         let mut raw: CuDevice = 0;
         // SAFETY: `raw` is a valid place for the driver to write the device.
         let status = unsafe { (self.api.device_get)(&raw mut raw, i32::from(ordinal.get())) };
         check(self.api, "cuDeviceGet", status)?;
-        Ok(Device::new(self.api, raw))
+        Device::new(self.api, raw)
     }
 }
 

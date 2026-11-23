@@ -35,11 +35,16 @@ pub struct ComputeCapability {
     pub minor: u8,
 }
 
-/// A GPU.
-#[derive(Clone, Copy)]
+/// A GPU, holding its primary context retained for as long as it lives.
+// NOTE: the driver destroys a primary context when its last retain is
+// released, and creating one costs far more than a launch. As the CUDA
+// runtime API keeps it alive until a reset, a device keeps it, so programs
+// loaded and dropped one after another share one context.
+#[derive(Clone)]
 pub struct Device {
     api: &'static Api,
     raw: CuDevice,
+    context: Context,
 }
 
 impl fmt::Debug for Device {
@@ -49,8 +54,8 @@ impl fmt::Debug for Device {
 }
 
 impl Device {
-    pub(crate) const fn new(api: &'static Api, raw: CuDevice) -> Self {
-        Self { api, raw }
+    pub(crate) fn new(api: &'static Api, raw: CuDevice) -> Result<Self, CudaError> {
+        Ok(Self { api, raw, context: Context::retain_primary(api, raw)? })
     }
 
     /// The device's compute capability, such as 8.9.
@@ -72,9 +77,41 @@ impl Device {
         u8::try_from(value).map_err(|_| CudaError::Attribute { attribute, value })
     }
 
-    /// The device's primary context, retained until every handle made from
-    /// it is dropped.
-    pub fn primary_context(&self) -> Result<Context, CudaError> {
-        Context::retain_primary(self.api, self.raw)
+    /// The device's primary context.
+    pub fn primary_context(&self) -> Context {
+        self.context.clone()
+    }
+}
+
+#[cfg(all(test, feature = "gpu"))]
+#[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
+mod tests {
+    use super::DeviceOrdinal;
+    use crate::driver::Driver;
+    use crate::sys::{Api, CuDevice};
+    use std::ffi::{c_int, c_uint};
+
+    fn is_context_active(api: &Api, raw: CuDevice) -> bool {
+        let mut flags: c_uint = 0;
+        let mut active: c_int = 0;
+        // SAFETY: `flags` and `active` are valid places for the driver to
+        // write, and `raw` is a device the driver returned.
+        let status = unsafe { (api.primary_ctx_get_state)(raw, &raw mut flags, &raw mut active) };
+        assert_eq!(status, crate::sys::CUDA_SUCCESS);
+        active != 0
+    }
+
+    #[test]
+    fn the_primary_context_lives_exactly_as_long_as_the_device() {
+        let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
+        let (api, raw) = (device.api, device.raw);
+
+        drop(device.primary_context());
+        let active_with_device = is_context_active(api, raw);
+        drop(device);
+        let active_after_device = is_context_active(api, raw);
+
+        assert!(active_with_device);
+        assert!(!active_after_device);
     }
 }
