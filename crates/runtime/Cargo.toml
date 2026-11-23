@@ -20,6 +20,12 @@ ptxc-target.workspace = true
 ptxc-program.workspace = true
 ptxc-cuda.workspace = true
 
+[dev-dependencies]
+ptxc-codegen.workspace = true
+ptxc-loop.workspace = true
+ptxc-schedule.workspace = true
+ptxc-testkit.workspace = true
+
 [features]
 # Compiles the tests that need a GPU; without a GPU they fail rather than skip.
 gpu = []
