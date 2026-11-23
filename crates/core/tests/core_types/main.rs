@@ -16,4 +16,5 @@ mod quant;
 mod shape;
 mod size;
 mod tensor;
+mod tensor_bytes;
 mod time;
