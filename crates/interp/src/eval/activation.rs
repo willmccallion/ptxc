@@ -44,10 +44,7 @@ fn apply(activation: Activation, x: f32) -> f32 {
                 alpha.get() * x.exp_m1()
             }
         }
-        Activation::Celu { alpha } => {
-            let alpha = alpha.get();
-            x.max(0.0) + (alpha * (x / alpha).exp_m1()).min(0.0)
-        }
+        Activation::Celu { alpha } => celu(x, alpha.get()),
         Activation::ThresholdedRelu { alpha } => {
             if x > alpha.get() {
                 x
@@ -60,6 +57,15 @@ fn apply(activation: Activation, x: f32) -> f32 {
             alpha.get().mul_add(x, beta.get()).clamp(0.0, 1.0)
         }
     }
+}
+
+/// `max(x, 0) + min(alpha * (e^(x / alpha) - 1), 0)`, passing NaN through
+/// as NumPy's `maximum` and `minimum` do, where `f32::max` would drop it.
+fn celu(x: f32, alpha: f32) -> f32 {
+    if x.is_nan() {
+        return x;
+    }
+    x.max(0.0) + (alpha * (x / alpha).exp_m1()).min(0.0)
 }
 
 /// `max(x, 0)`, passing NaN through.
