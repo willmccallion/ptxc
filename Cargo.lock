@@ -1014,6 +1014,7 @@ dependencies = [
  "ptxc-core",
  "ptxc-cuda",
  "ptxc-graph",
+ "ptxc-interp",
  "ptxc-loop",
  "ptxc-program",
  "ptxc-schedule",
