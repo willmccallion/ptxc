@@ -390,6 +390,8 @@ fragment layout) are caught by `cargo test`.
 
 - **In:** `ComputeDef` and `Target`. **Out:** a `Schedule<Validated>`, from
   a `Trace` replayed from the tuning database, or from `default.rs`.
+  In M2, `default_schedule` gives injective stages blocks of 256 threads and
+  reductions a block per output row with a shared-memory tree (D49).
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's

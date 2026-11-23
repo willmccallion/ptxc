@@ -795,3 +795,24 @@ the old one.
   - The scores take memory quadratic in the sequence, as an unfused
     attention does everywhere. M6's fused kernel removes it, and with it
     the recomputation for the QK output.
+
+## D49. M2's default schedules are two fixed rules
+
+- **Context:** every stage needs a schedule before codegen. The tuned
+  schedules come later: tensor-core GEMM and convolution in M3, search over
+  sketches in M5.
+- **Options:** the `ScheduleRule` trait now, with sketches whose knobs are
+  fixed, or plain functions until there are knobs to search.
+- **Choice:** `default_schedule` picks one of two plain functions.
+  - An injective stage fuses its loops and splits them into blocks of 256
+    threads, or fewer for a smaller output, so consecutive threads write
+    consecutive elements.
+  - A reduction binds its fused output rows to blocks. It fuses its
+    reduction loops and splits them so `threadIdx.x` takes consecutive
+    elements, with a shared-memory tree combining the threads.
+  - An empty output stays serial, as does an empty row's reduction: an
+    empty loop cannot be bound.
+- **Reason:** a trait whose only implementations have no knobs would fix
+  an interface before the search that shapes it. These two rules make every
+  stage a valid GPU kernel. The differential tests run every lowered op
+  family under them in the loop interpreter, races and barriers checked.
