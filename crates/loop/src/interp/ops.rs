@@ -40,7 +40,9 @@ pub(super) fn unary(op: UnaryOp, value: Value, dtype: DType) -> Value {
         UnaryOp::Abs => x.abs(),
         UnaryOp::Neg => -x,
         UnaryOp::Exp => x.exp(),
+        UnaryOp::Expm1 => x.exp_m1(),
         UnaryOp::Log => x.ln(),
+        UnaryOp::Log1p => x.ln_1p(),
         UnaryOp::Sqrt => x.sqrt(),
         UnaryOp::Reciprocal => 1.0 / x,
         UnaryOp::Floor => x.floor(),
@@ -148,6 +150,7 @@ fn integer_binary(op: BinaryOp, a: i128, b: i128, dtype: DType) -> Result<Value,
         }
         BinaryOp::Max => a.max(b),
         BinaryOp::Min => a.min(b),
+        BinaryOp::Pow => i128::from(ptxc_core::arith::wrapping_pow(narrow(a), narrow(b))),
         BinaryOp::FlooredRem => {
             let (a, b) = (narrow(a), narrow(b));
             i128::from(crate::expr::floor_mod(a, b).ok_or(RunError::DivisionByZero)?)

@@ -11,8 +11,12 @@ pub enum UnaryOp {
     Neg,
     /// `e^x`.
     Exp,
+    /// `e^x - 1`, accurate near zero.
+    Expm1,
     /// The natural logarithm.
     Log,
+    /// `ln(1 + x)`, accurate near zero.
+    Log1p,
     /// The square root.
     Sqrt,
     /// `1 / x`.
@@ -63,7 +67,8 @@ pub enum BinaryOp {
     Mul,
     /// `a / b`; integers truncate toward zero.
     Div,
-    /// `a` to the power `b`, on floats.
+    /// `a` to the power `b`. On integers, by repeated squaring, wrapping;
+    /// a negative exponent truncates the float power toward zero.
     Pow,
     /// The larger; NaN if either is NaN, as NumPy's `maximum`.
     Max,
@@ -131,7 +136,9 @@ impl UnaryOp {
             Self::Abs => "abs",
             Self::Neg => "neg",
             Self::Exp => "exp",
+            Self::Expm1 => "expm1",
             Self::Log => "log",
+            Self::Log1p => "log1p",
             Self::Sqrt => "sqrt",
             Self::Reciprocal => "reciprocal",
             Self::Floor => "floor",

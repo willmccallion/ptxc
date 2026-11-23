@@ -101,7 +101,8 @@ fn arithmetic_keeps_its_type_and_comparisons_give_booleans() {
 #[test]
 fn some_binary_ops_take_one_kind_of_number() {
     assert_eq!(binary(BinaryOp::Pow, DType::F32), Ok(DType::F32));
-    assert!(binary(BinaryOp::Pow, DType::I32).is_err());
+    assert_eq!(binary(BinaryOp::Pow, DType::I32), Ok(DType::I32));
+    assert!(binary(BinaryOp::Pow, DType::Bool).is_err());
     assert_eq!(binary(BinaryOp::FlooredRem, DType::I64), Ok(DType::I64));
     assert!(binary(BinaryOp::FlooredRem, DType::F32).is_err());
     assert_eq!(binary(BinaryOp::And, DType::Bool), Ok(DType::Bool));

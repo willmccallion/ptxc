@@ -43,6 +43,8 @@ fn float_unary_ops_round_to_their_type() {
         (UnaryOp::Abs, -2.5, 2.5),
         (UnaryOp::Neg, 1.5, -1.5),
         (UnaryOp::Exp, 0.0, 1.0),
+        (UnaryOp::Expm1, 0.0, 0.0),
+        (UnaryOp::Log1p, 0.0, 0.0),
         (UnaryOp::Log, 1.0, 0.0),
         (UnaryOp::Sqrt, 4.0, 2.0),
         (UnaryOp::Reciprocal, 4.0, 0.25),
@@ -61,6 +63,16 @@ fn float_unary_ops_round_to_their_type() {
         assert_eq!(unary(op, f(input), DType::F32), f(expected), "{op:?}({input})");
     }
     assert_eq!(unary(UnaryOp::Exp, f(1.0), DType::F16), f(2.718_75));
+    let tiny = 1e-10;
+    assert_eq!(
+        unary(UnaryOp::Expm1, f(tiny), DType::F32),
+        round(tiny.exp_m1(), DType::F32, Overflow::NonFinite)
+    );
+    assert_eq!(
+        unary(UnaryOp::Log1p, f(tiny), DType::F32),
+        round(tiny.ln_1p(), DType::F32, Overflow::NonFinite)
+    );
+    assert_ne!(unary(UnaryOp::Expm1, f(tiny), DType::F32), f(0.0));
     assert!(is_nan(unary(UnaryOp::Sign, f(f64::NAN), DType::F32)));
     let negative_zero = unary(UnaryOp::Sign, f(-0.0), DType::F32);
     assert!(matches!(negative_zero, Value::Float(x) if x == 0.0 && x.is_sign_negative()));
@@ -109,6 +121,9 @@ fn integer_binary_ops_wrap_and_truncate() {
     assert_eq!(op(BinaryOp::Mul, 1 << 20, 1 << 12, DType::I32), i(0));
     assert_eq!(op(BinaryOp::Mul, 6, 7, DType::I32), i(42));
     assert_eq!(op(BinaryOp::Div, -7, 2, DType::I32), i(-3));
+    assert_eq!(op(BinaryOp::Pow, 3, 5, DType::I32), i(243));
+    assert_eq!(op(BinaryOp::Pow, 2, 31, DType::I32), i(i64::from(i32::MIN)));
+    assert_eq!(op(BinaryOp::Pow, 2, -1, DType::I32), i(0));
     assert_eq!(op(BinaryOp::Max, -7, 2, DType::I32), i(2));
     assert_eq!(op(BinaryOp::Min, -7, 2, DType::I32), i(-7));
     assert_eq!(op(BinaryOp::FlooredRem, -7, 2, DType::I32), i(1));

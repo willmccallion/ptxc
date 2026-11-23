@@ -34,7 +34,9 @@ pub(crate) const fn unary(op: UnaryOp, dtype: DType) -> Result<DType, ComputeErr
             accept(is_numeric(dtype), op.name(), dtype, dtype)
         }
         UnaryOp::Exp
+        | UnaryOp::Expm1
         | UnaryOp::Log
+        | UnaryOp::Log1p
         | UnaryOp::Sqrt
         | UnaryOp::Reciprocal
         | UnaryOp::Floor
@@ -64,8 +66,8 @@ pub(crate) fn binary(op: BinaryOp, lhs: DType, rhs: DType) -> Result<DType, Comp
         | BinaryOp::Div
         | BinaryOp::Max
         | BinaryOp::Min
-        | BinaryOp::TruncatedRem => accept(is_numeric(lhs), name, lhs, lhs),
-        BinaryOp::Pow => accept(is_float(lhs), name, lhs, lhs),
+        | BinaryOp::TruncatedRem
+        | BinaryOp::Pow => accept(is_numeric(lhs), name, lhs, lhs),
         BinaryOp::FlooredRem => accept(is_integer(lhs), name, lhs, lhs),
         BinaryOp::Equal => accept(is_numeric(lhs) || lhs == DType::Bool, name, lhs, DType::Bool),
         BinaryOp::Less | BinaryOp::LessOrEqual | BinaryOp::Greater | BinaryOp::GreaterOrEqual => {
