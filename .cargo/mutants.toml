@@ -25,4 +25,15 @@ exclude_re = [
     # The step's direction picks the clamp range; SliceStep rejects zero, so
     # `step >= 0` is the same test.
     "replace > with >= in slice_axis",
+    # Comparisons at a point where both branches give the same value: Relu,
+    # Selu and PRelu at zero, Clip at its bounds, and Keys' cubic kernel at
+    # |x| = 2, where both of its pieces are zero.
+    "replace < with <= in relu",
+    "replace > with >= in selu",
+    "replace < with <= in prelu",
+    "replace [<>] with [<>]= in clip",
+    "replace < with <= in cubic",
+    # Moving the start of the tap range only adds taps outside the kernel's
+    # support, whose weights are zero.
+    "replace \\+ with [-*] in stretched",
 ]
