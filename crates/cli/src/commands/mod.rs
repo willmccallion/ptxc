@@ -18,5 +18,6 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<ExitCode> {
         Command::Compile(compile) => compile::run(compile),
         Command::Run(run) => run::run(run),
         Command::Conformance(conformance) => conformance::run(conformance),
+        Command::Fuzz(fuzz) => fuzz::run(fuzz),
     }
 }

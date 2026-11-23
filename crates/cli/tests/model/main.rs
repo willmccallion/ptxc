@@ -210,3 +210,23 @@ fn compile_sizes_symbolic_dims_and_reads_external_data_beside_the_model() {
     assert_eq!(x.dims().iter().map(|d| d.get()).collect::<Vec<_>>(), [6, 4]);
     assert_eq!(unsized_run.status.code(), Some(2));
 }
+
+#[test]
+fn fuzz_runs_its_seeds_on_the_interpreters_and_passes_when_they_agree() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let output = ptxc(&[
+        "fuzz".as_ref(),
+        "--backend".as_ref(),
+        "interp".as_ref(),
+        "--cases".as_ref(),
+        "40".as_ref(),
+        "--out".as_ref(),
+        dir.path().as_os_str(),
+    ]);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.contains("agreed") && stderr.contains("40"), "{stderr}");
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
