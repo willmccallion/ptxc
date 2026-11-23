@@ -2,7 +2,7 @@
 
 use crate::dtype::DType;
 use crate::float::{Bf16, F8E4M3Fn, F8E5M2, F16};
-use crate::shape::Shape;
+use crate::shape::{Dim, Shape};
 use crate::size::ElementCount;
 use thiserror::Error;
 
@@ -109,6 +109,13 @@ impl HostTensor {
             return Err(TensorError::LengthMismatch { shape_elements, data_len });
         }
         Ok(Self { shape, data })
+    }
+
+    /// A vector holding `data`, as long as `data` is.
+    pub fn vector(data: TensorData) -> Self {
+        let length = with_tensor_data!(&data, elements => elements.len());
+        let shape = Shape::vector(Dim::new(u64::try_from(length).unwrap_or(u64::MAX)));
+        Self { shape, data }
     }
 
     /// The shape.

@@ -61,3 +61,13 @@ fn into_parts_returns_the_shape_and_data() {
     assert_eq!(parts_shape, shape(&[2]));
     assert!(matches!(data, TensorData::Bool(elements) if elements == [false, true]));
 }
+
+#[test]
+fn a_vector_is_as_long_as_its_data() {
+    let tensor = HostTensor::vector(vec![1_i32, 2, 3].into());
+
+    assert_eq!(tensor.shape(), &Shape::vector(Dim::new(3)));
+    assert_eq!(tensor.shape().dims(), [Dim::new(3)]);
+    assert_eq!(tensor.shape().element_count().get(), 3);
+    assert_eq!(tensor.dtype(), ptxc_core::DType::I32);
+}
