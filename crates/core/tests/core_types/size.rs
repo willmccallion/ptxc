@@ -71,3 +71,9 @@ fn align_up_past_u64_max_is_rejected() {
 fn alignment_get_returns_its_bytes() {
     assert_eq!(Alignment::new(64).unwrap().get(), 64);
 }
+
+#[test]
+fn a_count_converts_to_the_nearest_f32() {
+    assert_eq!(ElementCount::new(3).to_f32(), 3.0);
+    assert_eq!(ElementCount::new(16_777_217).to_f32(), 16_777_216.0);
+}
