@@ -45,6 +45,8 @@ count_methods!(ThreadsPerBlock, ThreadCount, BlockCount, RegisterCount, SmemByte
 pub struct BlockLimits {
     /// The most threads in a block.
     pub threads: ThreadsPerBlock,
+    /// The most threads along each of the block's x, y and z axes.
+    pub extents: [ThreadsPerBlock; 3],
     /// The most registers a block's threads hold together.
     pub registers: RegisterCount,
     /// The most shared memory without opting in, static and dynamic.
@@ -71,6 +73,13 @@ pub struct SmLimits {
     pub smem: SmemBytes,
 }
 
+/// How large a grid may be.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct GridLimits {
+    /// The most blocks along each of the grid's x, y and z axes.
+    pub extents: [BlockCount; 3],
+}
+
 /// A target's hardware limits.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Limits {
@@ -82,4 +91,6 @@ pub struct Limits {
     pub block: BlockLimits,
     /// Per-SM limits.
     pub sm: SmLimits,
+    /// Grid limits.
+    pub grid: GridLimits,
 }

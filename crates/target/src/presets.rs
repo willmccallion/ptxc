@@ -1,7 +1,7 @@
 //! Built-in targets for known architectures.
 
 use crate::limits::{
-    BlockCount, BlockLimits, Limits, RegisterCount, SmLimits, SmemBytes, ThreadCount,
+    BlockCount, BlockLimits, GridLimits, Limits, RegisterCount, SmLimits, SmemBytes, ThreadCount,
     ThreadsPerBlock,
 };
 use crate::mma;
@@ -26,6 +26,11 @@ const SM_89: Target = Target {
         registers_per_thread: RegisterCount::new(255),
         block: BlockLimits {
             threads: ThreadsPerBlock::new(1024),
+            extents: [
+                ThreadsPerBlock::new(1024),
+                ThreadsPerBlock::new(1024),
+                ThreadsPerBlock::new(64),
+            ],
             registers: RegisterCount::new(65_536),
             smem: SmemBytes::new(49_152),
             smem_opt_in: SmemBytes::new(101_376),
@@ -36,6 +41,13 @@ const SM_89: Target = Target {
             blocks: BlockCount::new(24),
             registers: RegisterCount::new(65_536),
             smem: SmemBytes::new(102_400),
+        },
+        grid: GridLimits {
+            extents: [
+                BlockCount::new(2_147_483_647),
+                BlockCount::new(65_535),
+                BlockCount::new(65_535),
+            ],
         },
     },
     mma: mma::SM_89,
