@@ -43,7 +43,8 @@ crates/<crate>/tests/golden/     expected outputs (IR text, reports)
 crates/<crate>/tests/fixtures/   small hand-written inputs (graph IR text, tiny .onnx files)
 data/onnx/<tag>/node/            ONNX backend node tests (gitignored, fetched)
 data/models/<name>/              exported ONNX models (gitignored, produced by baselines/)
-data/datasets/                   ImageNet validation subset, WikiText-2 (gitignored)
+data/datasets/                   ImageNet validation subset, ImageNetV2 (D35), WikiText-2 (gitignored)
+data/inputs/<set>/               input sets: input_k.pb and input_set.json (gitignored, produced by baselines/)
 data/reference/                  cached reference outputs (gitignored)
 data/fuzz/                       shrunk failing cases (gitignored; promoted to fixtures by hand)
 ```
@@ -136,8 +137,29 @@ Accuracy budgets for the quantized models are set when QDQ models land (M6).
 - Cache key: `data/reference/<sha256 of model>/<input set id>/<tool>-<tool version>/`,
   plus `manifest.json` (tool versions, device, command line). A changed
   model, input set or tool version is a cache miss, never a stale hit.
+- An input set's id is the SHA-256, in hex, over each `input_k.pb` in
+  order: its length as 8 little-endian bytes, then its bytes. Python and
+  Rust both check it against `crates/testkit/tests/fixtures/input-set/`.
+- ORT runs on the CPU with graph optimisations disabled, so it computes the
+  model as written.
 - Rust never runs Python. If a cached reference is missing, the Rust side
   fails with the exact `uv run` command that produces it.
+
+The target models are checked against ORT by ignored tests in
+`ptxc-testkit`, after their data is made:
+
+```
+cargo xtask fetch imagenetv2
+uv run --project baselines ptxc-baselines export --model resnet50     # also mlp, bert-base, gpt2
+uv run --project baselines ptxc-baselines images --source imagenetv2 --count 16
+uv run --project baselines ptxc-baselines random --model gpt2 --batch 1 --sequence 128 --seed 0
+uv run --project baselines ptxc-baselines reference --model resnet50 --inputs imagenetv2-16
+cargo test --release -p ptxc-testkit --test models -- --ignored
+```
+
+`random` makes MLP inputs with `--batch 4` and BERT and GPT-2 inputs with
+`--batch 1`, as the tests expect. `uv run pytest` in `baselines/`
+tests the baselines themselves.
 
 ## Test quality
 
