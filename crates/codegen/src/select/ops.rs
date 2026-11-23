@@ -70,13 +70,12 @@ impl Selector<'_> {
             UnaryOp::IsInf(sign) => return Ok(Held::Bool(self.is_infinite(x, sign))),
             UnaryOp::Exp => self.math(math::exp(), x),
             UnaryOp::Log => self.math(math::log(), x),
-            UnaryOp::Not
-            | UnaryOp::Expm1
-            | UnaryOp::Log1p
-            | UnaryOp::Erf
-            | UnaryOp::Sin
-            | UnaryOp::Cos
-            | UnaryOp::Tanh => return Err(unsupported(op.name())),
+            UnaryOp::Expm1 => self.math(math::expm1(), x),
+            UnaryOp::Log1p => self.math(math::log1p(), x),
+            UnaryOp::Tanh => self.math(math::tanh(), x),
+            UnaryOp::Not | UnaryOp::Erf | UnaryOp::Sin | UnaryOp::Cos => {
+                return Err(unsupported(op.name()));
+            }
         };
         Ok(Held::Float(self.rounded(result, dtype, Overflow::NonFinite)))
     }

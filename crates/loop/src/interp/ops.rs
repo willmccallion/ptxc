@@ -42,9 +42,9 @@ pub(super) fn unary(op: UnaryOp, value: Value, dtype: DType) -> Value {
         UnaryOp::Abs => x.abs(),
         UnaryOp::Neg => -x,
         UnaryOp::Exp => f64::from(math::exp().eval(f64_to_f32(x))),
-        UnaryOp::Expm1 => x.exp_m1(),
+        UnaryOp::Expm1 => f64::from(math::expm1().eval(f64_to_f32(x))),
         UnaryOp::Log => f64::from(math::log().eval(f64_to_f32(x))),
-        UnaryOp::Log1p => x.ln_1p(),
+        UnaryOp::Log1p => f64::from(math::log1p().eval(f64_to_f32(x))),
         UnaryOp::Sqrt => x.sqrt(),
         UnaryOp::Reciprocal => 1.0 / x,
         UnaryOp::Floor => x.floor(),
@@ -54,7 +54,7 @@ pub(super) fn unary(op: UnaryOp, value: Value, dtype: DType) -> Value {
         UnaryOp::Erf => libm::erf(x),
         UnaryOp::Sin => x.sin(),
         UnaryOp::Cos => x.cos(),
-        UnaryOp::Tanh => x.tanh(),
+        UnaryOp::Tanh => f64::from(math::tanh().eval(f64_to_f32(x))),
         UnaryOp::Not => x,
     };
     round(result, dtype, Overflow::NonFinite)
