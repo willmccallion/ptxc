@@ -5,11 +5,18 @@ model, optimises and fuses its graph, schedules each fused kernel for the
 GPU, emits PTX directly, and runs the result through the CUDA driver API
 with a statically planned memory arena and CUDA graphs.
 
-**Status:** M1, the frontend and reference interpreter, is done. ptxc
-imports ONNX models into its graph IR and runs them on a naive CPU
-interpreter: 984 of the 1,765 ONNX v1.22.0 node tests pass, and the rest
-are reported unsupported with a reason (D33, D34). MLP, ResNet-50,
-BERT-base and GPT-2 match ONNX Runtime. GPU code generation starts in M2.
+**Status:** M2, GPU code generation correct on everything, is done. ptxc
+compiles ONNX models to PTX it emits itself and runs them through the CUDA
+driver API.
+- On the GPU, 984 of the 1,765 ONNX v1.22.0 node tests pass, test for test
+  the same as the reference interpreter. The rest are reported unsupported
+  with a reason (D33, D34).
+- Every kernel matches the loop interpreter bit for bit, NaN payloads aside.
+- 10,000 random graphs over the whole op set agree across the interpreters
+  and the GPU, and 1,200 agree with ONNX Runtime.
+- The kernels are naive. Tiling, tensor cores and the first comparison
+  with cuBLAS come in M3.
+
 See [the roadmap](docs/ROADMAP.md).
 
 ## Goals
