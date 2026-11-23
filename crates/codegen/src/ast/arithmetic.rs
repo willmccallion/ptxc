@@ -62,6 +62,14 @@ impl FunctionBuilder {
         dst
     }
 
+    /// `a * b + c`, rounded once.
+    pub(crate) fn fma(&mut self, a: Value<F32>, b: Value<F32>, c: Value<F32>) -> Reg<F32> {
+        let dst = self.reg();
+        let (a, b, c) = (a.operand(), b.operand(), c.operand());
+        self.push(Instr::Fma { dst: dst.id(), a, b, c });
+        dst
+    }
+
     pub(crate) fn float_unary(&mut self, op: UnaryOp, a: Value<F32>) -> Reg<F32> {
         let dst = self.reg();
         self.push(Instr::Unary { op, ty: PtxType::F32, dst: dst.id(), a: a.operand() });

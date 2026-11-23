@@ -71,6 +71,8 @@ pub(crate) enum BinaryOp {
     Or,
     Xor,
     Shl,
+    /// Arithmetic on signed types, logical on unsigned and bit types.
+    Shr,
 }
 
 /// A one-operand operation.
@@ -149,6 +151,13 @@ pub(crate) enum Instr {
         dst: RegId,
         a: Operand,
         b: Operand,
+    },
+    /// `fma.rn.f32`: `a * b + c`, rounded once.
+    Fma {
+        dst: RegId,
+        a: Operand,
+        b: Operand,
+        c: Operand,
     },
     Unary {
         op: UnaryOp,

@@ -10,6 +10,7 @@ use crate::ast::{
 };
 use ptxc_core::DType;
 use ptxc_core::float::Overflow;
+use ptxc_loop::math;
 use ptxc_loop::{BinaryOp, InfSign, UnaryOp};
 
 const fn unsupported(op: &'static str) -> CodegenError {
@@ -67,10 +68,10 @@ impl Selector<'_> {
                 return Ok(Held::Bool(b.compare_float(Compare::Unordered, x.into(), x.into())));
             }
             UnaryOp::IsInf(sign) => return Ok(Held::Bool(self.is_infinite(x, sign))),
+            UnaryOp::Exp => self.math(math::exp(), x),
+            UnaryOp::Log => self.math(math::log(), x),
             UnaryOp::Not
-            | UnaryOp::Exp
             | UnaryOp::Expm1
-            | UnaryOp::Log
             | UnaryOp::Log1p
             | UnaryOp::Erf
             | UnaryOp::Sin

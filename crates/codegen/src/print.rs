@@ -101,6 +101,7 @@ fn binary_name(op: BinaryOp, ty: PtxType) -> &'static str {
         BinaryOp::Or => "or",
         BinaryOp::Xor => "xor",
         BinaryOp::Shl => "shl",
+        BinaryOp::Shr => "shr",
     }
 }
 
@@ -153,6 +154,10 @@ fn write_instr(f: &mut fmt::Formatter<'_>, instr: &Instr) -> fmt::Result {
         Instr::Binary { op, ty, dst, a, b } => {
             let (a, b) = (operand(*a), operand(*b));
             write!(line, "{}{} {}, {a}, {b}", binary_name(*op, *ty), ty.suffix(), reg(*dst))
+        }
+        Instr::Fma { dst, a, b, c } => {
+            let (a, b, c) = (operand(*a), operand(*b), operand(*c));
+            write!(line, "fma.rn.f32 {}, {a}, {b}, {c}", reg(*dst))
         }
         Instr::Unary { op, ty, dst, a } => {
             write!(line, "{}{} {}, {}", unary_name(*op), ty.suffix(), reg(*dst), operand(*a))

@@ -5,6 +5,7 @@ mod cast;
 mod control;
 mod expr;
 mod fp8;
+mod math;
 mod memory;
 mod mma;
 mod ops;
