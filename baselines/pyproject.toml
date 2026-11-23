@@ -2,12 +2,42 @@
 name = "ptxc-baselines"
 version = "0.1.0"
 description = "Reference outputs and baseline benchmarks for ptxc: PyTorch, torch.compile, ONNX Runtime and TensorRT."
-requires-python = ">=3.12"
-# Dependencies are added, pinned and locked with uv at M1 (reference outputs) and M3 (benchmarks).
-dependencies = []
+# onnx 1.22.0, the ONNX pin (D31), has no wheels for Python 3.13.
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy==2.5.5",
+    "onnx==1.22.0",
+    "onnxruntime==1.32.0",
+    "onnxscript==0.7.2",
+    "pillow==13.0.0",
+    "torch==2.14.1",
+    "torchvision==0.29.1",
+    "transformers==5.24.0",
+]
+
+[project.scripts]
+ptxc-baselines = "ptxc_baselines.cli:main"
+
+[dependency-groups]
+dev = ["pytest==9.2.0", "ruff==0.17.6"]
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
 [build-system]
 requires = ["hatchling"]
