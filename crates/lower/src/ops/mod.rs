@@ -14,7 +14,7 @@ mod shape;
 
 use crate::error::LowerError;
 use crate::stage::{Binding, GroupBuilder, LoweredGroup, Operand, Stage, StageBuilder};
-use ptxc_core::{Idx, IndexVec};
+use ptxc_core::{Dim, Idx, IndexVec};
 use ptxc_graph::{Graph, Node, NodeId, Op, ValueId};
 use ptxc_loop::{ComputeError, ComputeName, TensorExpr};
 
@@ -53,6 +53,9 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::Split(attrs) => shape::split(cx, attrs),
         Op::Pad(attrs) => shape::pad(cx, attrs),
         Op::Trilu(attrs) => shape::trilu(cx, *attrs),
+        Op::Gather(axis) => gather::gather(cx, *axis),
+        Op::GatherElements(axis) => gather::gather_elements(cx, *axis),
+        Op::GatherNd(batch) => gather::gather_nd(cx, *batch),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }
@@ -90,6 +93,12 @@ impl<'g> NodeContext<'g> {
     /// The node's `N` operands, or an error if it has another number.
     fn values<const N: usize>(&self) -> Result<[ValueId; N], LowerError> {
         self.operands().try_into().map_err(|_| LowerError::Operands(self.id))
+    }
+
+    /// `dim` as an index-arithmetic constant; past `i64::MAX` it is the
+    /// error `ComputeBuilder` would give.
+    fn signed(&self, dim: Dim) -> Result<i64, LowerError> {
+        i64::try_from(dim.get()).map_err(|_| self.ill_formed(ComputeError::ExtentTooLarge(dim)))
     }
 
     /// A rejected definition as the error lowering this node gives.

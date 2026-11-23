@@ -13,14 +13,8 @@ pub(super) use view::{expand, reshape, tile, transpose};
 
 use super::NodeContext;
 use crate::error::LowerError;
-use ptxc_core::{DType, Dim};
-use ptxc_loop::{ComputeError, ExprArena, ExprId, TensorExpr};
-
-/// `dim` as an index-arithmetic constant; past `i64::MAX` it is the error
-/// `ComputeBuilder` would give.
-fn signed(cx: &NodeContext<'_>, dim: Dim) -> Result<i64, LowerError> {
-    i64::try_from(dim.get()).map_err(|_| cx.ill_formed(ComputeError::ExtentTooLarge(dim)))
-}
+use ptxc_core::{Axis, DType, Dim};
+use ptxc_loop::{ExprArena, ExprId, TensorExpr};
 
 /// `index + delta`.
 fn shifted(exprs: &mut ExprArena, index: ExprId, delta: i64) -> ExprId {
@@ -41,6 +35,15 @@ fn clamped(exprs: &mut ExprArena, index: ExprId, last: i64) -> ExprId {
     exprs.min(raised, last)
 }
 
+/// `spatial` with the index of `axis` replaced by `index`.
+pub(in crate::ops) fn replaced(spatial: &[ExprId], axis: Axis, index: ExprId) -> Vec<ExprId> {
+    spatial
+        .iter()
+        .enumerate()
+        .map(|(position, &var)| if position == axis.index() { index } else { var })
+        .collect()
+}
+
 /// An index expression's value, for comparing positions.
 const fn position(index: ExprId) -> TensorExpr {
     TensorExpr::Index { index, dtype: DType::I64 }
@@ -56,7 +59,7 @@ fn linearized(
     let Some((&first, rest)) = indices.split_first() else { return Ok(exprs.constant(0)) };
     let mut flat = first;
     for (&index, &dim) in rest.iter().zip(dims.iter().skip(1)) {
-        let extent = exprs.constant(signed(cx, dim)?);
+        let extent = exprs.constant(cx.signed(dim)?);
         let scaled = exprs.mul(flat, extent);
         flat = exprs.add(scaled, index);
     }
@@ -73,7 +76,7 @@ fn delinearized(
     let mut stride = 1_i64;
     let mut indices = Vec::with_capacity(dims.len());
     for &dim in dims.iter().rev() {
-        let extent = signed(cx, dim)?;
+        let extent = cx.signed(dim)?;
         let quotient = if stride == 1 {
             flat
         } else {

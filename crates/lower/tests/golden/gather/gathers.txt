@@ -1,0 +1,28 @@
+compute gather_0(%in0: i64[4], %in1: f32[2, 5, 3]) {
+  %i0 = spatial 2
+  %i1 = spatial 4
+  %i2 = spatial 3
+  %j = load %in0[%i1]
+  %out0: f32[2, 4, 3] = %in1[%i0, floormod(%j, 5), %i2]
+}
+
+compute gather_elements_0(%in0: i32[4, 2], %in1: i8[3, 2]) {
+  %i0 = spatial 4
+  %i1 = spatial 2
+  %j = load %in0[%i0, %i1]
+  %out0: i8[4, 2] = %in1[floormod(%j, 3), %i1]
+}
+
+compute gather_nd_0(%in0: i64[2, 5, 2], %in1: f16[2, 3, 4]) {
+  %i0 = spatial 2
+  %i1 = spatial 5
+  %j0 = load %in0[%i0, %i1, 0]
+  %j1 = load %in0[%i0, %i1, 1]
+  %out0: f16[2, 5] = %in1[%i0, floormod(%j0, 3), floormod(%j1, 4)]
+}
+
+compute gather_0() {
+  %i0 = spatial 0
+  %i1 = spatial 2
+  %out0: f32[0, 2] = 0.0:f32
+}

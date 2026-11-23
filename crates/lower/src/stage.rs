@@ -198,6 +198,13 @@ impl<'g> StageBuilder<'g> {
         Operand { expr: TensorExpr::Load { tensor, index }, dtype: self.type_of(binding).dtype() }
     }
 
+    /// An index variable holding `binding`'s integer at `index`, as a gather
+    /// reads its indices.
+    pub(crate) fn loaded(&mut self, name: &str, binding: Binding, index: Vec<ExprId>) -> ExprId {
+        let tensor = self.tensor(binding);
+        self.compute.loaded_index(VarName::new(name), tensor, index)
+    }
+
     /// `value` read at the output element, with ONNX's multidirectional
     /// broadcasting: trailing axes align, and an axis of extent 1 is read
     /// at 0.
