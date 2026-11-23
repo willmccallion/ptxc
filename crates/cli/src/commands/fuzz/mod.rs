@@ -1,6 +1,6 @@
-//! `ptxc fuzz`: differential fuzzing (D13). Each seed's random graph runs on
-//! every executor; a mismatch is shrunk and written to the output directory
-//! with its seed.
+//! `ptxc fuzz`: differential fuzzing (D13, D53). Each seed's random graph
+//! runs on every executor; a mismatch is shrunk and written to the output
+//! directory with its seed.
 
 mod check;
 
@@ -8,9 +8,9 @@ use super::runner::Runner;
 use crate::args::{Backend as BackendArg, FuzzArgs};
 use crate::ui;
 use anyhow::Context;
-use check::{Backend, check};
+use check::{Backend, Failure, check};
 use ptxc_graph::Graph;
-use ptxc_testkit::generate::{Recipe, Seed, generate};
+use ptxc_testkit::generate::{Generator, Recipe, Seed};
 use ptxc_testkit::shrink::shrink;
 use std::ops::Range;
 use std::path::Path;
@@ -32,24 +32,45 @@ pub(crate) fn run(args: &FuzzArgs) -> anyhow::Result<ExitCode> {
         BackendArg::Interp => None,
         BackendArg::Gpu => Some(&on_runner),
     };
-    let mismatched = fuzz(args.seed..end, backend, &args.out)?;
-    let agreed = args.cases - u64::try_from(mismatched.len())?;
-    ui::stat("agreed", &agreed.to_string());
-    ui::stat("mismatched", &mismatched.len().to_string());
-    Ok(if mismatched.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(MISMATCHED) })
+    let tally = fuzz(args.seed..end, backend, &args.out)?;
+    ui::stat("agreed", &tally.agreed.to_string());
+    ui::stat("of them against the reference", &tally.against_reference.to_string());
+    ui::stat("rejected by the loop interpreter", &tally.rejected.to_string());
+    ui::stat("mismatched", &tally.mismatched.len().to_string());
+    let passed = tally.mismatched.is_empty();
+    Ok(if passed { ExitCode::SUCCESS } else { ExitCode::from(MISMATCHED) })
 }
 
-/// The seeds whose cases mismatched, each shrunk and written to `out`.
-fn fuzz(seeds: Range<u64>, backend: Option<&Backend<'_>>, out: &Path) -> anyhow::Result<Vec<u64>> {
-    let mut mismatched = Vec::new();
+/// What a run of seeds found.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Tally {
+    agreed: u64,
+    /// Agreed cases also within tolerance of the reference interpreter.
+    against_reference: u64,
+    rejected: u64,
+    /// The seeds that mismatched.
+    mismatched: Vec<u64>,
+}
+
+/// Every seed's case checked, each mismatch shrunk and written to `out`.
+fn fuzz(seeds: Range<u64>, backend: Option<&Backend<'_>>, out: &Path) -> anyhow::Result<Tally> {
+    let generator = Generator::default();
+    let mut tally = Tally::default();
     for seed in seeds {
-        let recipe = generate(Seed(seed));
-        if check(&recipe, backend).is_err() {
-            report(seed, recipe, backend, out)?;
-            mismatched.push(seed);
+        let recipe = generator.generate(Seed(seed));
+        match check(&recipe, backend) {
+            Ok(()) => {
+                tally.agreed += 1;
+                tally.against_reference += u64::from(recipe.compares_with_reference());
+            }
+            Err(Failure::Rejected(_)) => tally.rejected += 1,
+            Err(Failure::Mismatch(_)) => {
+                report(seed, recipe, backend, out)?;
+                tally.mismatched.push(seed);
+            }
         }
     }
-    Ok(mismatched)
+    Ok(tally)
 }
 
 /// Shrinks `recipe`, which mismatched, and writes the smallest failing case
@@ -60,8 +81,10 @@ fn report(
     backend: Option<&Backend<'_>>,
     out: &Path,
 ) -> anyhow::Result<()> {
-    let shrunk = shrink(recipe, |candidate| check(candidate, backend).is_err());
-    let Err(message) = check(&shrunk, backend) else {
+    let still_mismatches =
+        |candidate: &Recipe| matches!(check(candidate, backend), Err(Failure::Mismatch(_)));
+    let shrunk = shrink(recipe, still_mismatches);
+    let Err(Failure::Mismatch(message)) = check(&shrunk, backend) else {
         anyhow::bail!("seed {seed}'s shrunk case no longer fails");
     };
     let case = shrunk.build().context("a shrunk case always builds")?;
@@ -76,11 +99,11 @@ fn report(
 
 #[cfg(test)]
 mod tests {
-    use super::check::check;
+    use super::check::{Failure, check};
     use super::fuzz;
     use ptxc_core::HostTensor;
-    use ptxc_graph::Graph;
-    use ptxc_testkit::generate::{Seed, generate};
+    use ptxc_graph::{BinaryOp, Graph, Op};
+    use ptxc_testkit::generate::{Generator, Input, Node, Operand, Recipe, Seed, Source};
     use ptxc_testkit::lowered::run_lowered;
 
     fn on_loop_interpreter(
@@ -90,13 +113,19 @@ mod tests {
         run_lowered(graph.clone(), inputs, ptxc_loop::run).map_err(|error| error.to_string())
     }
 
+    fn integers(values: Vec<i32>) -> Input {
+        Input { tensor: HostTensor::vector(values.into()), source: Source::Moderate }
+    }
+
     #[test]
     fn a_backend_matching_the_loop_interpreter_agrees_on_every_seed() {
         let dir = tempfile::tempdir().unwrap();
 
-        let mismatched = fuzz(0..40, Some(&on_loop_interpreter), dir.path()).unwrap();
+        let tally = fuzz(0..40, Some(&on_loop_interpreter), dir.path()).unwrap();
 
-        assert_eq!(mismatched, Vec::<u64>::new());
+        assert_eq!(tally.mismatched, Vec::<u64>::new());
+        assert!(tally.agreed > tally.rejected, "{tally:?}");
+        assert!(tally.against_reference > 0 && tally.against_reference < tally.agreed);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 
@@ -105,23 +134,44 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let broken = |_: &Graph, _: &[HostTensor]| Err("broken".to_owned());
 
-        let mismatched = fuzz(5..8, Some(&broken), dir.path()).unwrap();
+        let tally = fuzz(0..6, Some(&broken), dir.path()).unwrap();
 
-        assert_eq!(mismatched, [5, 6, 7]);
-        let text = std::fs::read_to_string(dir.path().join("seed-6.txt")).unwrap();
-        assert!(text.starts_with("seed 6\nthe backend failed: broken\n"), "{text}");
+        assert_eq!(tally.agreed, 0);
+        assert_eq!(u64::try_from(tally.mismatched.len()).unwrap() + tally.rejected, 6);
+        let seed = tally.mismatched[0];
+        let text = std::fs::read_to_string(dir.path().join(format!("seed-{seed}.txt"))).unwrap();
+        assert!(text.starts_with(&format!("seed {seed}\nthe backend failed: broken\n")), "{text}");
         assert_eq!(text.matches("Node {").count(), 1, "{text}");
     }
 
     #[test]
     fn a_backend_returning_the_wrong_outputs_mismatches() {
+        let generator = Generator::default();
+        let recipe = (0..40)
+            .map(|seed| generator.generate(Seed(seed)))
+            .find(|recipe| check(recipe, None).is_ok())
+            .unwrap();
         let none = |_: &Graph, _: &[HostTensor]| Ok(Vec::new());
 
-        let verdict = check(&generate(Seed(0)), Some(&none));
+        let verdict = check(&recipe, Some(&none));
 
-        assert_eq!(
-            verdict,
-            Err("the backend against the loop interpreter: 0 outputs, expected 1".into())
-        );
+        let Err(Failure::Mismatch(message)) = verdict else { panic!("{verdict:?}") };
+        assert!(message.starts_with("the backend against the loop interpreter: 0 outputs"));
+    }
+
+    #[test]
+    fn an_integer_division_by_zero_is_rejected_before_any_backend_runs() {
+        let recipe = Recipe {
+            inputs: vec![integers(vec![6, 4]), integers(vec![3, 0])],
+            nodes: vec![Node {
+                op: Op::Binary(BinaryOp::Div),
+                operands: vec![Operand::Input(0), Operand::Input(1)],
+            }],
+        };
+        let unreachable = |_: &Graph, _: &[HostTensor]| Err("the backend ran".to_owned());
+
+        let verdict = check(&recipe, Some(&unreachable));
+
+        assert_eq!(verdict, Err(Failure::Rejected("integer division by zero".into())));
     }
 }
