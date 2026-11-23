@@ -2,6 +2,7 @@
 
 use super::iter_var::{IterVar, IterVarId};
 use super::names::{ComputeName, TensorName, VarName};
+use super::scalar_op::UnaryOp;
 use super::tensor_expr::{TensorExpr, TensorParamId};
 use crate::expr::{ExprArena, ExprId, VarId};
 use ptxc_core::{DType, IndexVec, Shape};
@@ -96,6 +97,22 @@ impl ComputeDef {
     /// The shape every output has: the spatial axes' extents.
     pub const fn output_shape(&self) -> &Shape {
         &self.output_shape
+    }
+
+    /// The element type of `expr`, one of this definition's expressions
+    /// (which `finish` type-checked).
+    pub fn dtype_of(&self, expr: &TensorExpr) -> DType {
+        match expr {
+            TensorExpr::Load { tensor, .. } => self.inputs[*tensor].dtype,
+            TensorExpr::Const(scalar) => scalar.dtype(),
+            TensorExpr::Unary(UnaryOp::Not | UnaryOp::IsNaN | UnaryOp::IsInf(_), _) => DType::Bool,
+            TensorExpr::Binary(op, _, _) if crate::stmt::is_predicate(*op) => DType::Bool,
+            TensorExpr::Unary(_, value) | TensorExpr::Binary(_, value, _) => self.dtype_of(value),
+            TensorExpr::Cast { to, .. } => *to,
+            TensorExpr::Select { then, .. } => self.dtype_of(then),
+            TensorExpr::Reduce { body, .. } => self.dtype_of(body),
+            TensorExpr::ArgReduce { .. } => DType::I64,
+        }
     }
 
     /// The name index variable `var` prints with.

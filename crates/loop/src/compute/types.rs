@@ -28,7 +28,7 @@ const fn accept(
 }
 
 /// The type `op` gives for an operand of `dtype`.
-pub(super) const fn unary(op: UnaryOp, dtype: DType) -> Result<DType, ComputeError> {
+pub(crate) const fn unary(op: UnaryOp, dtype: DType) -> Result<DType, ComputeError> {
     match op {
         UnaryOp::Abs | UnaryOp::Neg | UnaryOp::Sign => {
             accept(is_numeric(dtype), op.name(), dtype, dtype)
@@ -52,7 +52,7 @@ pub(super) const fn unary(op: UnaryOp, dtype: DType) -> Result<DType, ComputeErr
 }
 
 /// The type `op` gives for operands of `lhs` and `rhs`, which must match.
-pub(super) fn binary(op: BinaryOp, lhs: DType, rhs: DType) -> Result<DType, ComputeError> {
+pub(crate) fn binary(op: BinaryOp, lhs: DType, rhs: DType) -> Result<DType, ComputeError> {
     if lhs != rhs {
         return Err(ComputeError::MixedDTypes { op: op.name(), lhs, rhs });
     }

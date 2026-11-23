@@ -1,0 +1,11 @@
+kernel any_positive(%x: f32[24] read, %any: bool[4] write)
+  grid(1, 1, 1) block(1, 1, 1) smem 0
+  for %i in 4 {
+    alloc %acc: bool[1] local {
+      %acc[0] = false
+      for %k in 6 {
+        %acc[0] = or(%acc[0], gt(%x[%i * 6 + %k], 0.0:f32))
+      }
+      %any[%i] = %acc[0]
+    }
+  }

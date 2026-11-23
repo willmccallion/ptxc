@@ -9,7 +9,7 @@ mod names;
 mod scalar;
 mod scalar_op;
 mod tensor_expr;
-mod types;
+pub(crate) mod types;
 
 pub use builder::ComputeBuilder;
 pub use compute_def::{ComputeDef, IndexVar, OutputDef, TensorParam};

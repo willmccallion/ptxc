@@ -1,0 +1,7 @@
+kernel add(%x: f32[1000] read, %y: f32[1000] read, %sum: f32[1000] write)
+  grid(4, 1, 1) block(256, 1, 1) smem 0
+  %i.0 = blockIdx.x
+  %i.1 = threadIdx.x
+  if %i.1 + %i.0 * 256 < 1000 {
+    %sum[%i.1 + %i.0 * 256] = add(%x[%i.1 + %i.0 * 256], %y[%i.1 + %i.0 * 256])
+  }

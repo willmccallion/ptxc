@@ -1,0 +1,11 @@
+kernel largest_double(%x: f32[15] read, %largest: f32[3] write)
+  grid(1, 1, 1) block(1, 1, 1) smem 0
+  for %i in 3 {
+    alloc %acc: f32[1] local {
+      %acc[0] = -inf:f32
+      for %k in 5 {
+        %acc[0] = max(%acc[0], mul(%x[%i * 5 + %k], 2.0:f32))
+      }
+      %largest[%i] = %acc[0]
+    }
+  }

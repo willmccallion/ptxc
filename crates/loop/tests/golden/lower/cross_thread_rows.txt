@@ -1,0 +1,44 @@
+kernel reduction(%x: f32[1024] read, %out: f32[16] write)
+  grid(1, 1, 1) block(8, 16, 1) smem 512
+  %i = threadIdx.x
+  %k.1 = threadIdx.y
+  alloc %partials: f32[128] shared {
+    for %j in 2 {
+      alloc %partial: f32[1] local {
+        %partial[0] = 0.0:f32
+        for %k.0 in 4 {
+          %partial[0] = add(%partial[0], %x[%i * 128 + %j * 64 + %k.1 + %k.0 * 16])
+        }
+        %partials[%i + %k.1 * 8] = %partial[0]
+        barrier
+        if %k.1 < 8 {
+          if %k.1 + 8 < 16 {
+            %partials[%i + %k.1 * 8] = add(%partials[%i + %k.1 * 8], %partials[%i + %k.1 * 8 + 64])
+          }
+        }
+        barrier
+        if %k.1 < 4 {
+          if %k.1 + 4 < 16 {
+            %partials[%i + %k.1 * 8] = add(%partials[%i + %k.1 * 8], %partials[%i + %k.1 * 8 + 32])
+          }
+        }
+        barrier
+        if %k.1 < 2 {
+          if %k.1 + 2 < 16 {
+            %partials[%i + %k.1 * 8] = add(%partials[%i + %k.1 * 8], %partials[%i + %k.1 * 8 + 16])
+          }
+        }
+        barrier
+        if %k.1 < 1 {
+          if %k.1 + 1 < 16 {
+            %partials[%i + %k.1 * 8] = add(%partials[%i + %k.1 * 8], %partials[%i + %k.1 * 8 + 8])
+          }
+        }
+        barrier
+        if %k.1 < 1 {
+          %out[%i * 2 + %j] = %partials[%i + %k.1 * 8]
+        }
+        barrier
+      }
+    }
+  }
