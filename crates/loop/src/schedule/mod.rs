@@ -5,11 +5,13 @@ mod error;
 mod loop_tree;
 mod primitive;
 mod trace;
+mod validate;
 
 pub use error::ScheduleError;
 pub use loop_tree::{Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree};
 pub use primitive::{Primitive, SplitFactor, ThreadAxis};
 pub use trace::Trace;
+pub use validate::Validated;
 
 use crate::compute::ComputeDef;
 use std::marker::PhantomData;

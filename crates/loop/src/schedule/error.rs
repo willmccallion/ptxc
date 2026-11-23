@@ -3,6 +3,8 @@
 use super::loop_tree::LoopId;
 use super::primitive::ThreadAxis;
 use crate::compute::VarName;
+use ptxc_core::Dim;
+use ptxc_target::ThreadsPerBlock;
 use thiserror::Error;
 
 /// A primitive the loop tree rejects. A rejected primitive changes nothing.
@@ -41,6 +43,45 @@ pub enum ScheduleError {
     /// A reduction loop bound to a block axis, which cannot share a sum.
     #[error("reduction loop {0} cannot be bound to a block axis")]
     BlockBoundReduce(VarName),
+    /// A loop bound to an axis longer than the target allows.
+    #[error("{} has {} iterations, more than the target's {limit}", .axis.name(), .extent.get())]
+    AxisTooLarge {
+        /// The axis.
+        axis: ThreadAxis,
+        /// The bound loop's extent.
+        extent: Dim,
+        /// The target's limit for the axis.
+        limit: u64,
+    },
+    /// More threads per block than the target allows.
+    #[error("{threads} threads per block, more than the target's {}", .limit.get())]
+    TooManyThreads {
+        /// The block's threads.
+        threads: u64,
+        /// The target's limit.
+        limit: ThreadsPerBlock,
+    },
+    /// A vectorized loop of a width vector instructions do not have.
+    #[error("vectorized loop {name} has {} iterations; vectors have 2 or 4", .extent.get())]
+    VectorWidth {
+        /// The loop.
+        name: VarName,
+        /// Its extent.
+        extent: Dim,
+    },
+    /// A vectorized loop with a serial loop inside it.
+    #[error("vectorized loop {0} is not the innermost serial loop")]
+    VectorNotInnermost(VarName),
+    /// A vectorized loop a guard reads, whose lanes would need masking.
+    #[error("vectorized loop {0} is read by a guard")]
+    VectorGuarded(VarName),
+    /// Reduction loops bound to more than one thread axis.
+    #[error("reduction loops are bound to more than one thread axis")]
+    CrossThreadAxes,
+    /// A serial spatial loop inside a reduction shared between threads,
+    /// which would need one partial result per spatial point per thread.
+    #[error("spatial loop {0} is inside a reduction shared between threads")]
+    SpatialInsideCrossThread(VarName),
     /// A reduction loop vectorized.
     #[error("reduction loop {0} cannot be vectorized")]
     VectorizedReduce(VarName),

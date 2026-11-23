@@ -11,3 +11,4 @@ mod schedule_rules;
 mod schedule_support;
 mod simplify_properties;
 mod simplify_rules;
+mod validate;
