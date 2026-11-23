@@ -441,3 +441,23 @@ the old one.
   exit criteria check that they import. Each category maps to one importer
   error, so a model that needs one fails at import with its reason rather
   than running wrongly.
+
+## D34. `GatherND` and `CumSum` join the v0.1.0 op set
+
+- **Context:** BERT-base and GPT-2, exported from transformers 5 with
+  `torch.onnx.export(dynamo=True)`, build their attention masks with
+  `GatherND` (one in BERT, four in GPT-2) and `CumSum` (one in GPT-2).
+  D33 left `GatherND` unsupported on the expectation that the target models
+  would not need it, so both models failed to import.
+- **Options:** support both ops; export with fixed shapes and fold the mask
+  construction away, which works for GPT-2 but not BERT, whose mask reads
+  the `attention_mask` input; drop BERT and GPT-2 from the v0.1.0 checks.
+- **Choice:** support both, as `Op::GatherNd(batch_dims)` in the gather
+  family and `Op::CumSum` in the reduce family. `CumSum`'s axis input must
+  be known at import, as other shape-like operands are (D32).
+- **Reason:** the models should be checked as users export them. Every
+  `GatherND` node test and both `CumSum` tests on supported element types
+  pass; the other seven `CumSum` tests are f64, which stays unsupported.
+  Conformance on the v1.22.0 node tests gives 984 passed, 0 failed and 781
+  unsupported.
+- **Supersedes:** `GatherND` in D33's list of ops outside the v0.1.0 set.
