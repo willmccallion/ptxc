@@ -1,0 +1,15 @@
+compute clip_0(%in0: f16[2], %in1: f16[], %in2: f16[]) {
+  %i0 = spatial 2
+  %out0: f16[2] = select(gt(select(lt(%in0[%i0], %in1[]), %in1[], %in0[%i0]), %in2[]), %in2[], select(lt(%in0[%i0], %in1[]), %in1[], %in0[%i0]))
+}
+
+compute prelu_0(%in0: f16[2, 3], %in1: f16[3]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %out0: f16[2, 3] = select(lt(%in0[%i0, %i1], 0.0:f16), cast<f16>(mul(cast<f32>(%in1[%i1]), cast<f32>(%in0[%i0, %i1]))), %in0[%i0, %i1])
+}
+
+compute prelu_0(%in0: i64[2], %in1: i64[1]) {
+  %i0 = spatial 2
+  %out0: i64[2] = select(lt(%in0[%i0], 0:i64), mul(%in1[0], %in0[%i0]), %in0[%i0])
+}

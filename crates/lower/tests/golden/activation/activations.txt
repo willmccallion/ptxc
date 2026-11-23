@@ -1,0 +1,19 @@
+compute relu_0(%in0: i32[2]) {
+  %i0 = spatial 2
+  %out0: i32[2] = select(lt(%in0[%i0], 0:i32), 0:i32, %in0[%i0])
+}
+
+compute sigmoid_0(%in0: f16[2]) {
+  %i0 = spatial 2
+  %out0: f16[2] = cast<f16>(select(ge(cast<f32>(%in0[%i0]), 0.0:f32), div(1.0:f32, add(1.0:f32, exp(neg(cast<f32>(%in0[%i0]))))), div(exp(cast<f32>(%in0[%i0])), add(1.0:f32, exp(cast<f32>(%in0[%i0]))))))
+}
+
+compute gelu_0(%in0: f32[2]) {
+  %i0 = spatial 2
+  %out0: f32[2] = mul(mul(0.5:f32, %in0[%i0]), add(1.0:f32, tanh(mul(0.7978845834732056:f32, add(mul(0.044714998453855515:f32, mul(mul(%in0[%i0], %in0[%i0]), %in0[%i0])), %in0[%i0])))))
+}
+
+compute celu_0(%in0: bf16[2]) {
+  %i0 = spatial 2
+  %out0: bf16[2] = cast<bf16>(add(max(cast<f32>(%in0[%i0]), 0.0:f32), min(mul(2.0:f32, expm1(div(cast<f32>(%in0[%i0]), 2.0:f32))), 0.0:f32)))
+}
