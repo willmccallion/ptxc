@@ -42,7 +42,7 @@ pub(crate) fn primitive(step: &Step, nest: &[ptxc_loop::LoopId]) -> Option<Primi
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1024))]
+    #![proptest_config(crate::cases(1024))]
 
     #[test]
     fn every_schedule_visits_each_point_once(

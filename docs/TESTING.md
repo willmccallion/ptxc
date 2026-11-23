@@ -25,6 +25,7 @@ It plays the role spike plays for rvsim.
 cargo test                                   # everything that needs no GPU and no downloads
 cargo test --features gpu                    # also the device tests (crates: cuda, runtime, autotune)
 cargo test --release -p ptxc-core -- --ignored   # exhaustive float-format checks
+PROPTEST_CASES=200000 cargo test --release -p ptxc-loop   # longer property-test runs
 cargo xtask fetch onnx-tests                 # pinned ONNX node tests into data/onnx/
 ptxc conformance --backend interp            # M1
 ptxc conformance --backend gpu               # M2 onwards

@@ -96,7 +96,7 @@ fn assignment(ranges: &[(i64, i64)], offsets: &[i64]) -> Vec<i64> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(4096))]
+    #![proptest_config(crate::cases(4096))]
 
     #[test]
     fn simplifying_never_changes_a_value_within_the_ranges(
