@@ -29,6 +29,9 @@ fn sm_89_has_the_limits_its_driver_reports() {
     assert_eq!(limits.sm.blocks, BlockCount::new(24));
     assert_eq!(limits.sm.registers, RegisterCount::new(65_536));
     assert_eq!(limits.sm.smem, SmemBytes::new(100 * 1024));
+    let block_extents = limits.block.extents.map(ThreadsPerBlock::get);
+    assert_eq!(block_extents, [1024, 1024, 64]);
+    assert_eq!(limits.grid.extents.map(BlockCount::get), [2_147_483_647, 65_535, 65_535]);
 }
 
 #[test]

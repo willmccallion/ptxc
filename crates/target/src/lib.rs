@@ -7,7 +7,7 @@ mod sm;
 mod target;
 
 pub use limits::{
-    BlockCount, BlockLimits, Limits, RegisterCount, SmLimits, SmemBytes, ThreadCount,
+    BlockCount, BlockLimits, GridLimits, Limits, RegisterCount, SmLimits, SmemBytes, ThreadCount,
     ThreadsPerBlock,
 };
 pub use mma::{MmaInstruction, MmaShape};
