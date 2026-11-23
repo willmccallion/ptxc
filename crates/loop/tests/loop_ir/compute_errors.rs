@@ -206,3 +206,18 @@ fn an_empty_axis_reads_nothing_so_any_index_is_allowed() {
 
     assert!(compute.finish().is_ok());
 }
+
+#[test]
+fn extents_and_tensor_sizes_must_fit_an_index() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("huge_tensor"));
+    let x = compute.input(TensorName::new("x"), DType::F32, shape(&[1 << 62, 2]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(2));
+    let zero = compute.exprs().constant(0);
+    compute.output(TensorName::new("out"), load(x, &[i, zero]));
+    assert_eq!(compute.finish().unwrap_err(), ComputeError::ExtentTooLarge(Dim::new(1 << 63)));
+
+    let mut compute = ComputeBuilder::new(ComputeName::new("huge_axis"));
+    let _ = compute.spatial(VarName::new("i"), Dim::new(1 << 63));
+    compute.output(TensorName::new("out"), f32_const(0.0));
+    assert_eq!(compute.finish().unwrap_err(), ComputeError::ExtentTooLarge(Dim::new(1 << 63)));
+}

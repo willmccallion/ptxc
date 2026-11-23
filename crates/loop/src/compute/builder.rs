@@ -101,6 +101,13 @@ impl ComputeBuilder {
             .map(|var| var.extent)
             .collect();
         let output_shape = Shape::new(dims)?;
+        let sizes = self.iter_vars.iter().map(|var| var.extent);
+        let sizes = sizes
+            .chain(self.inputs.iter().map(|input| Dim::new(input.shape.element_count().get())));
+        let sizes = sizes.chain(std::iter::once(Dim::new(output_shape.element_count().get())));
+        if let Some(too_large) = sizes.into_iter().find(|size| i64::try_from(size.get()).is_err()) {
+            return Err(ComputeError::ExtentTooLarge(too_large));
+        }
         Ok(ComputeDef {
             name: self.name,
             exprs: self.exprs,
