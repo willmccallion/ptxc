@@ -1,6 +1,6 @@
 //! One test case's outcome on a backend.
 
-use super::runner::Runner;
+use crate::commands::runner::Runner;
 use crate::report::{Failure, Outcome, Reason, Worst};
 use ptxc_onnx::{ImportError, ImportErrorKind, ImportOptions, Unsupported, import_model};
 use ptxc_testkit::compare::{self, Mismatch, Tolerance};
@@ -28,7 +28,7 @@ fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, runner: &Runne
         Ok(runnable) => runnable,
         Err(error) => return of_import_error(&error),
     };
-    let actual = match runner.evaluate(&runnable) {
+    let actual = match runner.evaluate(&runnable.graph, &runnable.inputs) {
         Ok(actual) => actual,
         Err(message) => return Outcome::Fail { failure: Failure::Evaluate { message } },
     };

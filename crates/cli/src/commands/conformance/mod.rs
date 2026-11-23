@@ -1,15 +1,14 @@
 //! `ptxc conformance`: runs the ONNX backend node tests.
 
 mod outcome;
-mod runner;
 
+use super::runner::Runner;
 use crate::args::ConformanceArgs;
 use crate::report::{Report, TestResult, markdown};
 use crate::ui;
 use anyhow::Context;
 use ptxc_testkit::data::onnx_node_tests;
 use ptxc_testkit::onnx_tests::{TestCase, TestOp, case_dirs};
-use runner::Runner;
 use std::path::Path;
 use std::process::ExitCode;
 

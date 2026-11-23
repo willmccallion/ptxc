@@ -30,6 +30,7 @@ ptxc-onnx-proto.workspace = true
 ptxc-interp.workspace = true
 ptxc-compiler.workspace = true
 ptxc-program.workspace = true
+ptxc-graph.workspace = true
 ptxc-cuda.workspace = true
 ptxc-runtime.workspace = true
 ptxc-autotune.workspace = true

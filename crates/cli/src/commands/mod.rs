@@ -6,6 +6,7 @@ mod conformance;
 mod fuzz;
 mod inspect;
 mod run;
+mod runner;
 mod tune;
 
 use crate::args::{Args, Command};
