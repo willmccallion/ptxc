@@ -161,6 +161,11 @@ fn slice_axes_must_be_distinct_and_in_range() {
 }
 
 #[test]
+fn the_unit_slice_step_is_one() {
+    assert_eq!(SliceStep::one().get(), 1);
+}
+
+#[test]
 fn split_gives_one_output_per_size() {
     let sizes = vec![Dim::new(1), Dim::new(0), Dim::new(5)];
     let attrs = SplitAttrs { axis: axis(0), sizes };

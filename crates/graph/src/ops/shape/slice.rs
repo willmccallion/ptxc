@@ -3,7 +3,7 @@
 use crate::ops::{TypeError, TypeRule, check_axis, exact_operands, require_dtype};
 use crate::tensor_type::{Layout, TensorType};
 use ptxc_core::{Axis, Dim, Shape, ShapeError};
-use std::num::NonZeroI64;
+use std::num::{NonZeroI64, NonZeroU8};
 
 /// The distance between consecutive elements a slice takes; negative walks
 /// backwards.
@@ -17,6 +17,11 @@ impl SliceStep {
             Some(step) => Some(Self(step)),
             None => None,
         }
+    }
+
+    /// A step of one: every element, in order.
+    pub fn one() -> Self {
+        Self(NonZeroI64::from(NonZeroU8::MIN))
     }
 
     /// The step.
