@@ -2,6 +2,7 @@
 //! stage reading its operands broadcast to the output.
 
 use super::NodeContext;
+use crate::compose;
 use crate::error::LowerError;
 use crate::precision::{convert, demote, promote};
 use crate::stage::{Operand, Stage};
@@ -32,11 +33,7 @@ pub(super) fn variadic(cx: &NodeContext<'_>, op: VariadicOp) -> Result<Vec<Stage
 pub(super) fn select(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError> {
     cx.elementwise(|operands| {
         let [condition, then, otherwise] = cx.exact(operands)?;
-        Ok(TensorExpr::Select {
-            condition: Box::new(condition.expr.clone()),
-            then: Box::new(then.expr.clone()),
-            otherwise: Box::new(otherwise.expr.clone()),
-        })
+        Ok(compose::select(condition.expr.clone(), then.expr.clone(), otherwise.expr.clone()))
     })
 }
 
@@ -51,19 +48,11 @@ pub(super) fn cast(cx: &NodeContext<'_>, attrs: CastAttrs) -> Result<Vec<Stage>,
     })
 }
 
-fn apply1(op: Scalar1, x: TensorExpr) -> TensorExpr {
-    TensorExpr::Unary(op, Box::new(x))
-}
-
-fn apply2(op: Scalar2, lhs: TensorExpr, rhs: TensorExpr) -> TensorExpr {
-    TensorExpr::Binary(op, Box::new(lhs), Box::new(rhs))
-}
-
 fn unary_expr(op: UnaryOp, x: &Operand) -> TensorExpr {
     let wide = || promote(x.expr.clone(), x.dtype);
     let arithmetic = match op {
-        UnaryOp::Not => return apply1(Scalar1::Not, x.expr.clone()),
-        UnaryOp::IsNaN => return apply1(Scalar1::IsNaN, wide()),
+        UnaryOp::Not => return compose::unary(Scalar1::Not, x.expr.clone()),
+        UnaryOp::IsNaN => return compose::unary(Scalar1::IsNaN, wide()),
         UnaryOp::IsInf(detection) => return is_inf(detection, wide()),
         UnaryOp::Abs => Scalar1::Abs,
         UnaryOp::Neg => Scalar1::Neg,
@@ -79,7 +68,7 @@ fn unary_expr(op: UnaryOp, x: &Operand) -> TensorExpr {
         UnaryOp::Sin => Scalar1::Sin,
         UnaryOp::Cos => Scalar1::Cos,
     };
-    demote(apply1(arithmetic, wide()), x.dtype)
+    demote(compose::unary(arithmetic, wide()), x.dtype)
 }
 
 fn is_inf(detection: InfDetection, x: TensorExpr) -> TensorExpr {
@@ -89,7 +78,7 @@ fn is_inf(detection: InfDetection, x: TensorExpr) -> TensorExpr {
         InfDetection::Negative => InfSign::Negative,
         InfDetection::Neither => return TensorExpr::Const(Scalar::bool(false)),
     };
-    apply1(Scalar1::IsInf(sign), x)
+    compose::unary(Scalar1::IsInf(sign), x)
 }
 
 fn binary_expr(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> TensorExpr {
@@ -111,12 +100,12 @@ fn binary_expr(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> TensorExpr {
         BinaryOp::Mod(ModKind::Fmod) => Scalar2::TruncatedRem,
     };
     let (a, b) = (promote(lhs.expr.clone(), lhs.dtype), promote(rhs.expr.clone(), rhs.dtype));
-    demote(apply2(arithmetic, a, b), lhs.dtype)
+    demote(compose::binary(arithmetic, a, b), lhs.dtype)
 }
 
 /// A comparison or logical op, exact in the operands' own type.
 fn compare(op: Scalar2, lhs: &Operand, rhs: &Operand) -> TensorExpr {
-    apply2(op, lhs.expr.clone(), rhs.expr.clone())
+    compose::binary(op, lhs.expr.clone(), rhs.expr.clone())
 }
 
 /// `Pow`, whose exponent may have another type: a float base raises to the
@@ -126,7 +115,7 @@ fn pow(base: &Operand, exponent: &Operand) -> TensorExpr {
     if base.dtype.is_float() {
         let b = promote(base.expr.clone(), base.dtype);
         let e = convert(exponent.expr.clone(), exponent.dtype, DType::F32);
-        return demote(apply2(Scalar2::Pow, b, e), base.dtype);
+        return demote(compose::binary(Scalar2::Pow, b, e), base.dtype);
     }
     if exponent.dtype.is_float() {
         // NOTE: ptxc-interp, as ONNX Runtime, raises an integer base to a
@@ -134,12 +123,12 @@ fn pow(base: &Operand, exponent: &Operand) -> TensorExpr {
         // while the base and the result stay below 2^24.
         let b = convert(base.expr.clone(), base.dtype, DType::F32);
         let e = promote(exponent.expr.clone(), exponent.dtype);
-        let truncated = convert(apply2(Scalar2::Pow, b, e), DType::F32, DType::I64);
+        let truncated = convert(compose::binary(Scalar2::Pow, b, e), DType::F32, DType::I64);
         return convert(truncated, DType::I64, base.dtype);
     }
     let b = convert(base.expr.clone(), base.dtype, DType::I64);
     let e = convert(exponent.expr.clone(), exponent.dtype, DType::I64);
-    convert(apply2(Scalar2::Pow, b, e), DType::I64, base.dtype)
+    convert(compose::binary(Scalar2::Pow, b, e), DType::I64, base.dtype)
 }
 
 /// `Max`, `Min`, `Sum` or `Mean` of every operand, folded left to right in
@@ -154,11 +143,11 @@ fn variadic_expr(op: VariadicOp, operands: &[Operand]) -> Option<TensorExpr> {
     let folded = operands
         .iter()
         .map(|operand| promote(operand.expr.clone(), operand.dtype))
-        .reduce(|acc, next| apply2(combine, acc, next))?;
+        .reduce(|acc, next| compose::binary(combine, acc, next))?;
     let result = match op {
         VariadicOp::Mean => {
-            let count = TensorExpr::Const(Scalar::f32(count_to_f32(operands.len())));
-            apply2(Scalar2::Div, folded, count)
+            let count = compose::f32(count_to_f32(operands.len()));
+            compose::binary(Scalar2::Div, folded, count)
         }
         VariadicOp::Max | VariadicOp::Min | VariadicOp::Sum => folded,
     };
