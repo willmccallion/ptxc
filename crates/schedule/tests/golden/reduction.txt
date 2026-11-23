@@ -1,0 +1,67 @@
+kernel stage(%x: f32[3600] read, %y: f32[6] write)
+  grid(6, 1, 1) block(256, 1, 1) smem 1024
+  %a0 = blockIdx.x
+  %a1_a2.1 = threadIdx.x
+  alloc %partials: f32[256] shared {
+    alloc %partial: f32[1] local {
+      %partial[0] = 0.0:f32
+      for %a1_a2.0 in 3 {
+        if %a1_a2.1 + %a1_a2.0 * 256 < 600 {
+          %partial[0] = add(%partial[0], %x[%a0 * 600 + %a1_a2.1 + %a1_a2.0 * 256])
+        }
+      }
+      %partials[%a1_a2.1] = %partial[0]
+      barrier
+      if %a1_a2.1 < 128 {
+        if %a1_a2.1 + 128 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 128])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 64 {
+        if %a1_a2.1 + 64 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 64])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 32 {
+        if %a1_a2.1 + 32 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 32])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 16 {
+        if %a1_a2.1 + 16 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 16])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 8 {
+        if %a1_a2.1 + 8 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 8])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 4 {
+        if %a1_a2.1 + 4 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 4])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 2 {
+        if %a1_a2.1 + 2 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 2])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 1 {
+        if %a1_a2.1 + 1 < 256 {
+          %partials[%a1_a2.1] = add(%partials[%a1_a2.1], %partials[%a1_a2.1 + 1])
+        }
+      }
+      barrier
+      if %a1_a2.1 < 1 {
+        %y[%a0] = %partials[%a1_a2.1]
+      }
+    }
+  }
