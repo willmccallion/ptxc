@@ -59,13 +59,19 @@ that changes it.
 
 - Each case is a directory holding `model.onnx` and
   `test_data_set_N/{input,output}_K.pb`. The `.pb` files are `TensorProto`s,
-  read with the same importer as model weights.
-- `ptxc conformance` runs every case through the chosen backend and writes:
-  - `report.json`: per test, one of `pass`, `fail { worst mismatch }` or
-    `unsupported { reason }`, where the reason is `Op(name)`,
-    `DType(dtype)`, `Attribute(op, name)`, `Opset(version)`,
-    `ControlFlow` or `DynamicShape`;
-  - `report.md`: totals by status and by op family.
+  read with the same importer as model weights; tests of sequences and
+  optionals store other protobufs there, and count by their model's reason.
+- `ptxc conformance --backend interp [--tests <dir>] [--out <dir>]` runs
+  every case through the chosen backend and writes:
+  - `report.json`: per test, one of `pass`, `fail { failure }` (the worst
+    mismatch, or an import, evaluation or loading error) or
+    `unsupported { reason }`, where the reason is an op, an element type,
+    an attribute value, an opset, control flow, a dynamic shape, or a
+    shape computed from values no input fixes;
+  - `report.md`: totals by status and by ONNX op (`composite` for the
+    multi-node `_expanded` tests), every failure, and the unsupported tests
+    by reason.
+- It exits with 1 if any test fails, and 2 if it cannot run at all.
 - The tolerance is the suite's own: rtol 1e-3, atol 1e-7, compared as
   `|actual - expected| <= atol + rtol * |expected|`.
 - The GPU report is diffed against the interpreter report. Any test that

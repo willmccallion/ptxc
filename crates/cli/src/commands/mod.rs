@@ -7,3 +7,13 @@ mod fuzz;
 mod inspect;
 mod run;
 mod tune;
+
+use crate::args::{Args, Command};
+use std::process::ExitCode;
+
+/// Runs the subcommand `args` names.
+pub(crate) fn run(args: &Args) -> anyhow::Result<ExitCode> {
+    match &args.command {
+        Command::Conformance(conformance) => conformance::run(conformance),
+    }
+}
