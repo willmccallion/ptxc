@@ -51,7 +51,7 @@ pub(super) fn unary(op: UnaryOp, value: Value, dtype: DType) -> Value {
         UnaryOp::Ceil => x.ceil(),
         UnaryOp::Round => x.round_ties_even(),
         UnaryOp::Sign => sign(x),
-        UnaryOp::Erf => libm::erf(x),
+        UnaryOp::Erf => f64::from(math::erf().eval(f64_to_f32(x))),
         UnaryOp::Sin => x.sin(),
         UnaryOp::Cos => x.cos(),
         UnaryOp::Tanh => f64::from(math::tanh().eval(f64_to_f32(x))),
