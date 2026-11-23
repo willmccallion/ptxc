@@ -85,9 +85,15 @@ pub struct Runnable {
 
 /// Every test case under `root`, in name order.
 pub fn cases(root: &Path) -> Result<Vec<TestCase>, LoadError> {
+    case_dirs(root)?.iter().map(|dir| TestCase::load(dir)).collect()
+}
+
+/// Every test case directory under `root`, in name order, for loading each
+/// case on its own.
+pub fn case_dirs(root: &Path) -> Result<Vec<PathBuf>, LoadError> {
     let mut dirs = subdirectories(root)?;
     dirs.sort();
-    dirs.iter().map(|dir| TestCase::load(dir)).collect()
+    Ok(dirs)
 }
 
 fn subdirectories(dir: &Path) -> Result<Vec<PathBuf>, LoadError> {
