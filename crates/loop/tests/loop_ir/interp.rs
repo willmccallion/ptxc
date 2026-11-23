@@ -5,6 +5,7 @@ use crate::compute_build::{binary, load, shape};
 use crate::lower::lower;
 use crate::schedule_support::{open, reduction};
 use proptest::prelude::Strategy;
+use ptxc_core::float::Overflow;
 use ptxc_core::{DType, Dim, HostTensor, TensorData};
 use ptxc_loop::{
     ArgKind, BinaryOp, ComputeBuilder, ComputeDef, ComputeName, Primitive, ReduceOp, RunError,
@@ -234,6 +235,33 @@ fn an_arg_reduction_over_an_empty_axis_gives_position_zero() {
 
         assert_eq!(ints(&outputs[0]), [0, 0]);
     }
+}
+
+/// `y = cast(x)` from `i64` to `to`, on one element.
+fn cast_from_i64(to: DType) -> Arc<ComputeDef> {
+    let mut compute = ComputeBuilder::new(ComputeName::new("cast"));
+    let x = compute.input(TensorName::new("x"), DType::I64, shape(&[1]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(1));
+    let value = Box::new(load(x, &[i]));
+    compute.output(
+        TensorName::new("y"),
+        TensorExpr::Cast { to, overflow: Overflow::NonFinite, value },
+    );
+    Arc::new(compute.finish().unwrap())
+}
+
+/// 2^62 + 2^38 + 1 and 2^62 + 2^54 + 1 lie just above midpoints of f32
+/// and bf16, but their nearest f64s are the midpoints, which tie to even.
+#[test]
+fn integer_casts_to_floats_round_once() {
+    let run_cast = |to, x: i64| run_default(&cast_from_i64(to), &[tensor(&[1], vec![x])]).unwrap();
+
+    let as_f32 = run_cast(DType::F32, (1 << 62) + (1 << 38) + 1);
+    let as_bf16 = run_cast(DType::Bf16, -((1 << 62) + (1 << 54) + 1));
+
+    assert_eq!(floats(&as_f32[0]), [2f32.powi(62) + 2f32.powi(39)]);
+    let TensorData::Bf16(bf16) = as_bf16[0].data() else { panic!("{:?}", as_bf16[0].dtype()) };
+    assert_eq!(bf16[0].to_f64(), -(2f64.powi(62) + 2f64.powi(55)));
 }
 
 #[test]

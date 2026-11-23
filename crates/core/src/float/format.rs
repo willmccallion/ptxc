@@ -79,6 +79,14 @@ impl FloatFormat {
         sign | rounded.unwrap_or_else(|| self.overflowed(overflow))
     }
 
+    /// Encodes the integer `value`, rounding once to nearest with ties to
+    /// even, which a detour through `f64` would not above 2^53.
+    pub(crate) fn encode_int(self, value: i64, overflow: Overflow) -> u16 {
+        let sign = if value < 0 { self.sign_bit() } else { 0 };
+        let rounded = self.round_significand(value.unsigned_abs(), 0);
+        sign | rounded.unwrap_or_else(|| self.overflowed(overflow))
+    }
+
     /// Decodes an encoding to its exact value.
     pub(crate) fn decode(self, bits: u16) -> f64 {
         let exponent_field = u32::from(bits >> self.mantissa_bits) & self.exponent_all_ones();
@@ -97,12 +105,23 @@ impl FloatFormat {
     /// the rounded value is beyond the largest finite one.
     fn round_magnitude(self, magnitude: f64) -> Option<u16> {
         let (significand, exponent) = decompose(magnitude);
+        self.round_significand(significand, exponent)
+    }
+
+    /// Rounds `significand * 2^exponent` to the format's grid; `None` when
+    /// the rounded value is beyond the largest finite one.
+    fn round_significand(self, significand: u64, exponent: i32) -> Option<u16> {
         if significand == 0 {
             return Some(0);
         }
         let leading = exponent + significand.ilog2() as i32;
         let quantum = leading.max(self.min_exponent()) - self.mantissa_bits as i32;
-        let rounded = shift_right_ties_even(significand, (quantum - exponent) as u32);
+        let rounded = if quantum >= exponent {
+            shift_right_ties_even(significand, (quantum - exponent) as u32)
+        } else {
+            // Finer than the grid needs, so exact: at most mantissa + 1 bits.
+            significand << (exponent - quantum)
+        };
         self.pack_rounded(rounded, quantum)
     }
 
@@ -207,7 +226,8 @@ const fn shift_right_ties_even(value: u64, shift: u32) -> u64 {
         return value;
     }
     if shift >= u64::BITS {
-        // value < 2^53, below half of 2^shift: rounds to zero.
+        // value <= 2^63, at most half of 2^shift: rounds to zero, a tie
+        // going to the even zero.
         return 0;
     }
     let kept = value >> shift;

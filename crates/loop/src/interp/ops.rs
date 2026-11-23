@@ -2,7 +2,7 @@
 //! wrapped to its element type.
 
 use super::RunError;
-use super::value::{Value, round, saturate, wrap};
+use super::value::{Value, round, round_int, saturate, wrap};
 use crate::compute::{BinaryOp, InfSign, UnaryOp};
 use ptxc_core::DType;
 use ptxc_core::float::Overflow;
@@ -176,7 +176,10 @@ pub(super) fn cast(value: Value, from: DType, to: DType, overflow: Overflow) -> 
         return Value::Bool(value.bool());
     }
     if is_float(to) {
-        return round(value.float(), to, overflow);
+        return match value {
+            Value::Int(int) => round_int(int, to, overflow),
+            Value::Float(_) | Value::Bool(_) => round(value.float(), to, overflow),
+        };
     }
     if is_float(from) {
         return saturate(ptxc_core::convert::truncate(value.float()), to);

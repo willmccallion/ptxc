@@ -9,6 +9,7 @@
 )]
 
 mod codec;
+mod integers;
 mod known_values;
 mod oracle;
 mod round_trip;

@@ -4,7 +4,7 @@
 
 use super::RunError;
 use super::ops::{binary, cast, unary};
-use super::value::{Value, round, saturate, wrap};
+use super::value::{Value, round, round_int, saturate, wrap};
 use crate::compute::{BinaryOp, InfSign, UnaryOp};
 use ptxc_core::DType;
 use ptxc_core::float::Overflow;
@@ -198,6 +198,10 @@ fn values_wrap_saturate_and_round_to_their_type() {
     assert_eq!(round(2.0, DType::Bool, Overflow::Saturate), b(true));
     assert_eq!(round(0.0, DType::Bool, Overflow::Saturate), b(false));
     assert_eq!(round(-2.7, DType::I32, Overflow::Saturate), i(-2));
+    assert_eq!(round_int(300, DType::I8, Overflow::Saturate), i(44));
+    assert_eq!(round_int(2, DType::Bool, Overflow::Saturate), b(true));
+    assert_eq!(round_int(0, DType::Bool, Overflow::Saturate), b(false));
+    assert_eq!(round_int(1000, DType::F8E4M3Fn, Overflow::Saturate), f(448.0));
     assert!(!f(0.0).bool());
     assert!(f(0.5).bool());
     assert!(!i(0).bool());
