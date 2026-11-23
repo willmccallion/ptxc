@@ -3,11 +3,12 @@
 //! is one, and a backend, such as the GPU, against the loop interpreter
 //! exactly.
 
-use ptxc_core::{DType, ElementCount, Evaluate, HostTensor};
+use crate::commands::agreement::agree;
+use ptxc_core::{ElementCount, Evaluate, HostTensor};
 use ptxc_graph::Graph;
 use ptxc_interp::Interpreter;
 use ptxc_loop::RunError;
-use ptxc_testkit::compare::{Tolerance, compare};
+use ptxc_testkit::compare::Tolerance;
 use ptxc_testkit::generate::{Case, Recipe};
 use ptxc_testkit::lowered::{LoweredError, run_lowered};
 
@@ -102,21 +103,4 @@ fn lowering_failure(error: LoweredError<RunError>) -> Failure {
 fn longest(inputs: &[HostTensor]) -> ElementCount {
     let most = inputs.iter().map(|input| input.shape().element_count().get()).max();
     ElementCount::new(most.unwrap_or(1).max(1))
-}
-
-/// Whether `actual` matches `expected` output by output, each within
-/// `tolerance` of its element type.
-fn agree(
-    actual: &[HostTensor],
-    expected: &[HostTensor],
-    tolerance: impl Fn(DType) -> Tolerance,
-) -> Result<(), String> {
-    if actual.len() != expected.len() {
-        return Err(format!("{} outputs, expected {}", actual.len(), expected.len()));
-    }
-    for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
-        compare(actual, expected, tolerance(expected.dtype()))
-            .map_err(|mismatch| format!("output {index}: {mismatch}"))?;
-    }
-    Ok(())
 }

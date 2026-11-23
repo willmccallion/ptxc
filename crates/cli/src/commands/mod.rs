@@ -1,5 +1,6 @@
 //! One module per subcommand.
 
+mod agreement;
 mod check_model;
 mod compile;
 mod conformance;
