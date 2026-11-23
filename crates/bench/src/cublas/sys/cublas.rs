@@ -4,6 +4,7 @@
 
 #![allow(unsafe_code, reason = "calls into the cuBLAS library it loads (D55)")]
 
+use ptxc_core::ByteSize;
 use ptxc_cuda::{DeviceAddress, Library, Stream};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::sync::OnceLock;
@@ -58,6 +59,19 @@ pub(crate) enum CublasError {
     Load(String),
     #[error("{call} failed: {name}")]
     Call { call: &'static str, name: String },
+    #[error("device address {0:#x} does not fit a host pointer")]
+    Address(u64),
+    #[error("a size of {0} bytes does not fit this host")]
+    Size(u64),
+    #[error("the workspace holds {actual:?}, but the algorithm needs {needed:?}")]
+    Workspace { needed: ByteSize, actual: ByteSize },
+}
+
+/// `address` as the pointer cuBLAS takes; never dereferenced on the host.
+pub(super) fn device_pointer(address: DeviceAddress) -> Result<*mut c_void, CublasError> {
+    let value = address.get();
+    let value = usize::try_from(value).map_err(|_| CublasError::Address(value))?;
+    Ok(std::ptr::without_provenance_mut(value))
 }
 
 static API: OnceLock<Result<Api, CublasError>> = OnceLock::new();
@@ -80,6 +94,12 @@ pub(in crate::cublas) enum DataType {
     F16 = 2,
     /// `CUDA_R_16BF`.
     Bf16 = 14,
+    /// `CUDA_R_8F_E4M3`.
+    E4m3 = 28,
+    /// `CUDA_R_8I`.
+    I8 = 3,
+    /// `CUDA_R_32I`.
+    I32 = 10,
 }
 
 /// A `cublasComputeType_t`.
@@ -87,6 +107,8 @@ pub(in crate::cublas) enum DataType {
 pub(in crate::cublas) enum ComputeType {
     /// `CUBLAS_COMPUTE_32F`: f32 arithmetic, never TF32.
     F32 = 68,
+    /// `CUBLAS_COMPUTE_32I`: i32 arithmetic.
+    I32 = 72,
 }
 
 /// An operand of `cublasGemmEx`, in cuBLAS's column-major terms.
@@ -143,8 +165,10 @@ impl<'s> Handle<'s> {
     /// Queues `call` on the handle's stream.
     pub(in crate::cublas) fn gemm_ex(&mut self, call: &GemmCall) -> Result<(), CublasError> {
         let (alpha, beta) = (1.0_f32, 0.0_f32);
-        let [m, n, k] = call.extents;
-        let address = |operand: Operand| operand.address.get() as *mut c_void;
+        let [rows, columns, depth] = call.extents;
+        let [a_pointer, b_pointer, c_pointer] =
+            [call.a, call.b, call.c].map(|operand| device_pointer(operand.address));
+        let (a_pointer, b_pointer, c_pointer) = (a_pointer?, b_pointer?, c_pointer?);
         // SAFETY: the handle is alive; `alpha` and `beta` are f32s, which
         // CUBLAS_COMPUTE_32F reads from host memory before returning; the
         // operands are device addresses, and no host memory is mapped into
@@ -155,18 +179,18 @@ impl<'s> Handle<'s> {
                 self.raw,
                 call.operations[0] as c_int,
                 call.operations[1] as c_int,
-                m,
-                n,
-                k,
+                rows,
+                columns,
+                depth,
                 (&raw const alpha).cast(),
-                address(call.a),
+                a_pointer,
                 call.data as c_int,
                 call.a.leading,
-                address(call.b),
+                b_pointer,
                 call.data as c_int,
                 call.b.leading,
                 (&raw const beta).cast(),
-                address(call.c),
+                c_pointer,
                 call.output as c_int,
                 call.c.leading,
                 call.compute as c_int,
@@ -219,7 +243,7 @@ impl Api {
 /// # Safety
 ///
 /// `F` must be a function pointer type matching the symbol's C declaration.
-unsafe fn resolve<F: Copy>(library: &Library, symbol: &CStr) -> Result<F, CublasError> {
+pub(super) unsafe fn resolve<F: Copy>(library: &Library, symbol: &CStr) -> Result<F, CublasError> {
     let address = library.symbol(symbol).map_err(CublasError::Load)?.as_ptr();
     if size_of::<F>() != size_of::<*mut c_void>() {
         return Err(CublasError::Load(format!(
