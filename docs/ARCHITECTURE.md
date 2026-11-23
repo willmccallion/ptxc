@@ -124,11 +124,11 @@ pub enum Op {                              // canonical forms: D32
     Activation(Activation), Clip, PRelu,
     MatMul, Gemm(GemmAttrs),
     Conv(ConvAttrs), Pool(PoolAttrs), GlobalPool(GlobalPoolKind),
-    Reduce(ReduceAttrs), ArgReduce(ArgReduceAttrs),
+    Reduce(ReduceAttrs), ArgReduce(ArgReduceAttrs), CumSum(CumSumAttrs),
     Softmax(SoftmaxAttrs), LayerNorm(LayerNormAttrs), BatchNorm(BatchNormAttrs), InstanceNorm(InstanceNormAttrs),
     Reshape(Shape), Expand(Shape), Transpose(TransposeAttrs), Tile(TileAttrs), Concat(Axis),
     Slice(SliceAttrs), Split(SplitAttrs), Pad(PadAttrs), Trilu(TriluAttrs),
-    Gather(Axis), GatherElements(Axis),
+    Gather(Axis), GatherElements(Axis), GatherNd(Rank),
     Quantize(QuantizeAttrs), Dequantize(DequantizeAttrs), QMatMul(QMatMulAttrs), QConv(QConvAttrs),
     Resize(ResizeAttrs),
     Attention(AttentionAttrs),             // ONNX's Attention; the M6 matcher produces it too
