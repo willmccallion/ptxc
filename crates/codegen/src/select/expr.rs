@@ -5,7 +5,7 @@ use super::{CodegenError, Selector};
 use crate::ast::{B32, B64, BinaryOp, Compare, CvtMode, F32, PtxType, Reg, Signedness, Value};
 use ptxc_core::DType;
 use ptxc_core::convert::f64_to_f32;
-use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
+use ptxc_core::float::Overflow;
 use ptxc_loop::{BufferId, Constant, Expr, ExprId, Scalar, ValueExpr};
 
 impl Selector<'_> {
@@ -129,7 +129,7 @@ impl Selector<'_> {
         let b = &mut self.builder;
         Ok(match scalar.constant() {
             Constant::Float(value) => {
-                Held::Float(b.mov(PtxType::F32, Value::f32(rounded_constant(value, dtype))))
+                Held::Float(b.mov(PtxType::F32, Value::f32(f64_to_f32(value))))
             }
             Constant::Bool(value) => {
                 let bit = b.mov(PtxType::B32, Value::<B32>::int(i32::from(value)));
@@ -198,16 +198,4 @@ impl Selector<'_> {
     ) -> Reg<F32> {
         round_float(&mut self.builder, value, dtype, overflow)
     }
-}
-
-/// A float constant's value in `dtype`, as the f32 that holds it exactly.
-fn rounded_constant(value: f64, dtype: DType) -> f32 {
-    let narrowed = match dtype {
-        DType::F16 => F16::from_f64(value).to_f64(),
-        DType::Bf16 => Bf16::from_f64(value).to_f64(),
-        DType::F8E4M3Fn => F8E4M3Fn::from_f64(value, Overflow::NonFinite).to_f64(),
-        DType::F8E5M2 => F8E5M2::from_f64(value, Overflow::NonFinite).to_f64(),
-        DType::F32 | DType::I8 | DType::U8 | DType::I32 | DType::I64 | DType::Bool => value,
-    };
-    f64_to_f32(narrowed)
 }

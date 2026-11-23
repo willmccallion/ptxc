@@ -154,3 +154,32 @@ one bool
 	setp.ne.u32 %p0, %r0, 0;
 	selp.b32 %r1, 1, 0, %p0;
 	st.global.u8 [%rd1], %r1;
+1000.1 f32
+	mov.f32 %f0, 0f447A0666;
+	st.global.f32 [%rd1], %f0;
+1000.1 f16
+	mov.f32 %f0, 0f447A0000;
+	cvt.rn.f16.f32 %h0, %f0;
+	st.global.b16 [%rd1], %h0;
+1000.1 bf16
+	mov.f32 %f0, 0f447A0000;
+	cvt.rn.bf16.f32 %h0, %f0;
+	st.global.b16 [%rd1], %h0;
+1000.1 f8e4m3fn
+	mov.f32 %f0, 0f43E00000;
+	cvt.rn.satfinite.e4m3x2.f32 %h0, 0f00000000, %f0;
+	abs.f32 %f1, %f0;
+	setp.gt.f32 %p0, %f1, 0f43E80000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.b16 %h1, 255, 127, %p1;
+	selp.b16 %h2, %h1, %h0, %p0;
+	st.global.b8 [%rd1], %h2;
+1000.1 f8e5m2
+	mov.f32 %f0, 0f44800000;
+	cvt.rn.satfinite.e5m2x2.f32 %h0, 0f00000000, %f0;
+	abs.f32 %f1, %f0;
+	setp.ge.f32 %p0, %f1, 0f47700000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.b16 %h1, 252, 124, %p1;
+	selp.b16 %h2, %h1, %h0, %p0;
+	st.global.b8 [%rd1], %h2;
