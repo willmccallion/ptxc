@@ -95,7 +95,7 @@ fn int_binary(op: BinaryOp, pair: &Pair<'_, i64>, dtype: DType) -> Result<Elemen
         BinaryOp::Div => |a, b| (b != 0).then(|| a.wrapping_div(b)),
         BinaryOp::Mod(ModKind::Fmod) => |a, b| (b != 0).then(|| a.wrapping_rem(b)),
         BinaryOp::Mod(ModKind::Integer) => floored_rem,
-        BinaryOp::Pow => |a, b| Some(int_pow(a, b)),
+        BinaryOp::Pow => |a, b| Some(ptxc_core::arith::wrapping_pow(a, b)),
         _ => return Err(Malformed::DType(dtype).into()),
     };
     let values: Option<Vec<i64>> = pair.map(f).into_iter().collect();
@@ -107,25 +107,6 @@ fn int_binary(op: BinaryOp, pair: &Pair<'_, i64>, dtype: DType) -> Result<Elemen
 fn floored_rem(a: i64, b: i64) -> Option<i64> {
     let remainder = a.checked_rem(b).or_else(|| (b != 0).then_some(0))?;
     Some(if remainder != 0 && remainder.signum() != b.signum() { remainder + b } else { remainder })
-}
-
-/// `a ^ b` by repeated squaring, wrapping. A negative exponent gives
-/// `1 / a^|b|` truncated toward zero.
-fn int_pow(base: i64, exponent: i64) -> i64 {
-    let Ok(mut remaining) = u64::try_from(exponent) else {
-        // NOTE: NumPy rejects negative integer exponents and ONNX's spec is
-        // silent; ORT computes them in floating point and truncates, as here.
-        return truncate(int_to_f64(base).powf(int_to_f64(exponent)));
-    };
-    let (mut result, mut square) = (1_i64, base);
-    while remaining > 0 {
-        if remaining & 1 == 1 {
-            result = result.wrapping_mul(square);
-        }
-        square = square.wrapping_mul(square);
-        remaining >>= 1;
-    }
-    result
 }
 
 fn bool_binary(op: BinaryOp, pair: &Pair<'_, bool>) -> Option<Elements> {

@@ -1,5 +1,6 @@
 //! Shared vocabulary: data types, float formats, shapes, sizes, typed indices, host tensors, kernel names, time and the Evaluate trait.
 
+pub mod arith;
 pub mod convert;
 mod dtype;
 mod evaluate;

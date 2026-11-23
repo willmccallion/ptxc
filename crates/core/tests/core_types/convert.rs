@@ -25,3 +25,17 @@ fn truncation_goes_toward_zero_and_saturates() {
     assert_eq!(truncate(f64::NEG_INFINITY), i64::MIN);
     assert_eq!(truncate(f64::NAN), 0);
 }
+
+#[test]
+fn integer_powers_wrap_and_negative_exponents_truncate() {
+    use ptxc_core::arith::wrapping_pow;
+
+    assert_eq!(wrapping_pow(3, 4), 81);
+    assert_eq!(wrapping_pow(-2, 3), -8);
+    assert_eq!(wrapping_pow(7, 0), 1);
+    assert_eq!(wrapping_pow(2, 64), 0);
+    assert_eq!(wrapping_pow(3, 41), 3_i64.wrapping_pow(41));
+    assert_eq!(wrapping_pow(2, -1), 0);
+    assert_eq!(wrapping_pow(1, -5), 1);
+    assert_eq!(wrapping_pow(-1, -3), -1);
+}
