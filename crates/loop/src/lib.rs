@@ -4,6 +4,7 @@ mod compute;
 mod expr;
 mod interp;
 mod lower;
+pub mod math;
 mod schedule;
 mod stmt;
 mod text;
