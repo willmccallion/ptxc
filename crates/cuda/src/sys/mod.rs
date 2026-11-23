@@ -3,3 +3,7 @@
 mod functions;
 mod library;
 mod types;
+
+pub(crate) use functions::Api;
+pub(crate) use library::Library;
+pub(crate) use types::*;

@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 ptxc-core.workspace = true
+thiserror.workspace = true
 
 [features]
 # Compiles the tests that need a GPU; without a GPU they fail rather than skip.
