@@ -5,7 +5,16 @@
     expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")
 )]
 mod clocks;
+#[cfg_attr(
+    not(all(test, feature = "gpu")),
+    expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")
+)]
 mod cublas;
+#[cfg_attr(
+    not(all(test, feature = "gpu")),
+    expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")
+)]
+mod problem;
 #[expect(dead_code, reason = "the GEMM sweep (#97) is its first caller")]
 mod results;
 mod suites;
