@@ -231,21 +231,33 @@ Three layers, as in Halide and TVM.
 **1. Compute: what each output element is.**
 
 ```rust
-define_index!(IterVarId);
-pub struct ComputeDef {
+define_index!(IterVarId); define_index!(TensorParamId);
+pub struct ComputeDef {                               // made only by ComputeBuilder::finish, which type-checks it
     name: ComputeName,
+    exprs: ExprArena,                                 // index arithmetic
+    vars: IndexVec<VarId, IndexVar>,                  // IndexVar::{Iter(IterVarId), Loaded { tensor, index }}
     iter_vars: IndexVec<IterVarId, IterVar>,          // spatial and reduction axes
-    inputs: Vec<TensorParam>,                         // dtype, shape, layout
-    outputs: Vec<OutputDef>,                          // TensorExpr per output
+    inputs: IndexVec<TensorParamId, TensorParam>,     // name, dtype, shape
+    outputs: Vec<OutputDef>,                          // name, dtype, TensorExpr; shape = spatial extents
 }
-pub struct IterVar { name: VarName, extent: Extent, kind: IterKind }   // IterKind::{Spatial, Reduce(ReduceOp)}
+pub struct IterVar { name: VarName, extent: Dim, kind: IterKind }   // IterKind::{Spatial, Reduce}
 pub enum TensorExpr {
     Load { tensor: TensorParamId, index: Vec<ExprId> },
     Const(Scalar), Unary(UnaryOp, Box<TensorExpr>), Binary(BinaryOp, Box<TensorExpr>, Box<TensorExpr>),
-    Cast(DType, Box<TensorExpr>), Select { cond: Box<TensorExpr>, then: Box<TensorExpr>, otherwise: Box<TensorExpr> },
-    Reduce { op: ReduceOp, axes: Vec<IterVarId>, body: Box<TensorExpr> },
+    Cast { to: DType, overflow: Overflow, value: Box<TensorExpr> },
+    Select { condition: Box<TensorExpr>, then: Box<TensorExpr>, otherwise: Box<TensorExpr> },
+    Reduce { op: ReduceOp, axes: Vec<IterVarId>, body: Box<TensorExpr> },          // Sum, Prod, Max, Min
+    ArgReduce { kind: ArgKind, tie: TieBreak, axis: IterVarId, body: Box<TensorExpr> },
 }
 ```
+
+The scalar operations are the primitives every v0.1.0 graph op lowers onto:
+arithmetic, both remainders, comparisons, logic, `exp`, `log`, `erf`,
+`tanh` and the other transcendental functions, rounding, and NaN and
+infinity tests. Activations, softmax and normalisation are compositions,
+built by `ptxc-lower`. FP8 is storage only here too: it reaches arithmetic
+through `Cast`. A gather's index is an `IndexVar::Loaded`, an integer read
+from an index tensor, so index arithmetic never reads data directly.
 
 **2. Schedule: how to iterate.** A loop tree is transformed by primitives.
 Every applied primitive is recorded in a `Trace`, as in TVM's MetaSchedule.
