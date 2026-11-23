@@ -7,6 +7,7 @@ mod activation;
 mod cases;
 mod elementwise;
 mod harness;
+mod reduce;
 mod values;
 
 /// Property-test cases: `PROPTEST_CASES` if set, else `default`.

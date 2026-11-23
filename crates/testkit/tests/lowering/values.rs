@@ -14,12 +14,24 @@ pub(crate) enum Domain {
     Any,
     /// Integers from 0 to 6, where a computation is exact in any type.
     SmallInt,
+    /// Values whose products and squares stay in f32's range: floats
+    /// without the specials past 1e4, integers within ±2^20.
+    Moderate,
 }
 
 /// An output shape: rank 0 to 3, extents mostly 1 to 3, sometimes 0.
 pub(crate) fn output_dims() -> impl Strategy<Value = Vec<u64>> {
+    dims_of_rank(0..=3)
+}
+
+/// As `output_dims`, with at least one axis.
+pub(crate) fn axis_dims() -> impl Strategy<Value = Vec<u64>> {
+    dims_of_rank(1..=3)
+}
+
+fn dims_of_rank(ranks: std::ops::RangeInclusive<usize>) -> impl Strategy<Value = Vec<u64>> {
     let extent = prop_oneof![1 => Just(0_u64), 12 => 1_u64..=3];
-    vec(extent, 0..=3)
+    vec(extent, ranks)
 }
 
 /// A shape broadcasting to `output`: some leading axes dropped, some
@@ -48,8 +60,22 @@ pub(crate) fn tensor(dtype: DType, dims: Vec<u64>, domain: Domain) -> BoxedStrat
 }
 
 fn data(dtype: DType, len: usize, domain: Domain) -> BoxedStrategy<TensorData> {
-    if matches!(domain, Domain::SmallInt) {
-        return vec(0_i64..=6, len).prop_map(move |values| small_ints(dtype, &values)).boxed();
+    match (domain, dtype.is_float()) {
+        (Domain::SmallInt, _) => {
+            return vec(0_i64..=6, len).prop_map(move |values| integers(dtype, &values)).boxed();
+        }
+        (Domain::Moderate, true) => {
+            return vec(moderate_float(), len)
+                .prop_map(move |values| floats(dtype, &values))
+                .boxed();
+        }
+        (Domain::Moderate, false) if matches!(dtype, DType::I32 | DType::I64) => {
+            let bound = 1_i64 << 20;
+            return vec(-bound..bound, len)
+                .prop_map(move |values| integers(dtype, &values))
+                .boxed();
+        }
+        _ => {}
     }
     match dtype {
         DType::I8 => vec(any::<i8>(), len).prop_map(TensorData::from).boxed(),
@@ -80,6 +106,18 @@ fn float() -> impl Strategy<Value = f64> {
     prop_oneof![6 => -8.0..8.0_f64, 3 => (-4_i32..=4).prop_map(f64::from), 1 => special]
 }
 
+/// As `float`, without the specials past f32's square root of its range.
+fn moderate_float() -> impl Strategy<Value = f64> {
+    let special = prop_oneof![
+        Just(0.0),
+        Just(-0.0),
+        Just(f64::INFINITY),
+        Just(f64::NEG_INFINITY),
+        Just(f64::NAN),
+    ];
+    prop_oneof![6 => -8.0..8.0_f64, 3 => (-4_i32..=4).prop_map(f64::from), 1 => special]
+}
+
 fn floats(dtype: DType, values: &[f64]) -> TensorData {
     let each = values.iter().copied();
     match dtype {
@@ -96,7 +134,7 @@ fn floats(dtype: DType, values: &[f64]) -> TensorData {
     }
 }
 
-fn small_ints(dtype: DType, values: &[i64]) -> TensorData {
+fn integers(dtype: DType, values: &[i64]) -> TensorData {
     let each = values.iter().copied();
     match dtype {
         DType::I8 => each.map(|x| i8::try_from(x).unwrap()).collect::<Vec<_>>().into(),

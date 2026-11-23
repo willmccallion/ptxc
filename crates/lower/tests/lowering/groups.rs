@@ -1,7 +1,7 @@
 use crate::{add_one, stages, tensor_type};
 use ptxc_core::DType;
 use ptxc_graph::{BinaryOp, GraphBuilder, Op, UnaryOp};
-use ptxc_lower::LowerError;
+use ptxc_lower::{Binding, LowerError};
 
 #[test]
 fn a_stage_binds_each_graph_value_once() {
@@ -13,8 +13,8 @@ fn a_stage_binds_each_graph_value_once() {
     let stages = stages(graph).unwrap();
 
     assert_eq!(stages.len(), 1);
-    assert_eq!(stages[0].inputs().iter().copied().collect::<Vec<_>>(), [x]);
-    assert_eq!(stages[0].outputs(), [doubled]);
+    assert_eq!(stages[0].inputs().iter().copied().collect::<Vec<_>>(), [Binding::Value(x)]);
+    assert_eq!(stages[0].outputs(), [Binding::Value(doubled)]);
     assert_eq!(stages[0].compute().name().as_str(), "add_0");
 }
 
@@ -29,7 +29,7 @@ fn a_node_whose_output_no_one_reads_has_no_stage() {
     let stages = stages(graph).unwrap();
 
     assert_eq!(stages.len(), 1);
-    assert_eq!(stages[0].outputs(), [out]);
+    assert_eq!(stages[0].outputs(), [Binding::Value(out)]);
 }
 
 #[test]

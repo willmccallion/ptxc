@@ -1,0 +1,14 @@
+compute reduce_sum_square_0(%in0: i32[3]) {
+  %k0 = reduce 3
+  %out0: i32[] = sum[%k0](mul(%in0[%k0], %in0[%k0]))
+}
+
+compute reduce_mean_0(%in0: i32[3]) {
+  %k0 = reduce 3
+  %out0: i32[] = cast<i32>(div(sum[%k0](cast<i64>(%in0[%k0])), 3:i64))
+}
+
+compute reduce_log_sum_0(%in0: i64[3]) {
+  %k0 = reduce 3
+  %out0: i64[] = cast<i64>(log(sum[%k0](cast<f32>(%in0[%k0]))))
+}

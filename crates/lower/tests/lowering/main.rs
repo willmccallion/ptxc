@@ -6,6 +6,7 @@
 mod activation;
 mod elementwise;
 mod groups;
+mod reduce;
 
 use ptxc_core::{DType, Dim, Shape};
 use ptxc_graph::{Graph, GraphBuilder, Layout, Op, Partitioned, TensorType, ValueId};
@@ -24,5 +25,5 @@ pub(crate) fn add_one(builder: &mut GraphBuilder, op: Op, operands: &[ValueId]) 
 /// Every group's stages, flattened in order.
 pub(crate) fn stages(graph: Graph) -> Result<Vec<Stage>, LowerError> {
     let partitioned = Partitioned::one_node_per_group(graph).unwrap();
-    Ok(lower(&partitioned)?.into_iter().flatten().collect())
+    Ok(lower(&partitioned)?.iter().flat_map(|group| group.stages().to_vec()).collect())
 }

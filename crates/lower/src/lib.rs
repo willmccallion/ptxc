@@ -10,4 +10,4 @@ mod stage;
 
 pub use error::LowerError;
 pub use group::lower;
-pub use stage::Stage;
+pub use stage::{Binding, IntermediateId, LoweredGroup, Stage};
