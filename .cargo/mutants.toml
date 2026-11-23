@@ -35,6 +35,10 @@ exclude_re = [
     "replace < with <= in (floor_div|floor_mod)",
     "replace > with >= in (Interval::excludes_zero|modulo_bounds)",
     "replace < with <= in (Interval::excludes_zero|modulo_bounds)",
+    # Resize weights are normalised, so a lone nonzero tap weighs exactly 1
+    # and a tap that is not whole always has a nonzero partner: either half
+    # of the test alone gives the same selections.
+    "replace \\|\\| with && in selection",
     # OR of bit fields that cannot overlap (sign and magnitude, implicit bit and
     # mantissa, exponent and mantissa), where XOR gives the same result.
     "replace \\| with \\^ in (FloatFormat::(encode|decode_magnitude|pack)|decompose)",
