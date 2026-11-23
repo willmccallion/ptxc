@@ -44,7 +44,9 @@ fn generate(workspace: &Path) -> Result<String, ProtoError> {
         .try_into()
         .map_err(|codes: Vec<String>| ProtoError::ModuleCount(codes.len()))?;
     Ok(format!(
-        "// From onnx.proto at ONNX {ONNX_TAG}. Regenerate with `cargo xtask proto`.\n{code}"
+        "// From onnx.proto at ONNX {ONNX_TAG}. Regenerate with `cargo xtask proto`.\n\
+         /// The ONNX release `onnx.proto` and the node tests come from (D31).\n\
+         pub const ONNX_TAG: &str = \"{ONNX_TAG}\";\n\n{code}"
     ))
 }
 
