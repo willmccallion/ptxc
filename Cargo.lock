@@ -1002,10 +1002,14 @@ dependencies = [
 name = "ptxc-runtime"
 version = "0.1.0"
 dependencies = [
+ "ptxc-codegen",
  "ptxc-core",
  "ptxc-cuda",
+ "ptxc-loop",
  "ptxc-program",
+ "ptxc-schedule",
  "ptxc-target",
+ "ptxc-testkit",
 ]
 
 [[package]]
