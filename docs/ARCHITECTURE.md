@@ -269,22 +269,27 @@ pub struct Schedule<S> { compute: Arc<ComputeDef>, loops: LoopTree, trace: Trace
 pub struct Open; pub struct Validated;
 
 impl Schedule<Open> {
+    pub fn new(compute: Arc<ComputeDef>) -> Self;                        // spatial loops outermost, then reductions
+    pub fn replay(compute: Arc<ComputeDef>, trace: &Trace) -> Result<Self, ScheduleError>;
     pub fn apply(&mut self, step: Primitive) -> Result<(), ScheduleError>;
+    pub fn split(&mut self, loop_: LoopId, factors: Vec<SplitFactor>) -> Result<Vec<LoopId>, ScheduleError>;
+    pub fn fuse(&mut self, loops: Vec<LoopId>) -> Result<LoopId, ScheduleError>;
     pub fn validate(self, target: &Target) -> Result<Schedule<Validated>, ScheduleError>;
 }
 impl Schedule<Validated> { pub fn lower(&self) -> Result<LoweredKernel, LowerError> }
 
-pub enum Primitive {
-    Split { loop_: LoopId, factors: Vec<SplitFactor> }, Reorder { order: Vec<LoopId> }, Fuse { loops: Vec<LoopId> },
+pub enum Primitive {                                    // M2's; cache, compute-at, tensorize,
+    Split { loop_: LoopId, factors: Vec<SplitFactor> },  // pipeline and layout come with M3
+    Reorder { order: Vec<LoopId> }, Fuse { loops: Vec<LoopId> },
     Bind { loop_: LoopId, axis: ThreadAxis },          // blockIdx.{x,y,z}, threadIdx.{x,y,z}
-    CacheRead { tensor: TensorParamId, scope: MemScope }, CacheWrite { scope: MemScope },
-    ComputeAt { block: StageId, loop_: LoopId },
-    Vectorize { loop_: LoopId }, Unroll { loop_: LoopId },
-    Tensorize { loops: [LoopId; 3], intrinsic: MmaIntrinsic },
-    Pipeline { loop_: LoopId, stages: PipelineDepth },
-    Layout { buffer: StageId, transform: LayoutTransform },   // swizzle, padding
+    Unroll { loop_: LoopId }, Vectorize { loop_: LoopId },
 }
 ```
+
+The `LoopTree` keeps every axis's index as an expression over the current
+loop variables, simplified after each primitive with the loops' ranges (D38),
+and the guards a nest needs (D39). A split whose factors do not divide the
+extent rounds the outer loop up and adds a guard `index < extent`.
 
 `validate` checks the schedule against the target: thread counts, shared
 memory, that `Tensorize` names an intrinsic the target supports, and that

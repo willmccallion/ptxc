@@ -550,3 +550,23 @@ the old one.
 - **Properties:** for every expression and every assignment within the
   ranges under which it evaluates, the simplified expression evaluates to
   the same value; and simplifying twice changes nothing.
+
+## D39. Schedule semantics: TVM's primitives, guards for uneven splits
+
+- **Context:** M2's schedules need split, reorder, fuse, bind, unroll and
+  vectorize, and M3's tiled GEMM must be expressible with them.
+- **Choice:**
+  - a split rounds its outer loop up when its factors do not divide the
+    extent, and records a guard `index < extent`, as TVM's `split` does;
+    lowering emits it as an `If`;
+  - reorder may put reduction loops between spatial loops, as a tiled GEMM
+    does with `k` between its block and thread tiles; lowering then keeps
+    an accumulator per inner spatial point;
+  - a reduction loop may be bound to a thread axis, whose threads combine
+    their partial results, but not to a block axis;
+  - each axis's index is an expression over the loop variables, simplified
+    after every primitive; a rejected primitive changes nothing, so a trace
+    holds only steps that applied.
+- **Reason:** these are TVM's semantics, which the M3 rules are written
+  against. The property tests check that any sequence of splits, fuses and
+  reorders visits every point of the iteration domain exactly once.
