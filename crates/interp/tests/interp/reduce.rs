@@ -233,3 +233,12 @@ fn integer_cum_sums_wrap_in_their_type() {
     );
     assert_exact(&wide, &[2], &[i64::MAX, i64::MIN]);
 }
+
+#[test]
+fn log_sum_exp_is_nan_wherever_an_input_is() {
+    let rows = f32s(&[3, 2], &[f32::NAN, f32::INFINITY, f32::NAN, f32::NAN, f32::NAN, 1.0]);
+
+    let reduced = reduce("reduce_log_sum_exp", "[1]", "drop", "f32[3]", rows);
+
+    assert_close(&reduced, &[3], &[f64::NAN, f64::NAN, f64::NAN]);
+}
