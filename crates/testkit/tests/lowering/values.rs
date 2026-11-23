@@ -22,6 +22,9 @@ pub(crate) enum Domain {
     /// rounding is tiny against any nonzero deviation from it, which keeps
     /// a normalisation's f32 result well-conditioned.
     Integral,
+    /// Moderate values without NaN or infinities: floats from -8 to 8,
+    /// integers within ±2^20.
+    Finite,
 }
 
 /// An output shape: rank 0 to 3, extents mostly 1 to 3, sometimes 0.
@@ -73,12 +76,16 @@ fn data(dtype: DType, len: usize, domain: Domain) -> BoxedStrategy<TensorData> {
             let whole = prop_oneof![9 => (-8_i32..=8).prop_map(f64::from), 1 => moderate_special()];
             return vec(whole, len).prop_map(move |values| floats(dtype, &values)).boxed();
         }
+        (Domain::Finite, true) => {
+            let finite = prop_oneof![3 => -8.0..8.0_f64, 1 => (-4_i32..=4).prop_map(f64::from)];
+            return vec(finite, len).prop_map(move |values| floats(dtype, &values)).boxed();
+        }
         (Domain::Moderate, true) => {
             return vec(moderate_float(), len)
                 .prop_map(move |values| floats(dtype, &values))
                 .boxed();
         }
-        (Domain::Moderate, false) if matches!(dtype, DType::I32 | DType::I64) => {
+        (Domain::Moderate | Domain::Finite, false) if matches!(dtype, DType::I32 | DType::I64) => {
             let bound = 1_i64 << 20;
             return vec(-bound..bound, len)
                 .prop_map(move |values| integers(dtype, &values))

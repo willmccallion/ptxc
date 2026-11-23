@@ -10,6 +10,7 @@ mod norm;
 mod pool;
 mod quant;
 mod reduce;
+mod resize;
 mod shape;
 mod window;
 
@@ -67,7 +68,8 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::Dequantize(attrs) => quant::dequantize(cx, attrs),
         Op::QMatMul(attrs) => quant::qmatmul(cx, attrs),
         Op::QConv(attrs) => quant::qconv(cx, attrs),
-        other => Err(LowerError::Unsupported { op: other.mnemonic() }),
+        Op::Resize(attrs) => resize::resize(cx, attrs),
+        other @ Op::Attention(_) => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }
 

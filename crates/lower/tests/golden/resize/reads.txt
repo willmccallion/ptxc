@@ -1,0 +1,14 @@
+compute resize_0(%in0: i64[6], %in1: u8[2, 3]) {
+  %i0 = spatial 2
+  %i1 = spatial 6
+  %j1 = load %in0[%i1]
+  %out0: u8[2, 6] = %in1[%i0, %j1]
+}
+
+compute resize_0(%in0: i64[10], %in1: f32[10], %in2: f16[2, 2]) {
+  %i0 = spatial 2
+  %i1 = spatial 5
+  %k0 = reduce 2
+  %j1 = load %in0[%i1 * 2 + %k0]
+  %out0: f16[2, 5] = cast<f16>(sum[%k0](mul(%in1[%i1 * 2 + %k0], cast<f32>(%in2[%i0, %j1]))))
+}

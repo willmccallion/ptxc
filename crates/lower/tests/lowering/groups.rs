@@ -1,8 +1,8 @@
 use crate::{add_one, stages, tensor_type};
-use ptxc_core::{Affine, DType, Dim, Granularity, QuantDType, QuantParams, Scale, ZeroPoint};
+use ptxc_core::{Affine, DType, Granularity, QuantDType, QuantParams, Scale, ZeroPoint};
 use ptxc_graph::{
-    Antialias, BinaryOp, CoordinateTransform, F32Attr, GraphBuilder, Op, QMatMulAttrs, ResizeAttrs,
-    ResizeAxis, ResizeMode, UnaryOp,
+    AttentionAttrs, AttentionLayout, AttentionMask, BinaryOp, Causality, F32Attr, GraphBuilder, Op,
+    Presence, QMatMulAttrs, UnaryOp,
 };
 use ptxc_lower::{Binding, LowerError};
 
@@ -37,21 +37,27 @@ fn a_node_whose_output_no_one_reads_has_no_stage() {
 
 #[test]
 fn an_op_without_a_lowering_is_reported_by_name() {
-    let mut builder = GraphBuilder::new();
-    let x = builder.add_input(tensor_type(DType::F32, &[4]));
-    let axis = ResizeAxis { size: Dim::new(8), scale: F32Attr::new(2.0) };
-    let attrs = ResizeAttrs {
-        mode: ResizeMode::Linear,
-        coordinates: CoordinateTransform::HalfPixel,
-        antialias: Antialias::Off,
-        axes: vec![axis],
+    let attrs = AttentionAttrs {
+        layout: AttentionLayout::Heads,
+        mask: AttentionMask::None,
+        causality: Causality::Full,
+        past: Presence::Absent,
+        present: Presence::Absent,
+        nonpad_lengths: Presence::Absent,
+        qk_output: None,
+        scale: F32Attr::new(0.5),
+        softcap: None,
+        softmax_precision: DType::F32,
     };
-    let resized = add_one(&mut builder, Op::Resize(attrs), &[x]);
-    let graph = builder.finish(vec![resized]).unwrap();
+    let mut builder = GraphBuilder::new();
+    let qkv: Vec<_> =
+        (0..3).map(|_| builder.add_input(tensor_type(DType::F32, &[1, 2, 3, 4]))).collect();
+    let attended = add_one(&mut builder, Op::Attention(attrs), &qkv);
+    let graph = builder.finish(vec![attended]).unwrap();
 
     let error = stages(graph).err();
 
-    assert_eq!(error, Some(LowerError::Unsupported { op: "resize" }));
+    assert_eq!(error, Some(LowerError::Unsupported { op: "attention" }));
 }
 
 #[test]

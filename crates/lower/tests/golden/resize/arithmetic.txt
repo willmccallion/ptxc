@@ -1,0 +1,18 @@
+compute resize_0(%in0: i64[12], %in1: f32[12], %in2: i32[4]) {
+  %i0 = spatial 3
+  %k0 = reduce 4
+  %j0 = load %in0[%i0 * 4 + %k0]
+  %out0: i32[3] = cast<i32>(min(max(cast<i64>(sum[%k0](mul(%in1[%i0 * 4 + %k0], cast<f32>(%in2[%j0])))), cast<i64>(-2147483648:i32)), cast<i64>(2147483647:i32)))
+}
+
+compute resize_0(%in0: i64[6], %in1: f32[6], %in2: bool[3], %in3: f32[3]) {
+  %i0 = spatial 3
+  %k0 = reduce 2
+  %j0 = load %in0[%i0 * 2 + %k0]
+  %out0: f32[3] = select(%in2[%i0], 7.0:f32, sum[%k0](mul(%in1[%i0 * 2 + %k0], %in3[%j0])))
+}
+
+compute resize_0() {
+  %i0 = spatial 2
+  %out0: i8[2] = cast<i8>(min(max(cast<i64>(7.0:f32), cast<i64>(-128:i8)), cast<i64>(127:i8)))
+}

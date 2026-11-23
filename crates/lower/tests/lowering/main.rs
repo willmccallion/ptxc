@@ -11,6 +11,7 @@ mod matmul;
 mod norm;
 mod quant;
 mod reduce;
+mod resize;
 mod shape;
 mod window;
 
