@@ -2,6 +2,7 @@
 //! graph op: the canonical forms of D32.
 
 mod activation;
+mod attention;
 mod constant;
 mod conv;
 mod elementwise;
