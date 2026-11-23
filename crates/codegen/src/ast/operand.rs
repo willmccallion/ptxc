@@ -1,6 +1,6 @@
 //! Instruction operands: registers, immediates and addresses.
 
-use super::function::Int;
+use super::arithmetic::Int;
 use super::reg::{B16, B32, B64, Class, F32, Reg, RegId};
 
 /// A source operand as instructions store it.
