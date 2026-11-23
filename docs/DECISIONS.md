@@ -478,3 +478,28 @@ the old one.
 - **Reason:** the interpreter-against-ORT check needs only realistic inputs,
   not labels, and ImageNetV2 comes from the same distribution ResNet-50 was
   trained on. M4's top-1 accuracy still uses ImageNet itself, as D25 says.
+
+## D36. Targets declare their SM's minimum PTX ISA version
+
+- **Context:** D11 caps the `.version` ptxc emits by `Target`'s
+  `PtxIsaVersion`, derived from the driver. The GPU-free crates and their
+  tests need a version before any driver is involved, so the presets in
+  `ptxc-target` carry one.
+- **Options:** the version that introduced the SM (7.8 for `sm_89`, CUDA
+  11.8); the newest version the pinned ptxas accepts, lowered at runtime to
+  what the driver supports.
+- **Choice:** the SM's minimum. `Target::from_device` checks that the
+  driver supports at least the preset's version and fails otherwise; it
+  does not raise it.
+- **Reason:** what M2 and M3 emit (`mma.sync`, `ldmatrix`, `cp.async`)
+  exists at 7.8, so modules load on any driver that knows `sm_89`, and the
+  emitted text does not depend on which driver and ptxas produced it. A
+  feature that needs a newer version is a new decision.
+- **Evidence:** ptxas 13.5 rejects `.version 7.7` with `.target sm_89` ("PTX
+  .version 7.7 does not support .target sm_89") and accepts 7.8. The
+  preset's limits are what the RTX 4060 Ti's driver reports through
+  `cuDeviceGetAttribute`, and agree with the CUDA programming guide's
+  tables for compute capability 8.9; registers per thread (255) is from the
+  guide, as no attribute gives it.
+- **Supersedes:** D11's "which `ptxc-runtime` derives from the driver's
+  reported version".
