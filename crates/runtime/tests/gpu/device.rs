@@ -3,7 +3,7 @@
 use ptxc_codegen::generate;
 use ptxc_core::{ByteSize, HostTensor, TensorData};
 use ptxc_cuda::{BlockDim, Context, DeviceBuffer, DeviceOrdinal, Driver, GridDim};
-use ptxc_loop::{Access, ComputeDef, LoweredKernel};
+use ptxc_loop::{Access, ComputeDef, LoweredKernel, RunError};
 use ptxc_target::{BlockCount, SmVersion, Target, ThreadsPerBlock, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
 use std::sync::Arc;
@@ -38,8 +38,10 @@ pub(crate) fn run_on_device(kernel: &LoweredKernel, inputs: &[HostTensor]) -> Ve
             // tensor gets one byte it never touches.
             let mut device = context.alloc(ByteSize::new(bytes.get().max(1))).unwrap();
             if param.access == Access::Read {
-                let input = remaining_inputs.next().unwrap();
-                device.copy_from_host(&input.data().to_le_bytes()).unwrap();
+                let bytes = remaining_inputs.next().unwrap().data().to_le_bytes();
+                if !bytes.is_empty() {
+                    device.copy_from_host(&bytes).unwrap();
+                }
             }
             (param.access, device)
         })
@@ -76,12 +78,28 @@ pub(crate) fn run_on_device(kernel: &LoweredKernel, inputs: &[HostTensor]) -> Ve
 /// output matches exactly.
 pub(crate) fn check_against_interpreter(compute: ComputeDef, inputs: &[HostTensor]) {
     let kernel = lowered(compute);
-    let expected = ptxc_loop::run(&kernel, inputs).unwrap();
-    let actual = run_on_device(&kernel, inputs);
+    let _outputs = match_interpreter(&kernel, inputs, "").unwrap();
+}
+
+/// `kernel`'s outputs from the loop interpreter, after checking the GPU's
+/// match them exactly; `context` describes the case if they do not. An
+/// input the interpreter rejects leaves the GPU's result undefined, so it
+/// is returned as the interpreter's error, unchecked.
+pub(crate) fn match_interpreter(
+    kernel: &LoweredKernel,
+    inputs: &[HostTensor],
+    context: &str,
+) -> Result<Vec<HostTensor>, RunError> {
+    let expected = ptxc_loop::run(kernel, inputs)?;
+    let actual = run_on_device(kernel, inputs);
     assert_eq!(actual.len(), expected.len());
     for (index, (actual, expected)) in actual.iter().zip(&expected).enumerate() {
         if let Err(mismatch) = compare(actual, expected, Tolerance::Exact) {
-            panic!("{}: output {index} differs from the interpreter:\n{mismatch}", kernel.name());
+            panic!(
+                "{}: output {index} differs from the interpreter:\n{mismatch}\n{context}",
+                kernel.name()
+            );
         }
     }
+    Ok(expected)
 }
