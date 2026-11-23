@@ -1,10 +1,19 @@
 //! Times a launch with CUDA events, as BENCHMARKING.md's methodology says:
 //! a warmup of at least 20 iterations and 1 s, then a series of at least
-//! 100 iterations and 2 s, each iteration between two events on one stream.
+//! 100 samples and 2 s. A sample is a batch of back-to-back launches between
+//! two events on one stream, sized in the warmup to last at least 1 ms, so
+//! the events' resolution and the gaps between launches are a small part
+//! of it; it records the time per launch.
 
 use ptxc_core::Microseconds;
 use ptxc_cuda::{Context, CudaError, Stream};
 use std::time::{Duration, Instant};
+
+/// How long a sample lasts at the least.
+const SAMPLE_TIME: Microseconds = Microseconds::new(1000.0);
+
+/// The most launches a sample batches, however short they are.
+const MAX_BATCH: u32 = 100_000;
 
 /// How many iterations, and for how long, a phase runs at the least.
 #[derive(Clone, Copy, Debug)]
@@ -17,7 +26,7 @@ impl Budget {
     /// The warmup: at least 20 iterations and 1 s.
     const WARMUP: Self = Self { iterations: 20, time: Duration::from_secs(1) };
 
-    /// The timed series: at least 100 iterations and 2 s.
+    /// The timed series: at least 100 samples and 2 s.
     const TIMED: Self = Self { iterations: 100, time: Duration::from_secs(2) };
 
     /// Whether `iterations` run over `elapsed` meet the budget.
@@ -26,10 +35,12 @@ impl Budget {
     }
 }
 
-/// A timed series: each iteration's time, in order.
+/// A timed series: each sample's time per launch, in order, and how many
+/// launches each sample batched.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct Series {
     pub(crate) samples: Vec<Microseconds>,
+    pub(crate) batch: u32,
 }
 
 /// A series' median and spread.
@@ -67,23 +78,43 @@ fn percentile(sorted: &[f64], percent: u8) -> Option<Microseconds> {
     Some(Microseconds::new((upper - lower).mul_add(fraction, lower)))
 }
 
-/// Times `launch`, which queues one iteration's work on `stream`: a warmup,
-/// then a timed series, each iteration between two events and waited for.
+/// Times `launch`, which queues one iteration's work on `stream`: a warmup
+/// of single launches, then a timed series of batches sized from it.
 pub(crate) fn time<E: From<CudaError>>(
     context: &Context,
     stream: &Stream,
     mut launch: impl FnMut() -> Result<(), E>,
 ) -> Result<Series, E> {
     let (start, end) = (context.event()?, context.event()?);
-    let mut iteration = || -> Result<Microseconds, E> {
+    let mut sample = |batch: u32| -> Result<Microseconds, E> {
         start.record(stream)?;
-        launch()?;
+        for _ in 0..batch {
+            launch()?;
+        }
         end.record(stream)?;
         end.synchronize()?;
-        Ok(end.elapsed_since(&start)?)
+        Ok(Microseconds::new(end.elapsed_since(&start)?.get() / f64::from(batch)))
     };
-    let _warmup = run(Budget::WARMUP, &mut iteration)?;
-    Ok(Series { samples: run(Budget::TIMED, &mut iteration)? })
+    let warmup = run(Budget::WARMUP, &mut || sample(1))?;
+    let batch = batch_size(&Series { samples: warmup, batch: 1 });
+    Ok(Series { samples: run(Budget::TIMED, &mut || sample(batch))?, batch })
+}
+
+/// The launches a sample batches to last `SAMPLE_TIME`, from `warmup`'s
+/// median time per launch: the smallest power of two that does, at most
+/// `MAX_BATCH`.
+fn batch_size(warmup: &Series) -> u32 {
+    let Some(summary) = warmup.summary() else { return 1 };
+    let per_launch = summary.median.get();
+    if per_launch >= SAMPLE_TIME.get() {
+        return 1;
+    }
+    let needed = (SAMPLE_TIME.get() / per_launch.max(f64::MIN_POSITIVE)).ceil();
+    let mut batch = 1;
+    while batch < MAX_BATCH && f64::from(batch) < needed {
+        batch = (batch * 2).min(MAX_BATCH);
+    }
+    batch
 }
 
 /// Each time `iteration` gives, run until `budget` is met.
@@ -102,12 +133,12 @@ fn run<E>(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod tests {
-    use super::{Budget, Series, percentile, run};
+    use super::{Budget, MAX_BATCH, Series, batch_size, percentile, run};
     use ptxc_core::Microseconds;
     use std::time::Duration;
 
     fn series(samples: &[f64]) -> Series {
-        Series { samples: samples.iter().copied().map(Microseconds::new).collect() }
+        Series { samples: samples.iter().copied().map(Microseconds::new).collect(), batch: 1 }
     }
 
     #[test]
@@ -140,6 +171,21 @@ mod tests {
             (Microseconds::new(7.0), Microseconds::new(7.0), Microseconds::new(7.0))
         );
         assert_eq!(series(&[]).summary(), None);
+    }
+
+    #[test]
+    fn a_batch_is_the_smallest_power_of_two_lasting_a_millisecond() {
+        assert_eq!(batch_size(&series(&[7.0, 7.0, 9.0])), 256);
+        assert_eq!(batch_size(&series(&[250.0])), 4);
+        assert_eq!(batch_size(&series(&[1000.0])), 1);
+        assert_eq!(batch_size(&series(&[5000.0])), 1);
+    }
+
+    #[test]
+    fn a_batch_is_never_empty_nor_past_its_limit() {
+        assert_eq!(batch_size(&series(&[])), 1);
+        assert_eq!(batch_size(&series(&[0.0])), MAX_BATCH);
+        assert_eq!(batch_size(&series(&[1e-6])), MAX_BATCH);
     }
 
     #[test]
@@ -233,6 +279,7 @@ LOOP:
 
         let summary = series.summary().unwrap();
         assert!(series.samples.len() >= 100, "{}", series.samples.len());
+        assert!((16..=32).contains(&series.batch), "{}", series.batch);
         assert!(summary.p10.get() >= WAIT_MICROSECONDS, "{summary:?}");
         assert!(summary.median.get() < 2.0 * WAIT_MICROSECONDS, "{summary:?}");
         assert!(summary.p10 <= summary.median && summary.median <= summary.p90, "{summary:?}");
