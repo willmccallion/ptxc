@@ -415,23 +415,24 @@ let ctx = device.primary_context()?;
 let module = ctx.load_ptx(&ptx)?;
 let kernel = module.function(&KernelName::new("matmul_0"))?;
 let stream = ctx.stream()?;
-let buf = ctx.alloc::<f16>(ElementCount::new(n))?;
+let mut buf = ctx.alloc(ByteSize::new(bytes))?;   // device memory is bytes
+buf.copy_from_host(&host_bytes)?;
 
 kernel.launch()
     .grid(GridDim::new(64, 1, 1))
     .block(BlockDim::new(128, 1, 1))     // .launch() is only callable once grid and block are set
-    .dynamic_smem(SmemBytes::new(49_152))
-    .arg(&buf)
+    .dynamic_smem(ByteSize::new(49_152))
+    .arg(&buf)                           // checked against the kernel's parameter sizes
     .launch(&stream)?;
-
-let capture = stream.begin_capture()?;   // GraphCapture<Recording>
-// ... launches ...
-let exec = capture.end()?.instantiate()?; // CapturedGraph → GraphExec
-exec.launch(&stream)?;
 ```
 
-- `CudaError` carries the driver's error name, the call that failed and the
-  caller's context.
+- Every handle holds an `Arc` of its context, and each call makes that
+  context current on the calling thread (D37).
+- `CudaError` carries the driver's error name, the call that failed and,
+  for a failed PTX load, the JIT's log.
+- No host memory is mapped into the device's address space, which is what
+  makes a safe launch sound (D37). Stream capture and CUDA graphs come with
+  the graphed executor (M4).
 - `unsafe_code` is denied workspace-wide and allowed only in `ptxc-cuda`;
   `cargo xtask check-deps` enforces both.
 
