@@ -10,6 +10,9 @@ impl LoopTree {
     /// combine their partial results.
     pub(crate) fn bind(&mut self, target: LoopId, axis: ThreadAxis) -> Result<(), ScheduleError> {
         let bound = self.serial_loop(target)?;
+        if bound.extent.get() == 0 {
+            return Err(ScheduleError::EmptyBound(bound.name.clone()));
+        }
         if axis.is_block() && bound.kind == LoopKind::Reduce {
             return Err(ScheduleError::BlockBoundReduce(bound.name.clone()));
         }

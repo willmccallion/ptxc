@@ -207,3 +207,13 @@ fn a_split_of_a_fused_loop_by_the_inner_extent_gives_back_plain_indices() {
     assert!(text.contains("  %i = %i_j.0\n  %j = %i_j.1\n"), "{text}");
     assert_eq!(schedule.loops().guards(), []);
 }
+
+#[test]
+fn an_empty_loop_cannot_be_bound() {
+    let compute = reduction([4, 0, 3]);
+    let (mut schedule, nest) = open(&compute);
+
+    let error = schedule.apply(Primitive::Bind { loop_: nest[1], axis: ThreadAxis::ThreadX });
+
+    assert_eq!(error, Err(ScheduleError::EmptyBound(VarName::new("j"))));
+}
