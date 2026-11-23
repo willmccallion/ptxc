@@ -34,6 +34,9 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError>
         Op::Variadic(op) => elementwise::variadic(cx, *op),
         Op::Where => elementwise::select(cx),
         Op::Cast(attrs) => elementwise::cast(cx, *attrs),
+        Op::Activation(activation) => activation::activation(cx, *activation),
+        Op::Clip => activation::clip(cx),
+        Op::PRelu => activation::prelu(cx),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }

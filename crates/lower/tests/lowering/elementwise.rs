@@ -9,7 +9,7 @@ use ptxc_testkit::golden;
 
 /// The printed definitions of a graph whose one node is `op` on inputs of
 /// `operands`' types.
-fn lowered(op: Op, operands: &[(DType, &[u64])]) -> String {
+pub(crate) fn lowered(op: Op, operands: &[(DType, &[u64])]) -> String {
     let mut builder = GraphBuilder::new();
     let inputs: Vec<_> =
         operands.iter().map(|&(dtype, dims)| builder.add_input(tensor_type(dtype, dims))).collect();

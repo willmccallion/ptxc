@@ -1,44 +1,13 @@
 //! Every elementwise op, `Where` and `Cast`, at every element type its type
 //! rule admits, with broadcasting.
 
+use crate::cases::{Case, OperandSpec, admitted, graphs};
 use crate::harness::check_against_reference;
-use crate::values::{Domain, operand_dims, output_dims, shape, tensor};
+use crate::values::Domain;
 use proptest::prelude::*;
-use proptest::sample::select;
+use ptxc_core::DType;
 use ptxc_core::float::Overflow;
-use ptxc_core::{DType, HostTensor};
-use ptxc_graph::{
-    BinaryOp, CastAttrs, Graph, GraphBuilder, InfDetection, Layout, ModKind, Op, TensorType,
-    TypeRule, UnaryOp, VariadicOp,
-};
-
-/// An op and each operand's element type and values.
-#[derive(Clone, Debug)]
-struct Case {
-    op: Op,
-    operands: Vec<(DType, Domain)>,
-}
-
-impl Case {
-    fn new(op: Op, dtypes: &[DType]) -> Self {
-        Self { op, operands: dtypes.iter().map(|&dtype| (dtype, Domain::Any)).collect() }
-    }
-
-    fn is_admitted(&self) -> bool {
-        let types: Vec<TensorType> = self
-            .operands
-            .iter()
-            .map(|&(dtype, _)| TensorType::new(dtype, shape(&[1]), Layout::RowMajor))
-            .collect();
-        self.op.infer(&types.iter().collect::<Vec<_>>()).is_ok()
-    }
-}
-
-fn admitted(cases: impl IntoIterator<Item = Case>) -> Vec<Case> {
-    let admitted: Vec<Case> = cases.into_iter().filter(Case::is_admitted).collect();
-    assert!(!admitted.is_empty());
-    admitted
-}
+use ptxc_graph::{BinaryOp, CastAttrs, InfDetection, ModKind, Op, UnaryOp, VariadicOp};
 
 const UNARY: [UnaryOp; 19] = [
     UnaryOp::Abs,
@@ -102,10 +71,9 @@ fn binary_cases() -> Vec<Case> {
             } else {
                 Domain::Any
             };
-            Case {
-                op: Op::Binary(BinaryOp::Pow),
-                operands: vec![(base, domain), (exponent, domain)],
-            }
+            let operands =
+                [base, exponent].map(|dtype| OperandSpec::any(dtype).with_domain(domain));
+            Case { op: Op::Binary(BinaryOp::Pow), operands: operands.into() }
         })
     });
     admitted(same.chain(pow))
@@ -131,42 +99,6 @@ fn cast_cases() -> Vec<Case> {
                 .map(|overflow| Case::new(Op::Cast(CastAttrs::new(to, overflow)), &[from]))
         })
     }))
-}
-
-/// A graph of one node of a case drawn from `cases`, and inputs for it.
-fn graphs(cases: Vec<Case>) -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
-    select(cases)
-        .prop_flat_map(|case| {
-            output_dims().prop_flat_map(move |output| {
-                let inputs: Vec<BoxedStrategy<HostTensor>> = case
-                    .operands
-                    .iter()
-                    .map(|&(dtype, domain)| {
-                        operand_dims(output.clone())
-                            .prop_flat_map(move |dims| tensor(dtype, dims, domain))
-                            .boxed()
-                    })
-                    .collect();
-                (Just(case.op.clone()), inputs)
-            })
-        })
-        .prop_map(|(op, inputs)| (single_node(op, &inputs), inputs))
-}
-
-fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
-    let mut builder = GraphBuilder::new();
-    let operands = inputs
-        .iter()
-        .map(|input| {
-            builder.add_input(TensorType::new(
-                input.dtype(),
-                input.shape().clone(),
-                Layout::RowMajor,
-            ))
-        })
-        .collect();
-    let outputs = builder.add_node(op, operands).unwrap();
-    builder.finish(outputs).unwrap()
 }
 
 proptest! {
