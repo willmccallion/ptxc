@@ -4,7 +4,7 @@ use super::iter_var::IterVarId;
 use super::names::{TensorName, VarName};
 use super::tensor_expr::TensorParamId;
 use crate::expr::VarId;
-use ptxc_core::{DType, Rank, ShapeError};
+use ptxc_core::{Axis, DType, Dim, Rank, ShapeError};
 use thiserror::Error;
 
 /// A compute definition `ComputeBuilder::finish` rejects.
@@ -46,9 +46,26 @@ pub enum ComputeError {
     /// A spatial axis named as a reduction axis.
     #[error("{0} is a spatial axis, not a reduction axis")]
     NotAReduceAxis(VarName),
-    /// A reduction axis reduced over twice.
-    #[error("reduction axis {0} is reduced over twice")]
+    /// An axis listed twice in one reduction.
+    #[error("reduction axis {0} is listed twice")]
     ReduceAxisReused(VarName),
+    /// A second reduction; each compute definition is one stage with at
+    /// most one (D40).
+    #[error("a compute definition holds at most one reduction")]
+    MultipleReductions,
+    /// Several outputs alongside a reduction.
+    #[error("a compute definition with a reduction has exactly one output")]
+    ReductionWithSeveralOutputs,
+    /// A load index that can leave its axis over the iteration domain.
+    #[error("index {} of {tensor} can leave [0, {})", .axis.index(), .extent.get())]
+    IndexOutOfBounds {
+        /// The tensor.
+        tensor: TensorName,
+        /// The axis indexed.
+        axis: Axis,
+        /// The axis's extent.
+        extent: Dim,
+    },
     /// A reduction axis no reduction uses.
     #[error("reduction axis {0} is never reduced over")]
     UnusedReduceAxis(VarName),

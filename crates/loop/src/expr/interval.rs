@@ -79,6 +79,14 @@ impl VarRanges {
     }
 }
 
+impl ExprArena {
+    /// Bounds of `id`'s value when each variable lies in its range, or
+    /// `None` if a variable it reads has no range or a bound overflows.
+    pub fn bounds(&self, id: ExprId, ranges: &VarRanges) -> Option<Interval> {
+        bounds(self, ranges, id)
+    }
+}
+
 /// Bounds of `id`'s value over its variables' ranges, or `None` if some
 /// variable is unbounded or a bound overflows `i64`.
 fn bounds(arena: &ExprArena, ranges: &VarRanges, id: ExprId) -> Option<Interval> {

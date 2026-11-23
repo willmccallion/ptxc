@@ -91,6 +91,9 @@ impl ComputeBuilder {
             outputs.push(OutputDef { name, dtype, expr });
         }
         checker.every_reduce_axis_used()?;
+        if checker.has_reduction() && outputs.len() > 1 {
+            return Err(ComputeError::ReductionWithSeveralOutputs);
+        }
         let dims = self
             .iter_vars
             .iter()

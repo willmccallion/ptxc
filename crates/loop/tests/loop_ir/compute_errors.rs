@@ -1,7 +1,7 @@
 //! Each way a compute definition is rejected.
 
 use crate::compute_build::{binary, f32_const, load, shape};
-use ptxc_core::{DType, Dim, Idx, Rank};
+use ptxc_core::{Axis, DType, Dim, Idx, Rank};
 use ptxc_loop::{
     BinaryOp, ComputeBuilder, ComputeError, ComputeName, IterVarId, ReduceOp, TensorExpr,
     TensorName, TensorParamId, VarId, VarName,
@@ -109,12 +109,8 @@ fn reduction_axes_are_read_only_inside_their_one_reduction() {
 
     let s = setup();
     let (x, i, k, k_axis) = (s.x, s.i, s.k, s.k_axis);
-    let twice = binary(
-        BinaryOp::Add,
-        sum(vec![k_axis], load(x, &[i, k])),
-        sum(vec![k_axis], load(x, &[i, k])),
-    );
-    assert_eq!(reject(s, twice), ComputeError::ReduceAxisReused(VarName::new("k")));
+    let listed_twice = sum(vec![k_axis, k_axis], load(x, &[i, k]));
+    assert_eq!(reject(s, listed_twice), ComputeError::ReduceAxisReused(VarName::new("k")));
 
     let mut s = setup();
     let zero = s.b.exprs().constant(0);
@@ -157,4 +153,56 @@ fn the_output_shape_must_fit_in_u64_elements() {
     b.output(TensorName::new("out"), f32_const(0.0));
 
     assert!(matches!(b.finish(), Err(ComputeError::Shape(_))));
+}
+
+#[test]
+fn a_definition_is_one_stage_with_at_most_one_reduction() {
+    let mut s = setup();
+    let (m_axis, second) = s.b.reduce_axis(VarName::new("m"), Dim::new(8));
+    let (x, i, k, k_axis) = (s.x, s.i, s.k, s.k_axis);
+    let two = binary(
+        BinaryOp::Add,
+        sum(vec![k_axis], load(x, &[i, k])),
+        sum(vec![m_axis], load(x, &[i, second])),
+    );
+    assert_eq!(reject(s, two), ComputeError::MultipleReductions);
+
+    let mut s = setup();
+    let (x, i, k, k_axis) = (s.x, s.i, s.k, s.k_axis);
+    s.b.output(TensorName::new("extra"), f32_const(1.0));
+    assert_eq!(
+        reject(s, sum(vec![k_axis], load(x, &[i, k]))),
+        ComputeError::ReductionWithSeveralOutputs
+    );
+}
+
+#[test]
+fn a_load_must_stay_within_its_tensor_over_the_domain() {
+    let out_of_bounds = |offset: i64| {
+        let mut s = setup();
+        let shift = s.b.exprs().constant(offset);
+        let shifted = s.b.exprs().add(s.k, shift);
+        let (x, i, k_axis) = (s.x, s.i, s.k_axis);
+        reject(s, sum(vec![k_axis], load(x, &[i, shifted])))
+    };
+    let expected = ComputeError::IndexOutOfBounds {
+        tensor: TensorName::new("x"),
+        axis: Axis::new(1),
+        extent: Dim::new(8),
+    };
+
+    assert_eq!(out_of_bounds(1), expected);
+    assert_eq!(out_of_bounds(-1), expected);
+}
+
+#[test]
+fn an_empty_axis_reads_nothing_so_any_index_is_allowed() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("empty"));
+    let x = compute.input(TensorName::new("x"), DType::F32, shape(&[2]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(0));
+    let ten = compute.exprs().constant(10);
+    let far = compute.exprs().add(i, ten);
+    compute.output(TensorName::new("out"), load(x, &[far]));
+
+    assert!(compute.finish().is_ok());
 }

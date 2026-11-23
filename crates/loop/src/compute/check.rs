@@ -1,13 +1,14 @@
 //! Type-checks a compute definition's outputs: element types, loads, index
-//! variables, and the scope of each reduction axis.
+//! variables, the scope of the one reduction axis set, and that every load
+//! stays within its tensor over the iteration domain.
 
 use super::compute_def::{IndexVar, TensorParam};
 use super::error::ComputeError;
 use super::iter_var::{IterKind, IterVar, IterVarId};
 use super::tensor_expr::{TensorExpr, TensorParamId};
 use super::types;
-use crate::expr::{ExprArena, ExprId, VarId};
-use ptxc_core::{DType, IndexVec, Rank};
+use crate::expr::{ExprArena, ExprId, Interval, VarId, VarRanges};
+use ptxc_core::{Axis, DType, Dim, IndexVec, Rank};
 use std::collections::HashSet;
 
 /// Checks outputs one by one, remembering which reduction axes are taken.
@@ -17,6 +18,7 @@ pub(super) struct Checker<'a> {
     iter_vars: &'a IndexVec<IterVarId, IterVar>,
     inputs: &'a IndexVec<TensorParamId, TensorParam>,
     reduced: HashSet<IterVarId>,
+    ranges: VarRanges,
 }
 
 impl<'a> Checker<'a> {
@@ -26,7 +28,23 @@ impl<'a> Checker<'a> {
         iter_vars: &'a IndexVec<IterVarId, IterVar>,
         inputs: &'a IndexVec<TensorParamId, TensorParam>,
     ) -> Self {
-        Self { exprs, vars, iter_vars, inputs, reduced: HashSet::new() }
+        let mut ranges = VarRanges::new();
+        for (var, definition) in vars.iter_enumerated() {
+            let IndexVar::Iter(axis) = definition else { continue };
+            let last = iter_vars.get(*axis).and_then(|iter| iter.extent.get().checked_sub(1));
+            if let Some(range) = last
+                .and_then(|last| i64::try_from(last).ok())
+                .and_then(|last| Interval::new(0, last))
+            {
+                ranges.insert(var, range);
+            }
+        }
+        Self { exprs, vars, iter_vars, inputs, reduced: HashSet::new(), ranges }
+    }
+
+    /// Whether the outputs read a reduction.
+    pub(super) fn has_reduction(&self) -> bool {
+        !self.reduced.is_empty()
     }
 
     /// The element type of an output's expression.
@@ -88,8 +106,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `scope` with `axes` added, after checking each is a reduction axis
-    /// no other reduction has taken.
+    /// `scope` with `axes` added, after checking this is the definition's
+    /// only reduction and each axis is a reduction axis, listed once.
     fn bind_axes(
         &mut self,
         axes: &[IterVarId],
@@ -97,6 +115,9 @@ impl<'a> Checker<'a> {
     ) -> Result<Vec<IterVarId>, ComputeError> {
         if axes.is_empty() {
             return Err(ComputeError::EmptyReduce);
+        }
+        if self.has_reduction() {
+            return Err(ComputeError::MultipleReductions);
         }
         for &axis in axes {
             let var = self.iter_vars.get(axis).ok_or(ComputeError::UnknownAxis(axis))?;
@@ -131,12 +152,40 @@ impl<'a> Checker<'a> {
                 actual,
             });
         }
-        for &expr in index {
+        for (position, (&expr, &extent)) in index.iter().zip(param.shape.dims()).enumerate() {
             for var in self.exprs.vars(expr) {
                 self.check_var(var, scope)?;
             }
+            if !self.stays_within(expr, extent) {
+                let axis = Axis::new(position);
+                return Err(ComputeError::IndexOutOfBounds {
+                    tensor: param.name.clone(),
+                    axis,
+                    extent,
+                });
+            }
         }
         Ok(())
+    }
+
+    /// Whether `expr` stays in `[0, extent)` over the iteration domain. An
+    /// index read from a tensor is checked when it is read, not here; an
+    /// empty axis makes the domain empty, so nothing is read at all.
+    fn stays_within(&self, expr: ExprId, extent: Dim) -> bool {
+        let read = self.exprs.vars(expr);
+        let vacuous = read.iter().any(|&var| match self.vars.get(var) {
+            Some(IndexVar::Loaded { .. }) => true,
+            Some(IndexVar::Iter(axis)) => {
+                self.iter_vars.get(*axis).is_some_and(|iter| iter.extent.get() == 0)
+            }
+            None => false,
+        });
+        if vacuous {
+            return true;
+        }
+        let last = extent.get().checked_sub(1).and_then(|last| i64::try_from(last).ok());
+        let bounds = self.exprs.bounds(expr, &self.ranges);
+        bounds.zip(last).is_some_and(|(bounds, last)| bounds.min() >= 0 && bounds.max() <= last)
     }
 
     /// Checks that `var` may be read where `scope` is bound.
