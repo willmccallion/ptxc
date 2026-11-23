@@ -369,9 +369,10 @@ fragment layout) are caught by `cargo test`.
 ### Lowering (`ptxc-lower`)
 
 - **In:** `Partitioned`. **Out:** `IndexVec<GroupId, LoweredGroup>`: each
-  group's stages in order and the intermediate buffers joining them (D40,
-  D43). A `Stage` is a `ComputeDef` with a `Binding`, a graph value or an
-  intermediate, for each of its tensors (D42).
+  group's stages in order, the intermediate buffers joining them, and the
+  constant tables they read, such as per-channel quantization scales (D40,
+  D43, D46). A `Stage` is a `ComputeDef` with a `Binding` (a graph value, an
+  intermediate or a table) for each of its tensors (D42).
 - Arithmetic on f16, bf16 and FP8 values runs in f32 and rounds back once
   (`precision.rs`), as the reference does; comparisons, selects and integer
   arithmetic stay in the operands' own types. Reductions accumulate in f32
