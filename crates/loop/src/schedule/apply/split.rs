@@ -37,6 +37,7 @@ impl LoopTree {
         let index = self.recombined(&parts, &strides);
         self.replace_var(target, index);
         if original.extent.get() % strides[0].unsigned_abs() != 0 {
+            let index = self.simplified(index);
             self.guards.push(Guard { index, extent: original.extent });
         }
         Ok(parts)

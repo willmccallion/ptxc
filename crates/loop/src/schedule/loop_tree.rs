@@ -180,6 +180,12 @@ impl LoopTree {
             .ok_or_else(|| ScheduleError::NotInNest(found.name.clone()))
     }
 
+    /// `id` simplified over the current loops' ranges.
+    pub(super) fn simplified(&mut self, id: ExprId) -> ExprId {
+        let ranges = self.ranges();
+        Simplifier::new(&ranges).simplify(&mut self.exprs, id)
+    }
+
     /// Replaces `old`'s variable by `value` in every axis index and guard,
     /// after `old` has left the nest, then simplifies them over the new
     /// loops' ranges. Substitution keeps the values an index takes, so a
