@@ -1012,6 +1012,7 @@ dependencies = [
  "ptxc-core",
  "ptxc-loop",
  "ptxc-target",
+ "ptxc-testkit",
 ]
 
 [[package]]

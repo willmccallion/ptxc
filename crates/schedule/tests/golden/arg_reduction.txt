@@ -1,0 +1,75 @@
+kernel stage(%x: f32[120] read, %y: i64[3] write)
+  grid(3, 1, 1) block(40, 1, 1) smem 480
+  %a0 = blockIdx.x
+  %a1.1 = threadIdx.x
+  alloc %partials: f32[40] shared {
+    alloc %partial_positions: i64[40] shared {
+      alloc %partial: f32[1] local {
+        alloc %partial_position: i64[1] local {
+          alloc %replace: bool[1] local {
+            %partial[0] = -inf:f32
+            %partial_position[0] = 9223372036854775807:i64
+            for %a1.0 in 1 {
+              %replace[0] = select(isnan(%partial[0]), and(isnan(%x[%a0 * 40 + %a1.1 + %a1.0 * 40]), lt(index<i64>(%a1.1 + %a1.0 * 40), %partial_position[0])), or(isnan(%x[%a0 * 40 + %a1.1 + %a1.0 * 40]), or(gt(%x[%a0 * 40 + %a1.1 + %a1.0 * 40], %partial[0]), and(eq(%x[%a0 * 40 + %a1.1 + %a1.0 * 40], %partial[0]), lt(index<i64>(%a1.1 + %a1.0 * 40), %partial_position[0])))))
+              %partial[0] = select(%replace[0], %x[%a0 * 40 + %a1.1 + %a1.0 * 40], %partial[0])
+              %partial_position[0] = select(%replace[0], index<i64>(%a1.1 + %a1.0 * 40), %partial_position[0])
+            }
+            %partials[%a1.1] = %partial[0]
+            %partial_positions[%a1.1] = %partial_position[0]
+            barrier
+            if %a1.1 < 32 {
+              if %a1.1 + 32 < 40 {
+                %replace[0] = select(isnan(%partials[%a1.1]), and(isnan(%partials[%a1.1 + 32]), lt(%partial_positions[%a1.1 + 32], %partial_positions[%a1.1])), or(isnan(%partials[%a1.1 + 32]), or(gt(%partials[%a1.1 + 32], %partials[%a1.1]), and(eq(%partials[%a1.1 + 32], %partials[%a1.1]), lt(%partial_positions[%a1.1 + 32], %partial_positions[%a1.1])))))
+                %partials[%a1.1] = select(%replace[0], %partials[%a1.1 + 32], %partials[%a1.1])
+                %partial_positions[%a1.1] = select(%replace[0], %partial_positions[%a1.1 + 32], %partial_positions[%a1.1])
+              }
+            }
+            barrier
+            if %a1.1 < 16 {
+              if %a1.1 + 16 < 40 {
+                %replace[0] = select(isnan(%partials[%a1.1]), and(isnan(%partials[%a1.1 + 16]), lt(%partial_positions[%a1.1 + 16], %partial_positions[%a1.1])), or(isnan(%partials[%a1.1 + 16]), or(gt(%partials[%a1.1 + 16], %partials[%a1.1]), and(eq(%partials[%a1.1 + 16], %partials[%a1.1]), lt(%partial_positions[%a1.1 + 16], %partial_positions[%a1.1])))))
+                %partials[%a1.1] = select(%replace[0], %partials[%a1.1 + 16], %partials[%a1.1])
+                %partial_positions[%a1.1] = select(%replace[0], %partial_positions[%a1.1 + 16], %partial_positions[%a1.1])
+              }
+            }
+            barrier
+            if %a1.1 < 8 {
+              if %a1.1 + 8 < 40 {
+                %replace[0] = select(isnan(%partials[%a1.1]), and(isnan(%partials[%a1.1 + 8]), lt(%partial_positions[%a1.1 + 8], %partial_positions[%a1.1])), or(isnan(%partials[%a1.1 + 8]), or(gt(%partials[%a1.1 + 8], %partials[%a1.1]), and(eq(%partials[%a1.1 + 8], %partials[%a1.1]), lt(%partial_positions[%a1.1 + 8], %partial_positions[%a1.1])))))
+                %partials[%a1.1] = select(%replace[0], %partials[%a1.1 + 8], %partials[%a1.1])
+                %partial_positions[%a1.1] = select(%replace[0], %partial_positions[%a1.1 + 8], %partial_positions[%a1.1])
+              }
+            }
+            barrier
+            if %a1.1 < 4 {
+              if %a1.1 + 4 < 40 {
+                %replace[0] = select(isnan(%partials[%a1.1]), and(isnan(%partials[%a1.1 + 4]), lt(%partial_positions[%a1.1 + 4], %partial_positions[%a1.1])), or(isnan(%partials[%a1.1 + 4]), or(gt(%partials[%a1.1 + 4], %partials[%a1.1]), and(eq(%partials[%a1.1 + 4], %partials[%a1.1]), lt(%partial_positions[%a1.1 + 4], %partial_positions[%a1.1])))))
+                %partials[%a1.1] = select(%replace[0], %partials[%a1.1 + 4], %partials[%a1.1])
+                %partial_positions[%a1.1] = select(%replace[0], %partial_positions[%a1.1 + 4], %partial_positions[%a1.1])
+              }
+            }
+            barrier
+            if %a1.1 < 2 {
+              if %a1.1 + 2 < 40 {
+                %replace[0] = select(isnan(%partials[%a1.1]), and(isnan(%partials[%a1.1 + 2]), lt(%partial_positions[%a1.1 + 2], %partial_positions[%a1.1])), or(isnan(%partials[%a1.1 + 2]), or(gt(%partials[%a1.1 + 2], %partials[%a1.1]), and(eq(%partials[%a1.1 + 2], %partials[%a1.1]), lt(%partial_positions[%a1.1 + 2], %partial_positions[%a1.1])))))
+                %partials[%a1.1] = select(%replace[0], %partials[%a1.1 + 2], %partials[%a1.1])
+                %partial_positions[%a1.1] = select(%replace[0], %partial_positions[%a1.1 + 2], %partial_positions[%a1.1])
+              }
+            }
+            barrier
+            if %a1.1 < 1 {
+              if %a1.1 + 1 < 40 {
+                %replace[0] = select(isnan(%partials[%a1.1]), and(isnan(%partials[%a1.1 + 1]), lt(%partial_positions[%a1.1 + 1], %partial_positions[%a1.1])), or(isnan(%partials[%a1.1 + 1]), or(gt(%partials[%a1.1 + 1], %partials[%a1.1]), and(eq(%partials[%a1.1 + 1], %partials[%a1.1]), lt(%partial_positions[%a1.1 + 1], %partial_positions[%a1.1])))))
+                %partials[%a1.1] = select(%replace[0], %partials[%a1.1 + 1], %partials[%a1.1])
+                %partial_positions[%a1.1] = select(%replace[0], %partial_positions[%a1.1 + 1], %partial_positions[%a1.1])
+              }
+            }
+            barrier
+            if %a1.1 < 1 {
+              %y[%a0] = %partial_positions[%a1.1]
+            }
+          }
+        }
+      }
+    }
+  }

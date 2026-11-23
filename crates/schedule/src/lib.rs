@@ -8,3 +8,5 @@ mod rules;
 mod smem;
 mod space;
 mod tiling;
+
+pub use default::default_schedule;
