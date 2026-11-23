@@ -19,5 +19,7 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<ExitCode> {
         Command::Run(run) => run::run(run),
         Command::Conformance(conformance) => conformance::run(conformance),
         Command::Fuzz(fuzz) => fuzz::run(fuzz),
+        Command::FuzzExport(export) => fuzz::export::run(export),
+        Command::FuzzOrt(ort) => fuzz::ort::run(ort),
     }
 }

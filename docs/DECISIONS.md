@@ -941,3 +941,30 @@ the old one.
   shrunk case is self-contained. A seed reproduces its recipe only while
   proptest's sampling stays the same: an upgrade may change which case a
   seed draws, but never a case written to `data/fuzz/`.
+
+## D54. Fuzz cases are checked against ONNX Runtime through an ONNX export
+
+- **Context:** M2 asks for 1,000 fuzz cases checked against cached ONNX
+  Runtime outputs. Rust never runs Python, so the cases have to reach ONNX
+  Runtime as files, and ptxc had no way to write a graph as ONNX.
+- **Options:**
+  - export every op in the v0.1.0 set;
+  - export only the ops of the cases ONNX Runtime can usefully check.
+- **Choice:** `ptxc_onnx::model_to_bytes` writes a graph at opset 21 for
+  the ops the fuzzer's connectors draw, and names any other op in an
+  error.
+  - `ptxc fuzz-export` writes cases the reference can check;
+    `ptxc-baselines fuzz-reference` caches ONNX Runtime's outputs;
+    `ptxc fuzz-ort` compares them, reading each model back through ptxc's
+    own importer.
+  - Cases with bf16 values are not exported: ONNX Runtime's CPU provider
+    has no bf16 kernels for these ops, and opset 21 does not define
+    `Softsign` on bf16.
+  - Cases that take the mean of no elements are not exported. ONNX leaves
+    that result undefined. ptxc computes NaN, as numpy does; ONNX Runtime
+    computes 0.
+- **Reason:** another implementation can only be compared within
+  tolerance, so like the reference it checks graphs of continuous ops on
+  moderate inputs, and those use only the connectors' ops. The exact GPU
+  comparison already covers the rest of the op set. Writing every op
+  would add about forty mappings that nothing reads.
