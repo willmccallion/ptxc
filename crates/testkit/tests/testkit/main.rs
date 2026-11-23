@@ -4,7 +4,9 @@
 
 mod compare;
 mod data;
+mod generate;
 mod golden;
 mod onnx_tests;
 mod ptxas;
 mod reference;
+mod shrink;

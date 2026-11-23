@@ -89,20 +89,28 @@ right value.
 
 ## Differential fuzzing
 
-- `ptxc_testkit::generate` builds a random well-typed graph from a `Seed`.
-  It picks ops whose type rules accept the values available, picks shapes
-  that favour edge cases (dimension 1, primes, non-multiples of tile sizes,
-  empty tensors where ONNX allows them), and picks a dtype per subgraph.
+- `ptxc_testkit::generate` builds a random well-typed graph from a `Seed`
+  as a `Recipe`, the choices that build it.
+  - It picks ops whose type rules accept the values available, and shapes
+    that favour edge cases: extents 0 and 1, primes, and sizes either side
+    of a power of two.
+  - It draws one element type per graph: f32, f16, bf16 or i32.
+  - Its ops are continuous in their operands (elementwise arithmetic,
+    activations, matmul, reductions, softmax, transposes, reshapes,
+    concatenation), so a last-bit difference between two executors stays
+    one rather than flipping a floor or a comparison. The discontinuous ops
+    are covered exactly by the op-family tests.
 - Every case runs on at least two executors through the `Evaluate` trait:
   - the reference interpreter;
   - the loop-IR interpreter;
   - the GPU runtime;
   - cached ONNX Runtime outputs, for cases exported to ONNX.
 - On a mismatch, `shrink.rs` tries, until nothing smaller still fails:
-  - removing nodes;
-  - replacing subgraphs by their inputs;
-  - halving dimensions;
-  - lowering the precision.
+  - bypassing a node, its readers reading one of its operands instead;
+  - dropping an input nothing reads;
+  - halving an extent everywhere it appears, so extents the inputs share
+    shrink together;
+  - widening f16 and bf16 to f32, the easiest type to debug in.
 - The shrunk case is written to `data/fuzz/` as graph IR text with its seed.
   When fixed, it becomes a fixture and a regression test.
 - Fuzzing is deterministic per seed and runs on stable Rust. It is not

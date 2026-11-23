@@ -907,6 +907,8 @@ the old one.
   - `ptxc_testkit::families` keeps its panics. A generator that builds an
     invalid shape or graph has a bug, and a proptest strategy has no way to
     report an error.
+  - The fuzzer's graph generator, `ptxc_testkit::generate`, does the same
+    for its own invariants, such as drawing from a non-empty table.
   - `ptxc_testkit::lowered::run_lowered`, which callers drive with their
     own executors, returns typed errors.
 - **Reason:** the panics guard invariants the generators establish

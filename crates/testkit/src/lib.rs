@@ -3,10 +3,10 @@
 pub mod compare;
 pub mod data;
 pub mod families;
-mod generate;
+pub mod generate;
 pub mod golden;
 pub mod lowered;
 pub mod onnx_tests;
 pub mod ptxas;
 pub mod reference;
-mod shrink;
+pub mod shrink;
