@@ -29,6 +29,7 @@ pub use ops::{
     TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp,
     VariadicOp, WindowAxis,
 };
+pub use partition::{FusedGroup, GroupId, GroupKind, Partitioned};
 pub use rewrite::{RewriteError, Rewriter};
 pub use tensor_type::{Layout, TensorType};
 pub use traverse::CycleError;

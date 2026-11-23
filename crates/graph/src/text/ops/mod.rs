@@ -32,6 +32,13 @@ impl OpText {
     }
 }
 
+impl Op {
+    /// The op's name in the text format, such as `add` or `reduce_sum`.
+    pub fn mnemonic(&self) -> &'static str {
+        encode(self).name
+    }
+}
+
 /// The text of `op`. The match is exhaustive, so every op has a text form.
 pub(super) fn encode(op: &Op) -> OpText {
     match op {
