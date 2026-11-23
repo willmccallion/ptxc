@@ -32,6 +32,10 @@ pub(crate) fn add(lhs: TensorExpr, rhs: TensorExpr) -> TensorExpr {
     binary(BinaryOp::Add, lhs, rhs)
 }
 
+pub(crate) fn sub(lhs: TensorExpr, rhs: TensorExpr) -> TensorExpr {
+    binary(BinaryOp::Sub, lhs, rhs)
+}
+
 pub(crate) fn mul(lhs: TensorExpr, rhs: TensorExpr) -> TensorExpr {
     binary(BinaryOp::Mul, lhs, rhs)
 }

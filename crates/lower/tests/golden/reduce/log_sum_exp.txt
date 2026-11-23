@@ -1,0 +1,10 @@
+compute reduce_log_sum_exp_0_max(%in0: bf16[2, 3]) {
+  %i0 = spatial 2
+  %k0 = reduce 3
+  %out0: f32[2] = reduce_max[%k0](cast<f32>(%in0[%i0, %k0]))
+}
+compute reduce_log_sum_exp_0_sum(%in0: bf16[2, 3], %in1: f32[2]) {
+  %i0 = spatial 2
+  %k0 = reduce 3
+  %out0: bf16[2] = cast<bf16>(select(isinf<either>(%in1[%i0]), %in1[%i0], add(%in1[%i0], log(sum[%k0](exp(sub(cast<f32>(%in0[%i0, %k0]), %in1[%i0])))))))
+}

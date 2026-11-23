@@ -99,7 +99,8 @@ pub(crate) fn graphs(cases: Vec<Case>) -> impl Strategy<Value = (Graph, Vec<Host
         .prop_map(|(op, inputs)| (single_node(op, &inputs), inputs))
 }
 
-fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
+/// A graph whose one node is `op` on inputs typed as `inputs`.
+pub(crate) fn single_node(op: Op, inputs: &[HostTensor]) -> Graph {
     let mut builder = GraphBuilder::new();
     let operands = inputs
         .iter()

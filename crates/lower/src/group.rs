@@ -2,13 +2,13 @@
 
 use crate::error::LowerError;
 use crate::ops::{NodeContext, lower_node};
-use crate::stage::Stage;
+use crate::stage::LoweredGroup;
 use ptxc_core::IndexVec;
 use ptxc_graph::{FusedGroup, GroupId, Partitioned};
 
-/// Every group's stages, in the order they run; a stage reads only graph
-/// values computed by earlier groups or stages.
-pub fn lower(partitioned: &Partitioned) -> Result<IndexVec<GroupId, Vec<Stage>>, LowerError> {
+/// Every group lowered, in the partition's order: each group reads only
+/// graph values computed by earlier groups.
+pub fn lower(partitioned: &Partitioned) -> Result<IndexVec<GroupId, LoweredGroup>, LowerError> {
     partitioned
         .groups()
         .iter_enumerated()
@@ -20,7 +20,7 @@ fn lower_group(
     partitioned: &Partitioned,
     id: GroupId,
     group: &FusedGroup,
-) -> Result<Vec<Stage>, LowerError> {
+) -> Result<LoweredGroup, LowerError> {
     let graph = partitioned.graph();
     let nodes: Vec<_> =
         group.nodes().iter().filter_map(|&node| Some((node, graph.node(node)?))).collect();

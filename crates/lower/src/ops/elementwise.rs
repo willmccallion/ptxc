@@ -5,39 +5,39 @@ use super::NodeContext;
 use crate::compose;
 use crate::error::LowerError;
 use crate::precision::{convert, demote, promote};
-use crate::stage::{Operand, Stage};
+use crate::stage::{LoweredGroup, Operand};
 use ptxc_core::DType;
 use ptxc_core::convert::count_to_f32;
 use ptxc_graph::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
 use ptxc_loop::{BinaryOp as Scalar2, InfSign, Scalar, TensorExpr, UnaryOp as Scalar1};
 
-pub(super) fn unary(cx: &NodeContext<'_>, op: UnaryOp) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn unary(cx: &NodeContext<'_>, op: UnaryOp) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [x] = cx.exact(operands)?;
         Ok(unary_expr(op, x))
     })
 }
 
-pub(super) fn binary(cx: &NodeContext<'_>, op: BinaryOp) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn binary(cx: &NodeContext<'_>, op: BinaryOp) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [lhs, rhs] = cx.exact(operands)?;
         Ok(binary_expr(op, lhs, rhs))
     })
 }
 
-pub(super) fn variadic(cx: &NodeContext<'_>, op: VariadicOp) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn variadic(cx: &NodeContext<'_>, op: VariadicOp) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| variadic_expr(op, operands).ok_or(LowerError::Operands(cx.id)))
 }
 
 /// `Where(condition, x, y)` as a select, which needs no arithmetic type.
-pub(super) fn select(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn select(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [condition, then, otherwise] = cx.exact(operands)?;
         Ok(compose::select(condition.expr.clone(), then.expr.clone(), otherwise.expr.clone()))
     })
 }
 
-pub(super) fn cast(cx: &NodeContext<'_>, attrs: CastAttrs) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn cast(cx: &NodeContext<'_>, attrs: CastAttrs) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [x] = cx.exact(operands)?;
         if x.dtype == attrs.to() {

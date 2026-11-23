@@ -1,0 +1,20 @@
+compute reduce_mean_0(%in0: f16[2, 3, 4]) {
+  %i0 = spatial 2
+  %i1 = spatial 1
+  %i2 = spatial 4
+  %k0 = reduce 3
+  %out0: f16[2, 1, 4] = cast<f16>(div(sum[%k0](cast<f32>(%in0[%i0, %k0, %i2])), 3.0:f32))
+}
+
+compute reduce_l2_0(%in0: f32[2, 3, 4]) {
+  %i0 = spatial 3
+  %k0 = reduce 2
+  %k1 = reduce 4
+  %out0: f32[3] = sqrt(sum[%k0, %k1](mul(%in0[%k0, %i0, %k1], %in0[%k0, %i0, %k1])))
+}
+
+compute reduce_max_0(%in0: bool[2]) {
+  %i0 = spatial 2
+  %k0 = reduce 1
+  %out0: bool[2] = reduce_max[%k0](%in0[%i0])
+}

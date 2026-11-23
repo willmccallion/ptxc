@@ -13,10 +13,10 @@ mod reduce;
 mod shape;
 
 use crate::error::LowerError;
-use crate::stage::{Operand, Stage, StageBuilder};
-use ptxc_core::Idx;
+use crate::stage::{Binding, LoweredGroup, Operand, StageBuilder};
+use ptxc_core::{Idx, IndexVec};
 use ptxc_graph::{Graph, Node, NodeId, Op, ValueId};
-use ptxc_loop::{ComputeName, TensorExpr};
+use ptxc_loop::{ComputeError, ComputeName, TensorExpr};
 
 /// One node to lower, with the outputs its group must compute.
 pub(crate) struct NodeContext<'g> {
@@ -27,7 +27,7 @@ pub(crate) struct NodeContext<'g> {
 }
 
 /// The stages computing `cx`'s needed outputs.
-pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError> {
+pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerError> {
     match cx.node.op() {
         Op::Unary(op) => elementwise::unary(cx, *op),
         Op::Binary(op) => elementwise::binary(cx, *op),
@@ -37,6 +37,9 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError>
         Op::Activation(activation) => activation::activation(cx, *activation),
         Op::Clip => activation::clip(cx),
         Op::PRelu => activation::prelu(cx),
+        Op::Reduce(attrs) => reduce::reduce(cx, attrs),
+        Op::ArgReduce(attrs) => reduce::arg_reduce(cx, *attrs),
+        Op::CumSum(attrs) => reduce::cum_sum(cx, *attrs),
         other => Err(LowerError::Unsupported { op: other.mnemonic() }),
     }
 }
@@ -56,24 +59,59 @@ impl<'g> NodeContext<'g> {
         ComputeName::new(format!("{}_{}", self.node.op().mnemonic(), self.id.index()))
     }
 
-    /// One stage computing the node's single output elementwise from its
-    /// operands, broadcast to the output; none if no one reads the output.
+    /// The name of one of the node's several stages: `reduce_log_sum_exp_3_max`.
+    fn named(&self, part: &str) -> ComputeName {
+        ComputeName::new(format!("{}_{}_{part}", self.node.op().mnemonic(), self.id.index()))
+    }
+
+    /// The node's single output, if its group must compute it.
+    fn needed_output(&self) -> Option<ValueId> {
+        self.node.outputs().iter().copied().find(|value| self.needed.contains(value))
+    }
+
+    /// The node's operands, in order.
+    fn operands(&self) -> Vec<ValueId> {
+        self.node.operands().iter().copied().collect()
+    }
+
+    /// The node's `N` operands, or an error if it has another number.
+    fn values<const N: usize>(&self) -> Result<[ValueId; N], LowerError> {
+        self.operands().try_into().map_err(|_| LowerError::Operands(self.id))
+    }
+
+    /// A rejected definition as the error lowering this node gives.
+    const fn ill_formed(&self, source: ComputeError) -> LowerError {
+        LowerError::Compute { node: self.id, source }
+    }
+
+    /// One stage computing the node's single output as the expression
+    /// `build` makes, over spatial axes of the output's shape; no stage if
+    /// no one reads the output.
+    fn one_stage(
+        &self,
+        build: impl FnOnce(&mut StageBuilder<'_>) -> Result<TensorExpr, LowerError>,
+    ) -> Result<LoweredGroup, LowerError> {
+        let Some(output) = self.needed_output() else { return Ok(LoweredGroup::default()) };
+        let no_intermediates = IndexVec::new();
+        let shape = self.graph.value(output).ty().shape();
+        let mut stage = StageBuilder::new(self.graph, &no_intermediates, self.name(), shape);
+        let expr = build(&mut stage)?;
+        stage.output(Binding::Value(output), expr);
+        let stage = stage.finish().map_err(|source| self.ill_formed(source))?;
+        Ok(LoweredGroup::new(IndexVec::new(), vec![stage]))
+    }
+
+    /// One stage computing the node's output elementwise from its operands,
+    /// each broadcast to the output.
     fn elementwise(
         &self,
         expr: impl FnOnce(&[Operand]) -> Result<TensorExpr, LowerError>,
-    ) -> Result<Vec<Stage>, LowerError> {
-        let Some(&output) = self.node.outputs().iter().find(|value| self.needed.contains(value))
-        else {
-            return Ok(Vec::new());
-        };
-        let shape = self.graph.value(output).ty().shape();
-        let mut stage = StageBuilder::new(self.graph, self.name(), shape);
-        let operands: Vec<Operand> =
-            self.node.operands().iter().map(|&value| stage.broadcast(value)).collect();
-        stage.output(output, expr(&operands)?);
-        let stage =
-            stage.finish().map_err(|source| LowerError::Compute { node: self.id, source })?;
-        Ok(vec![stage])
+    ) -> Result<LoweredGroup, LowerError> {
+        self.one_stage(|stage| {
+            let operands: Vec<Operand> =
+                self.operands().into_iter().map(|value| stage.broadcast(value)).collect();
+            expr(&operands)
+        })
     }
 
     /// The node's `N` operands, or an error if it has another number.

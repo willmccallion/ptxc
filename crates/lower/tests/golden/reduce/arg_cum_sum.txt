@@ -1,0 +1,12 @@
+compute arg_min_0(%in0: f16[3, 2]) {
+  %i0 = spatial 2
+  %k0 = reduce 3
+  %out0: i64[2] = argmin<last>[%k0](%in0[%k0, %i0])
+}
+
+compute cum_sum_0(%in0: f16[2, 3]) {
+  %i0 = spatial 2
+  %i1 = spatial 3
+  %k0 = reduce 3
+  %out0: f16[2, 3] = cast<f16>(sum[%k0](select(gt(index<i64>(%k0), index<i64>(%i1)), cast<f32>(%in0[%i0, %k0]), 0.0:f32)))
+}

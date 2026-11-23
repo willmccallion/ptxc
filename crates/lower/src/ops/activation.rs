@@ -5,7 +5,7 @@ use super::NodeContext;
 use crate::compose::{add, at_least, div, f32, greater, less, max, min, mul, neg, select, unary};
 use crate::error::LowerError;
 use crate::precision::{demote, promote};
-use crate::stage::{Operand, Stage};
+use crate::stage::{LoweredGroup, Operand};
 use ptxc_graph::{Activation, GeluApproximation};
 use ptxc_loop::{Scalar, TensorExpr, UnaryOp};
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_2_SQRT_PI};
@@ -13,7 +13,7 @@ use std::f32::consts::{FRAC_1_SQRT_2, FRAC_2_SQRT_PI};
 pub(super) fn activation(
     cx: &NodeContext<'_>,
     activation: Activation,
-) -> Result<Vec<Stage>, LowerError> {
+) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [x] = cx.exact(operands)?;
         Ok(apply(activation, x))
@@ -22,7 +22,7 @@ pub(super) fn activation(
 
 /// `Clip(x, min, max)` as `min` below `min`, then `max` above `max`, so `max`
 /// wins when the bounds cross and NaN passes through.
-pub(super) fn clip(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn clip(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [x, low, high] = cx.exact(operands)?;
         let (low, high) = (low.expr.clone(), high.expr.clone());
@@ -32,7 +32,7 @@ pub(super) fn clip(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError> {
 }
 
 /// `PRelu(x, slope)`: `slope * x` where `x` is negative, else `x`.
-pub(super) fn prelu(cx: &NodeContext<'_>) -> Result<Vec<Stage>, LowerError> {
+pub(super) fn prelu(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerError> {
     cx.elementwise(|operands| {
         let [x, slope] = cx.exact(operands)?;
         let wide = |operand: &Operand| promote(operand.expr.clone(), operand.dtype);
