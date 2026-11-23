@@ -11,7 +11,6 @@ fn sm_89_declares_the_first_isa_with_its_fp8_instructions() {
 
     assert_eq!(target.sm(), SmVersion::SM_89);
     assert_eq!(target.ptx_isa(), PtxIsaVersion::new(8, 4));
-    assert_eq!(target.mma(), &[]);
 }
 
 #[test]

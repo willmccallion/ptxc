@@ -26,5 +26,26 @@ pub struct MmaInstruction {
     pub accumulator: DType,
 }
 
-/// `sm_89`'s mma instructions. Rows are added with tensor-core schedules (M3).
-pub(crate) const SM_89: &[MmaInstruction] = &[];
+/// `sm_89`'s `mma.sync` variants with a wide accumulator, as ptxc
+/// accumulates (D43): f16 and bf16 at m16n8k16, and FP8 and 8-bit integers
+/// at m16n8k32, from the PTX ISA's table of warp-level matrix shapes.
+pub(crate) const SM_89: &[MmaInstruction] = &[
+    instruction([16, 8, 16], DType::F16, DType::F32),
+    instruction([16, 8, 16], DType::Bf16, DType::F32),
+    instruction([16, 8, 32], DType::F8E4M3Fn, DType::F32),
+    instruction([16, 8, 32], DType::F8E5M2, DType::F32),
+    instruction([16, 8, 32], DType::I8, DType::I32),
+    instruction([16, 8, 32], DType::U8, DType::I32),
+];
+
+const fn instruction(
+    [m, n, k]: [u64; 3],
+    multiplicands: DType,
+    accumulator: DType,
+) -> MmaInstruction {
+    MmaInstruction {
+        shape: MmaShape { m: Dim::new(m), n: Dim::new(n), k: Dim::new(k) },
+        multiplicands,
+        accumulator,
+    }
+}
