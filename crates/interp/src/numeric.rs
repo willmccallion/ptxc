@@ -4,7 +4,9 @@
 //! wrapping, as NumPy narrows.
 
 use crate::error::{InterpError, Malformed};
-pub(crate) use ptxc_core::convert::{f64_to_f32, int_to_f32, int_to_f64, truncate};
+pub(crate) use ptxc_core::convert::{
+    count_to_f32, count_to_f64, f64_to_f32, int_to_f32, int_to_f64, truncate,
+};
 use ptxc_core::float::{Bf16, F8E4M3Fn, F8E5M2, F16, Overflow};
 use ptxc_core::{DType, TensorData};
 
@@ -143,21 +145,6 @@ const fn wrap_i8(value: i64) -> i8 {
 )]
 const fn wrap_u8(value: i64) -> u8 {
     value as u8
-}
-
-/// An element count as the nearest f32, for averages.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "counts are far below 2^24 in practice; rounds to nearest"
-)]
-pub(crate) const fn count_to_f32(count: usize) -> f32 {
-    count as f32
-}
-
-/// An element count as the nearest f64, for averages.
-#[expect(clippy::cast_precision_loss, reason = "exact below 2^53")]
-pub(crate) const fn count_to_f64(count: usize) -> f64 {
-    count as f64
 }
 
 /// The lowest and highest values of an integer type, widened.

@@ -39,3 +39,12 @@ fn integer_powers_wrap_and_negative_exponents_truncate() {
     assert_eq!(wrapping_pow(1, -5), 1);
     assert_eq!(wrapping_pow(-1, -3), -1);
 }
+
+#[test]
+fn counts_convert_to_the_nearest_float() {
+    use ptxc_core::convert::{count_to_f32, count_to_f64};
+
+    assert_eq!(count_to_f64(3), 3.0);
+    assert_eq!(count_to_f64((1 << 53) + 1), 9_007_199_254_740_992.0);
+    assert_eq!(count_to_f32(16_777_217), 16_777_216.0);
+}
