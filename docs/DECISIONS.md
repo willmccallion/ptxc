@@ -968,3 +968,23 @@ the old one.
   moderate inputs, and those use only the connectors' ops. The exact GPU
   comparison already covers the rest of the op set. Writing every op
   would add about forty mappings that nothing reads.
+
+## D55. The cuBLAS baseline's bindings may use unsafe code
+
+- **Context:** D24 has `ptxc-bench` load cuBLAS with ptxc-cuda's `dlopen`
+  wrapper, but calling the functions it loads is unsafe, and the rules
+  allowed unsafe code only in `ptxc-cuda` while letting only `ptxc-bench`
+  mention cuBLAS.
+- **Options:**
+  - allow unsafe code in one `ptxc-bench` file;
+  - put the cuBLAS bindings in `ptxc-cuda` behind a feature only
+    `ptxc-bench` enables.
+- **Choice:** `crates/bench/src/cublas/sys.rs` may use unsafe code. It
+  holds the function table and the calls, each with a `// SAFETY:` line,
+  and checks every argument a call's safety rests on. Everything else in
+  `ptxc-bench` stays safe. `ptxc-cuda` exposes its `dlopen` wrapper, a
+  buffer's device address and a stream's handle for it.
+- **Reason:** cuBLAS stays wholly out of the CUDA crate the runtime builds
+  on, and `ptxc-cuda` stays the only unsafe crate on the compiler and
+  runtime path. `cargo xtask check-deps` names the one file, so no other
+  unsafe code can join it unnoticed.

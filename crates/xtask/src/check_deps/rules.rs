@@ -33,6 +33,10 @@ const CUBLAS_CRATE: &str = "bench";
 /// The one crate that allows unsafe code, rule 4.
 const UNSAFE_CRATE: &str = "cuda";
 
+/// The one file outside it that allows unsafe code: `bench`'s cuBLAS
+/// bindings, which call into the library it loads (D55).
+const BENCH_FFI: &str = "crates/bench/src/cublas/sys.rs";
+
 /// The crates whose libraries never depend on each other, rule 5. Their
 /// tests compare them through `testkit`.
 const SEPARATE: [&str; 2] = ["interp", "lower"];
@@ -52,7 +56,7 @@ pub(crate) enum Violation {
     OwnLints(String),
     /// The workspace does not deny `unsafe_code`.
     UnsafeNotDenied,
-    /// A file outside `cuda` names the `unsafe_code` lint.
+    /// A file outside `cuda` and `BENCH_FFI` names the `unsafe_code` lint.
     RelaxesUnsafe(String),
     /// `interp` and `lower` are joined by this chain.
     InterpAndLower(Vec<String>),
@@ -69,7 +73,9 @@ impl fmt::Display for Violation {
             Self::MentionsCublas(file) => write!(f, "{file} mentions cuBLAS outside `bench`"),
             Self::OwnLints(name) => write!(f, "`{name}` does not set `[lints] workspace = true`"),
             Self::UnsafeNotDenied => write!(f, "the workspace lints do not deny `unsafe_code`"),
-            Self::RelaxesUnsafe(file) => write!(f, "{file} names `unsafe_code` outside `cuda`"),
+            Self::RelaxesUnsafe(file) => {
+                write!(f, "{file} names `unsafe_code` outside `cuda` and {BENCH_FFI}")
+            }
             Self::InterpAndLower(chain) => write!(f, "{}", chain.join(" -> ")),
         }
     }
@@ -133,7 +139,8 @@ fn unsafe_rules(manifests: &Manifests, sources: &[SourceFile]) -> Vec<Violation>
     found.extend(
         sources
             .iter()
-            .filter(|file| file.krate != UNSAFE_CRATE && file.text.contains("unsafe_code"))
+            .filter(|file| file.krate != UNSAFE_CRATE && file.path != BENCH_FFI)
+            .filter(|file| file.text.contains("unsafe_code"))
             .map(|file| Violation::RelaxesUnsafe(file.path.clone())),
     );
     found

@@ -511,8 +511,9 @@ kernel.launch()
 - No host memory is mapped into the device's address space, which is what
   makes a safe launch sound (D37). Stream capture and CUDA graphs come with
   the graphed executor (M4).
-- `unsafe_code` is denied workspace-wide and allowed only in `ptxc-cuda`;
-  `cargo xtask check-deps` enforces both.
+- `unsafe_code` is denied workspace-wide and allowed only in `ptxc-cuda`
+  and in `ptxc-bench`'s cuBLAS bindings (D55); `cargo xtask check-deps`
+  enforces both.
 
 ### Runtime (`ptxc-runtime`)
 
@@ -593,7 +594,8 @@ Rules, checked by `cargo xtask check-deps` from `cargo metadata`:
    `cost-model`, `program`, `compiler` or `testkit` depends, transitively,
    on `cuda`, `runtime`, `autotune` or `bench`, from its tests either.
 3. Only `bench` mentions cuBLAS. Nothing depends on `bench`.
-4. Only `cuda` allows `unsafe_code`.
+4. Only `cuda`, and `bench`'s cuBLAS bindings in
+   `crates/bench/src/cublas/sys.rs`, allow `unsafe_code` (D55).
 5. The `interp` and `lower` libraries never depend on each other. Their
    tests compare them through `testkit`.
 
