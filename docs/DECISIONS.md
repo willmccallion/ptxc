@@ -461,3 +461,20 @@ the old one.
   Conformance on the v1.22.0 node tests gives 984 passed, 0 failed and 781
   unsupported.
 - **Supersedes:** `GatherND` in D33's list of ops outside the v0.1.0 set.
+
+## D35. ImageNetV2 stands in for ImageNet until it can be downloaded
+
+- **Context:** M1's ResNet-50 check compares the interpreter with ONNX
+  Runtime on 16 preprocessed images, and D25 takes them from the ImageNet
+  validation set. image-net.org's downloads were unreachable when the
+  baselines were built.
+- **Options:** wait for ImageNet; Kaggle's copy of ImageNet, which needs an
+  account; Imagenette, ten ImageNet classes; ImageNetV2's matched-frequency
+  set, 10,000 images of all 1,000 classes under the MIT licence.
+- **Choice:** ImageNetV2, fetched by `cargo xtask fetch imagenetv2` from a
+  pinned Hugging Face revision with its SHA-256. `ptxc-baselines images
+  --source imagenetv2` takes evenly spaced images, ordered by class and then
+  name; `--source imagenet` keeps D25's list for when ImageNet is in place.
+- **Reason:** the interpreter-against-ORT check needs only realistic inputs,
+  not labels, and ImageNetV2 comes from the same distribution ResNet-50 was
+  trained on. M4's top-1 accuracy still uses ImageNet itself, as D25 says.
