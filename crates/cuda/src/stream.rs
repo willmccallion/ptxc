@@ -4,6 +4,7 @@ use crate::context::Context;
 use crate::error::CudaError;
 use crate::memory::DeviceSlice;
 use crate::sys::{CU_STREAM_DEFAULT, CuStream};
+use std::ffi::c_void;
 
 /// A queue of device work, destroyed on drop.
 #[derive(Debug)]
@@ -69,5 +70,11 @@ impl Stream {
 
     pub(crate) const fn raw(&self) -> CuStream {
         self.raw
+    }
+
+    /// The driver's `CUstream` handle, for passing to another CUDA library;
+    /// valid while the stream lives.
+    pub const fn handle(&self) -> *mut c_void {
+        self.raw.0
     }
 }
