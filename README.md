@@ -5,8 +5,12 @@ model, optimises and fuses its graph, schedules each fused kernel for the
 GPU, emits PTX directly, and runs the result through the CUDA driver API
 with a statically planned memory arena and CUDA graphs.
 
-**Status:** planning (M0). The workspace contains documented stub crates
-only; no compiler logic is implemented yet. See [the roadmap](docs/ROADMAP.md).
+**Status:** M1, the frontend and reference interpreter, is done. ptxc
+imports ONNX models into its graph IR and runs them on a naive CPU
+interpreter: 984 of the 1,765 ONNX v1.22.0 node tests pass, and the rest
+are reported unsupported with a reason (D33, D34). MLP, ResNet-50,
+BERT-base and GPT-2 match ONNX Runtime. GPU code generation starts in M2.
+See [the roadmap](docs/ROADMAP.md).
 
 ## Goals
 
