@@ -1,6 +1,7 @@
 use crate::{add_one, stages, tensor_type};
-use ptxc_core::DType;
-use ptxc_graph::{BinaryOp, GlobalPoolKind, GraphBuilder, Op, UnaryOp};
+use ptxc_core::float::Overflow;
+use ptxc_core::{Affine, DType, Granularity, QuantDType, QuantParams, Scale, ZeroPoint};
+use ptxc_graph::{BinaryOp, GraphBuilder, Op, QuantizeAttrs, UnaryOp};
 use ptxc_lower::{Binding, LowerError};
 
 #[test]
@@ -35,11 +36,14 @@ fn a_node_whose_output_no_one_reads_has_no_stage() {
 #[test]
 fn an_op_without_a_lowering_is_reported_by_name() {
     let mut builder = GraphBuilder::new();
-    let x = builder.add_input(tensor_type(DType::F32, &[1, 2, 3, 3]));
-    let pooled = add_one(&mut builder, Op::GlobalPool(GlobalPoolKind::Average), &[x]);
-    let graph = builder.finish(vec![pooled]).unwrap();
+    let x = builder.add_input(tensor_type(DType::F32, &[2, 3]));
+    let affine = Affine { scale: Scale::new(0.5), zero_point: ZeroPoint::new(3) };
+    let params = QuantParams::new(QuantDType::U8, Granularity::PerTensor(affine)).unwrap();
+    let attrs = QuantizeAttrs::new(params, Overflow::Saturate);
+    let quantized = add_one(&mut builder, Op::Quantize(attrs), &[x]);
+    let graph = builder.finish(vec![quantized]).unwrap();
 
     let error = stages(graph).err();
 
-    assert_eq!(error, Some(LowerError::Unsupported { op: "global_average_pool" }));
+    assert_eq!(error, Some(LowerError::Unsupported { op: "quantize" }));
 }

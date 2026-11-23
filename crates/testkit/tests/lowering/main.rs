@@ -13,6 +13,7 @@ mod norm;
 mod reduce;
 mod shape;
 mod values;
+mod window;
 
 /// Property-test cases: `PROPTEST_CASES` if set, else `default`.
 pub(crate) fn cases(default: u32) -> u32 {

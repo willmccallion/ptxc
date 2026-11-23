@@ -17,7 +17,7 @@ use ptxc_core::{Axis, DType, Dim};
 use ptxc_loop::{ExprArena, ExprId, TensorExpr};
 
 /// `index + delta`.
-fn shifted(exprs: &mut ExprArena, index: ExprId, delta: i64) -> ExprId {
+pub(in crate::ops) fn shifted(exprs: &mut ExprArena, index: ExprId, delta: i64) -> ExprId {
     if delta == 0 {
         return index;
     }
@@ -26,7 +26,7 @@ fn shifted(exprs: &mut ExprArena, index: ExprId, delta: i64) -> ExprId {
 }
 
 /// `index` limited to `[0, last]`.
-fn clamped(exprs: &mut ExprArena, index: ExprId, last: i64) -> ExprId {
+pub(in crate::ops) fn clamped(exprs: &mut ExprArena, index: ExprId, last: i64) -> ExprId {
     if last == 0 {
         return exprs.constant(0);
     }
@@ -45,7 +45,7 @@ pub(in crate::ops) fn replaced(spatial: &[ExprId], axis: Axis, index: ExprId) ->
 }
 
 /// An index expression's value, for comparing positions.
-const fn position(index: ExprId) -> TensorExpr {
+pub(in crate::ops) const fn position(index: ExprId) -> TensorExpr {
     TensorExpr::Index { index, dtype: DType::I64 }
 }
 

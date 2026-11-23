@@ -11,6 +11,7 @@ mod matmul;
 mod norm;
 mod reduce;
 mod shape;
+mod window;
 
 use ptxc_core::{DType, Dim, Shape};
 use ptxc_graph::{Graph, GraphBuilder, Layout, Op, Partitioned, TensorType, ValueId};
