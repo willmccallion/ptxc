@@ -4,5 +4,5 @@ pub mod compare;
 pub mod data;
 mod generate;
 pub mod golden;
-mod onnx_tests;
+pub mod onnx_tests;
 mod shrink;
