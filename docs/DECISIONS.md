@@ -767,3 +767,31 @@ the old one.
   results differ only where a zero-weight neighbour is NaN or infinite,
   which no model relies on; the differential test uses finite inputs and
   says why.
+
+## D48. Attention lowers unfused in M2
+
+- **Context:** ONNX `Attention` is a softmax between two matrix products,
+  with masks, causality, a key-value cache, softcapping and an optional
+  intermediate output. M6 fuses it as FlashAttention-2 does; M2 needs it
+  correct on every option first.
+- **Options:** a fused kernel now, or a chain of plain stages.
+- **Choice:** four stages over f32 intermediates:
+  - the scores, `softcap(scale * Q K^T)` plus the bias;
+  - each row's maximum;
+  - each row's sum of `exp(score - max)`;
+  - `Y = sum of exp(score - max) / sum * V`, laid out as `Y` is.
+
+  The bias is negative infinity where the mask, causality or a non-pad
+  length hides a key, the additive mask's value, or nothing. Keys and
+  values after a past are read through a select between the past and
+  current operands, each clamped (D40). Grouped heads read key head
+  `head / (q_heads / kv_heads)`. Present keys and values and the QK
+  intermediate are stages of their own, built only when read; its matmul
+  and softcapped forms recompute the scores.
+- **Reason:**
+  - Each stage is a plain reduction or elementwise kernel that M2's
+    default schedules and codegen handle, and two-pass softmax statistics
+    are the reference's algorithm.
+  - The scores take memory quadratic in the sequence, as an unfused
+    attention does everywhere. M6's fused kernel removes it, and with it
+    the recomputation for the QK output.
