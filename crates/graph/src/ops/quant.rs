@@ -8,7 +8,7 @@ use super::{
 };
 use crate::tensor_type::{Layout, TensorType};
 use ptxc_core::float::Overflow;
-use ptxc_core::{DType, Granularity, QuantDType, QuantParams};
+use ptxc_core::{Axis, DType, Granularity, QuantDType, QuantParams};
 
 /// ONNX `QuantizeLinear`: a float tensor rounded onto `params`' grid. The
 /// scales and zero points are constants at import, so they are attributes.
@@ -87,11 +87,18 @@ pub struct QMatMulAttrs {
 }
 
 impl TypeRule for QMatMulAttrs {
+    /// As ONNX `QLinearMatMul`: `a`'s maps may vary by row and `b`'s by
+    /// column, which the sum over the inner axis leaves constant; the
+    /// result has one map.
     fn infer(&self, operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError> {
         let [a, b] = exact_operands(operands)?;
         for (operand, params) in [(a, &self.a), (b, &self.b)] {
             check_quantized_operand(operand, params)?;
         }
+        let rank = |operand: &TensorType| operand.shape().rank().get();
+        check_varies_only_along(&self.a, rank(a).checked_sub(2).map(Axis::new))?;
+        check_varies_only_along(&self.b, (rank(b) >= 2).then(|| Axis::new(rank(b) - 1)))?;
+        check_varies_only_along(&self.output, None)?;
         let dtype = quantized_dtype(&self.output)?;
         let result = TensorType::new(dtype, matmul_shape(a.shape(), b.shape())?, Layout::RowMajor);
         check_params(&self.output, &result)?;
@@ -122,6 +129,9 @@ impl TypeRule for QConvAttrs {
         for (operand, params) in [(input, &self.input), (weights, &self.weights)] {
             check_quantized_operand(operand, params)?;
         }
+        check_varies_only_along(&self.input, None)?;
+        check_varies_only_along(&self.weights, Some(Axis::new(0)))?;
+        check_varies_only_along(&self.output, None)?;
         let shape = self.conv.output_shape(input.shape(), weights.shape())?;
         if let Some(bias) = bias {
             check_bias(bias, DType::I32, shape.dims()[1])?;
@@ -144,6 +154,16 @@ const fn quantized_dtype(params: &QuantParams) -> Result<DType, TypeError> {
 fn check_quantized_operand(operand: &TensorType, params: &QuantParams) -> Result<(), TypeError> {
     require_dtype(quantized_dtype(params)?, operand)?;
     check_params(params, operand)
+}
+
+/// Checks that `params` has one map, or maps varying only along `allowed`.
+fn check_varies_only_along(params: &QuantParams, allowed: Option<Axis>) -> Result<(), TypeError> {
+    match params.granularity() {
+        Granularity::PerAxis { axis, .. } if Some(*axis) != allowed => {
+            Err(TypeError::QuantAxis(*axis))
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Checks that per-axis parameters name an axis of `operand` and have one
