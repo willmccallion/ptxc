@@ -638,9 +638,12 @@ dependencies = [
 name = "ptxc-onnx"
 version = "0.1.0"
 dependencies = [
+ "prost",
  "ptxc-core",
  "ptxc-graph",
  "ptxc-onnx-proto",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

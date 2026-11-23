@@ -18,3 +18,8 @@ workspace = true
 ptxc-core.workspace = true
 ptxc-graph.workspace = true
 ptxc-onnx-proto.workspace = true
+prost.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
