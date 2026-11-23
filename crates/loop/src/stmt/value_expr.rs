@@ -71,6 +71,19 @@ impl ValueExpr {
             Self::Select { then, .. } => then.dtype(buffers),
         }
     }
+
+    /// Whether the expression loads from `buffer` anywhere in it.
+    pub fn reads(&self, buffer: BufferId) -> bool {
+        match self {
+            Self::Load { buffer: read, .. } => *read == buffer,
+            Self::Const(_) | Self::Index { .. } => false,
+            Self::Unary(_, value) | Self::Cast { value, .. } => value.reads(buffer),
+            Self::Binary(_, lhs, rhs) => lhs.reads(buffer) || rhs.reads(buffer),
+            Self::Select { condition, then, otherwise } => {
+                condition.reads(buffer) || then.reads(buffer) || otherwise.reads(buffer)
+            }
+        }
+    }
 }
 
 /// Whether `op` gives a boolean whatever its operands are.

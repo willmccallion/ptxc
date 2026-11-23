@@ -14,6 +14,7 @@ mod schedule_support;
 mod simplify_properties;
 mod simplify_rules;
 mod validate;
+mod values;
 
 /// Property tests run `default` cases, or `PROPTEST_CASES` when set, so a
 /// longer run needs no code change (`ProptestConfig::with_cases` alone
