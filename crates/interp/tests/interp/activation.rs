@@ -133,6 +133,13 @@ fn relu_passes_nan_and_softplus_does_not_overflow() {
 }
 
 #[test]
+fn celu_propagates_nan_as_numpys_maximum_and_minimum_do() {
+    let nan = f32s(&[1], &[f32::NAN]);
+
+    assert_close(&op("celu<alpha=1.0>", "f32[1]", &[nan]), &[1], &[f64::NAN]);
+}
+
+#[test]
 fn narrow_inputs_widen_and_round_back() {
     let half = tensor(&[2], vec![F16::from_f32(-1.0), F16::from_f32(1.0)]);
 
