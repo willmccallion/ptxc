@@ -314,6 +314,7 @@ mod gpu {
 
     #[test]
     fn the_gpu_reports_its_clocks_and_a_gpu_another_process_uses_is_refused() {
+        let _gpu = crate::timing::exclusive_gpu();
         let state = GpuState::read().unwrap();
         let identity = GpuIdentity::read().unwrap();
         ensure_idle().unwrap();

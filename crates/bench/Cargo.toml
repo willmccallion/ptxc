@@ -24,6 +24,9 @@ name = "ptxc-bench"
 path = "src/main.rs"
 
 [dependencies]
+clap.workspace = true
+ptxc-graph.workspace = true
+ptxc-testkit.workspace = true
 ptxc-core.workspace = true
 ptxc-target.workspace = true
 ptxc-compiler.workspace = true

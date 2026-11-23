@@ -836,12 +836,15 @@ dependencies = [
 name = "ptxc-bench"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "ptxc-compiler",
  "ptxc-core",
  "ptxc-cuda",
+ "ptxc-graph",
  "ptxc-program",
  "ptxc-runtime",
  "ptxc-target",
+ "ptxc-testkit",
  "serde",
  "serde_json",
  "tempfile",
