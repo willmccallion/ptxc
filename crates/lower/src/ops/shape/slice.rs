@@ -1,13 +1,13 @@
 //! `Concat`, `Slice` and `Split`.
 
-use super::{clamped, position, shifted, signed};
+use super::{clamped, position, replaced, shifted};
 use crate::compose::{less, select};
 use crate::error::LowerError;
 use crate::ops::NodeContext;
 use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::{Axis, DType, Dim};
 use ptxc_graph::{SliceAttrs, SplitAttrs, ValueId};
-use ptxc_loop::{ExprId, Scalar, TensorExpr};
+use ptxc_loop::{Scalar, TensorExpr};
 
 /// `Concat` along `axis`: the operand whose span holds the output index,
 /// chosen by comparing positions. Each operand's read is clamped into it,
@@ -50,22 +50,13 @@ fn spans(cx: &NodeContext<'_>, axis: Axis) -> Result<(DType, Vec<Span>), LowerEr
     let mut start = 0_i64;
     for operand in operands {
         let dim = cx.graph.value(operand).ty().shape().dim(axis);
-        let extent = signed(cx, dim.ok_or(LowerError::Operands(cx.id))?)?;
+        let extent = cx.signed(dim.ok_or(LowerError::Operands(cx.id))?)?;
         if extent > 0 {
             spans.push(Span { operand, start, extent });
         }
         start = start.saturating_add(extent);
     }
     Ok((cx.graph.value(first).ty().dtype(), spans))
-}
-
-/// `spatial` with the index of `axis` replaced by `index`.
-fn replaced(spatial: &[ExprId], axis: Axis, index: ExprId) -> Vec<ExprId> {
-    spatial
-        .iter()
-        .enumerate()
-        .map(|(position, &var)| if position == axis.index() { index } else { var })
-        .collect()
 }
 
 /// `Slice`: along each sliced axis, `start + step * i`.
@@ -78,7 +69,7 @@ pub(in crate::ops) fn slice(
         let mut index = stage.spatial().to_vec();
         for sliced in &attrs.axes {
             let slot = index.get_mut(sliced.axis.index()).ok_or(LowerError::Operands(cx.id))?;
-            let start = signed(cx, Dim::new(sliced.start))?;
+            let start = cx.signed(Dim::new(sliced.start))?;
             let exprs = stage.exprs();
             let step = exprs.constant(sliced.step.get());
             let scaled = exprs.mul(*slot, step);
@@ -99,7 +90,7 @@ pub(in crate::ops) fn split(
     let mut start = 0_i64;
     for (piece, (&output, &size)) in cx.node.outputs().iter().zip(&attrs.sizes).enumerate() {
         let offset = start;
-        start = start.saturating_add(signed(cx, size)?);
+        start = start.saturating_add(cx.signed(size)?);
         if !cx.needed.contains(&output) {
             continue;
         }

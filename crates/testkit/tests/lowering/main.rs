@@ -6,6 +6,7 @@
 mod activation;
 mod cases;
 mod elementwise;
+mod gather;
 mod harness;
 mod norm;
 mod reduce;

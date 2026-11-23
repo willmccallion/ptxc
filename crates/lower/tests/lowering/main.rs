@@ -5,6 +5,7 @@
 
 mod activation;
 mod elementwise;
+mod gather;
 mod groups;
 mod norm;
 mod reduce;

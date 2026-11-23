@@ -1,6 +1,6 @@
 //! `Reshape`, `Expand`, `Transpose` and `Tile`.
 
-use super::{delinearized, linearized, signed};
+use super::{delinearized, linearized};
 use crate::error::LowerError;
 use crate::ops::NodeContext;
 use crate::stage::{Binding, LoweredGroup};
@@ -61,7 +61,7 @@ pub(in crate::ops) fn tile(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerEr
             let wrapped = if dim.get() == 0 {
                 var
             } else {
-                let extent = stage.exprs().constant(signed(cx, dim)?);
+                let extent = stage.exprs().constant(cx.signed(dim)?);
                 stage.exprs().floor_mod(var, extent)
             };
             index.push(wrapped);

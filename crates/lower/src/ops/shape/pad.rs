@@ -1,6 +1,6 @@
 //! `Pad` and `Trilu`.
 
-use super::{clamped, position, shifted, signed};
+use super::{clamped, position, shifted};
 use crate::compose::{binary, select};
 use crate::error::LowerError;
 use crate::ops::NodeContext;
@@ -40,7 +40,7 @@ pub(in crate::ops) fn pad(
                 index.push(var);
                 continue;
             }
-            let (begin, extent) = (signed(cx, Dim::new(padding.begin.get()))?, signed(cx, dim)?);
+            let (begin, extent) = (cx.signed(Dim::new(padding.begin.get()))?, cx.signed(dim)?);
             let local = shifted(stage.exprs(), var, -begin);
             index.push(clamped(stage.exprs(), local, extent - 1));
             conditions.push(within(var, begin, begin + extent));
@@ -71,7 +71,7 @@ fn folded(
     if padding.begin.get() == 0 && padding.end.get() == 0 {
         return Ok(var);
     }
-    let (begin, extent) = (signed(cx, Dim::new(padding.begin.get()))?, signed(cx, dim)?);
+    let (begin, extent) = (cx.signed(Dim::new(padding.begin.get()))?, cx.signed(dim)?);
     let local = shifted(exprs, var, -begin);
     Ok(match mode {
         PadMode::Constant | PadMode::Edge => clamped(exprs, local, extent - 1),
