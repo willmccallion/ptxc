@@ -13,7 +13,7 @@ It plays the role spike plays for rvsim.
 | Golden IR tests | passes, lowering and printing produce the expected IR text | nothing | `cargo test` |
 | Float format tests | every encoding round-trips; every f32 rounds to nearest-even | nothing | `cargo test` (exhaustive: `--release -- --ignored`) |
 | Loop-interpreter checks | scheduled kernels compute what the graph interpreter computes, without races | nothing | `cargo test` |
-| ptxas checks | every emitted kernel assembles for its target | ptxas (flake) | `cargo test` |
+| ptxas checks | every emitted kernel assembles for its target | ptxas (the flake; CI fetches NVIDIA's checksummed redistributable) | `cargo test` |
 | GPU tests | kernels and runtime are correct on the device | GPU | `cargo test --features gpu` |
 | ONNX conformance | interpreter and GPU agree with the official node tests | `data/onnx` | `ptxc conformance` |
 | Differential fuzzing | random well-typed graphs agree across executors | GPU for `--backend gpu` | `ptxc fuzz` |
@@ -56,6 +56,13 @@ data/fuzz/                       shrunk failing cases (gitignored; promoted to f
 `tests/golden/<path>`. `PTXC_BLESS=1 cargo test` rewrites the golden files.
 Bless only on unchanged code, and review every golden diff in the commit
 that changes it.
+
+Codegen's selection tables (`crates/codegen/tests/golden/*.txt`) list, for
+every cast, operation and element type, the instructions a rank-0 kernel
+runs between its parameter loads and its `ret`. ptxas only proves a module
+well formed; until the GPU tests compare kernels with the loop interpreter,
+the tables are where a reviewer checks that each selection computes the
+right value.
 
 ## ONNX backend node tests
 

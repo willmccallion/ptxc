@@ -18,3 +18,8 @@ workspace = true
 ptxc-core.workspace = true
 ptxc-target.workspace = true
 ptxc-loop.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ptxc-schedule.workspace = true
+ptxc-testkit.workspace = true

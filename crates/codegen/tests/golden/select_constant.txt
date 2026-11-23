@@ -1,0 +1,156 @@
+select f32
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.f32 %f0, [%rd3];
+	ld.global.f32 %f1, [%rd5];
+	selp.f32 %f2, %f0, %f1, %p0;
+	st.global.f32 [%rd7], %f2;
+select f16
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.b16 %h0, [%rd3];
+	cvt.f32.f16 %f0, %h0;
+	ld.global.b16 %h1, [%rd5];
+	cvt.f32.f16 %f1, %h1;
+	selp.f32 %f2, %f0, %f1, %p0;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd7], %h2;
+select bf16
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.b16 %h0, [%rd3];
+	cvt.u32.u16 %r1, %h0;
+	shl.b32 %r2, %r1, 16;
+	mov.b32 %f0, %r2;
+	ld.global.b16 %h1, [%rd5];
+	cvt.u32.u16 %r3, %h1;
+	shl.b32 %r4, %r3, 16;
+	mov.b32 %f1, %r4;
+	selp.f32 %f2, %f0, %f1, %p0;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd7], %h2;
+select f8e4m3fn
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.b8 %h0, [%rd3];
+	cvt.rn.f16x2.e4m3x2 %r1, %h0;
+	cvt.u16.u32 %h1, %r1;
+	cvt.f32.f16 %f0, %h1;
+	ld.global.b8 %h2, [%rd5];
+	cvt.rn.f16x2.e4m3x2 %r2, %h2;
+	cvt.u16.u32 %h3, %r2;
+	cvt.f32.f16 %f1, %h3;
+	selp.f32 %f2, %f0, %f1, %p0;
+	cvt.rn.satfinite.e4m3x2.f32 %h4, 0f00000000, %f2;
+	abs.f32 %f3, %f2;
+	setp.gt.f32 %p1, %f3, 0f43E80000;
+	setp.lt.f32 %p2, %f2, 0f00000000;
+	selp.b16 %h5, 255, 127, %p2;
+	selp.b16 %h6, %h5, %h4, %p1;
+	st.global.b8 [%rd7], %h6;
+select f8e5m2
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.b8 %h0, [%rd3];
+	cvt.rn.f16x2.e5m2x2 %r1, %h0;
+	cvt.u16.u32 %h1, %r1;
+	cvt.f32.f16 %f0, %h1;
+	ld.global.b8 %h2, [%rd5];
+	cvt.rn.f16x2.e5m2x2 %r2, %h2;
+	cvt.u16.u32 %h3, %r2;
+	cvt.f32.f16 %f1, %h3;
+	selp.f32 %f2, %f0, %f1, %p0;
+	cvt.rn.satfinite.e5m2x2.f32 %h4, 0f00000000, %f2;
+	abs.f32 %f3, %f2;
+	setp.ge.f32 %p1, %f3, 0f47700000;
+	setp.lt.f32 %p2, %f2, 0f00000000;
+	selp.b16 %h5, 252, 124, %p2;
+	selp.b16 %h6, %h5, %h4, %p1;
+	st.global.b8 [%rd7], %h6;
+select i8
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.s8 %r1, [%rd3];
+	ld.global.s8 %r2, [%rd5];
+	selp.b32 %r3, %r1, %r2, %p0;
+	st.global.s8 [%rd7], %r3;
+select u8
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.u8 %r1, [%rd3];
+	ld.global.u8 %r2, [%rd5];
+	selp.b32 %r3, %r1, %r2, %p0;
+	st.global.u8 [%rd7], %r3;
+select i32
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.s32 %r1, [%rd3];
+	ld.global.s32 %r2, [%rd5];
+	selp.b32 %r3, %r1, %r2, %p0;
+	st.global.s32 [%rd7], %r3;
+select i64
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.s64 %rd8, [%rd3];
+	ld.global.s64 %rd9, [%rd5];
+	selp.b64 %rd10, %rd8, %rd9, %p0;
+	st.global.s64 [%rd7], %rd10;
+select bool
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	ld.global.u8 %r1, [%rd3];
+	setp.ne.u32 %p1, %r1, 0;
+	ld.global.u8 %r2, [%rd5];
+	setp.ne.u32 %p2, %r2, 0;
+	and.pred %p3, %p0, %p1;
+	not.pred %p4, %p0;
+	and.pred %p5, %p4, %p2;
+	or.pred %p6, %p3, %p5;
+	selp.b32 %r3, 1, 0, %p6;
+	st.global.u8 [%rd7], %r3;
+one f32
+	mov.f32 %f0, 0f3F800000;
+	st.global.f32 [%rd1], %f0;
+one f16
+	mov.f32 %f0, 0f3F800000;
+	cvt.rn.f16.f32 %h0, %f0;
+	st.global.b16 [%rd1], %h0;
+one bf16
+	mov.f32 %f0, 0f3F800000;
+	cvt.rn.bf16.f32 %h0, %f0;
+	st.global.b16 [%rd1], %h0;
+one f8e4m3fn
+	mov.f32 %f0, 0f3F800000;
+	cvt.rn.satfinite.e4m3x2.f32 %h0, 0f00000000, %f0;
+	abs.f32 %f1, %f0;
+	setp.gt.f32 %p0, %f1, 0f43E80000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.b16 %h1, 255, 127, %p1;
+	selp.b16 %h2, %h1, %h0, %p0;
+	st.global.b8 [%rd1], %h2;
+one f8e5m2
+	mov.f32 %f0, 0f3F800000;
+	cvt.rn.satfinite.e5m2x2.f32 %h0, 0f00000000, %f0;
+	abs.f32 %f1, %f0;
+	setp.ge.f32 %p0, %f1, 0f47700000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.b16 %h1, 252, 124, %p1;
+	selp.b16 %h2, %h1, %h0, %p0;
+	st.global.b8 [%rd1], %h2;
+one i8
+	mov.s32 %r0, 1;
+	st.global.s8 [%rd1], %r0;
+one u8
+	mov.s32 %r0, 1;
+	st.global.u8 [%rd1], %r0;
+one i32
+	mov.s32 %r0, 1;
+	st.global.s32 [%rd1], %r0;
+one i64
+	mov.s64 %rd2, 1;
+	st.global.s64 [%rd1], %rd2;
+one bool
+	mov.b32 %r0, 1;
+	setp.ne.u32 %p0, %r0, 0;
+	selp.b32 %r1, 1, 0, %p0;
+	st.global.u8 [%rd1], %r1;

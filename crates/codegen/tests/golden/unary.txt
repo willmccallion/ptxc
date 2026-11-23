@@ -1,0 +1,376 @@
+Abs f32
+	ld.global.f32 %f0, [%rd1];
+	abs.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Abs f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	abs.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Abs bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	abs.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Abs i8
+	ld.global.s8 %r0, [%rd1];
+	abs.s32 %r1, %r0;
+	cvt.s32.s8 %r2, %r1;
+	st.global.s8 [%rd3], %r2;
+Abs u8
+	ld.global.u8 %r0, [%rd1];
+	abs.s32 %r1, %r0;
+	cvt.u32.u8 %r2, %r1;
+	st.global.u8 [%rd3], %r2;
+Abs i32
+	ld.global.s32 %r0, [%rd1];
+	abs.s32 %r1, %r0;
+	st.global.s32 [%rd3], %r1;
+Abs i64
+	ld.global.s64 %rd4, [%rd1];
+	abs.s64 %rd5, %rd4;
+	st.global.s64 [%rd3], %rd5;
+Neg f32
+	ld.global.f32 %f0, [%rd1];
+	neg.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Neg f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	neg.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Neg bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	neg.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Neg i8
+	ld.global.s8 %r0, [%rd1];
+	neg.s32 %r1, %r0;
+	cvt.s32.s8 %r2, %r1;
+	st.global.s8 [%rd3], %r2;
+Neg u8
+	ld.global.u8 %r0, [%rd1];
+	neg.s32 %r1, %r0;
+	cvt.u32.u8 %r2, %r1;
+	st.global.u8 [%rd3], %r2;
+Neg i32
+	ld.global.s32 %r0, [%rd1];
+	neg.s32 %r1, %r0;
+	st.global.s32 [%rd3], %r1;
+Neg i64
+	ld.global.s64 %rd4, [%rd1];
+	neg.s64 %rd5, %rd4;
+	st.global.s64 [%rd3], %rd5;
+Exp f32: `exp` cannot be emitted yet
+Exp f16: `exp` cannot be emitted yet
+Exp bf16: `exp` cannot be emitted yet
+Expm1 f32: `expm1` cannot be emitted yet
+Expm1 f16: `expm1` cannot be emitted yet
+Expm1 bf16: `expm1` cannot be emitted yet
+Log f32: `log` cannot be emitted yet
+Log f16: `log` cannot be emitted yet
+Log bf16: `log` cannot be emitted yet
+Log1p f32: `log1p` cannot be emitted yet
+Log1p f16: `log1p` cannot be emitted yet
+Log1p bf16: `log1p` cannot be emitted yet
+Sqrt f32
+	ld.global.f32 %f0, [%rd1];
+	sqrt.rn.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Sqrt f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	sqrt.rn.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Sqrt bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	sqrt.rn.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Reciprocal f32
+	ld.global.f32 %f0, [%rd1];
+	rcp.rn.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Reciprocal f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	rcp.rn.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Reciprocal bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	rcp.rn.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Floor f32
+	ld.global.f32 %f0, [%rd1];
+	cvt.rmi.f32.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Floor f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	cvt.rmi.f32.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Floor bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	cvt.rmi.f32.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Ceil f32
+	ld.global.f32 %f0, [%rd1];
+	cvt.rpi.f32.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Ceil f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	cvt.rpi.f32.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Ceil bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	cvt.rpi.f32.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Round f32
+	ld.global.f32 %f0, [%rd1];
+	cvt.rni.f32.f32 %f1, %f0;
+	st.global.f32 [%rd3], %f1;
+Round f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	cvt.rni.f32.f32 %f1, %f0;
+	cvt.rn.f16.f32 %h1, %f1;
+	cvt.f32.f16 %f2, %h1;
+	cvt.rn.f16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Round bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	cvt.rni.f32.f32 %f1, %f0;
+	cvt.rn.bf16.f32 %h1, %f1;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f2, %r3;
+	cvt.rn.bf16.f32 %h2, %f2;
+	st.global.b16 [%rd3], %h2;
+Sign f32
+	ld.global.f32 %f0, [%rd1];
+	setp.gt.f32 %p0, %f0, 0f00000000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.f32 %f1, 0fBF800000, %f0, %p1;
+	selp.f32 %f2, 0f3F800000, %f1, %p0;
+	st.global.f32 [%rd3], %f2;
+Sign f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	setp.gt.f32 %p0, %f0, 0f00000000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.f32 %f1, 0fBF800000, %f0, %p1;
+	selp.f32 %f2, 0f3F800000, %f1, %p0;
+	cvt.rn.f16.f32 %h1, %f2;
+	cvt.f32.f16 %f3, %h1;
+	cvt.rn.f16.f32 %h2, %f3;
+	st.global.b16 [%rd3], %h2;
+Sign bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	setp.gt.f32 %p0, %f0, 0f00000000;
+	setp.lt.f32 %p1, %f0, 0f00000000;
+	selp.f32 %f1, 0fBF800000, %f0, %p1;
+	selp.f32 %f2, 0f3F800000, %f1, %p0;
+	cvt.rn.bf16.f32 %h1, %f2;
+	cvt.u32.u16 %r2, %h1;
+	shl.b32 %r3, %r2, 16;
+	mov.b32 %f3, %r3;
+	cvt.rn.bf16.f32 %h2, %f3;
+	st.global.b16 [%rd3], %h2;
+Sign i8
+	ld.global.s8 %r0, [%rd1];
+	setp.gt.s32 %p0, %r0, 0;
+	setp.lt.s32 %p1, %r0, 0;
+	selp.b32 %r1, -1, 0, %p1;
+	selp.b32 %r2, 1, %r1, %p0;
+	cvt.s32.s8 %r3, %r2;
+	st.global.s8 [%rd3], %r3;
+Sign u8
+	ld.global.u8 %r0, [%rd1];
+	setp.gt.s32 %p0, %r0, 0;
+	setp.lt.s32 %p1, %r0, 0;
+	selp.b32 %r1, -1, 0, %p1;
+	selp.b32 %r2, 1, %r1, %p0;
+	cvt.u32.u8 %r3, %r2;
+	st.global.u8 [%rd3], %r3;
+Sign i32
+	ld.global.s32 %r0, [%rd1];
+	setp.gt.s32 %p0, %r0, 0;
+	setp.lt.s32 %p1, %r0, 0;
+	selp.b32 %r1, -1, 0, %p1;
+	selp.b32 %r2, 1, %r1, %p0;
+	st.global.s32 [%rd3], %r2;
+Sign i64
+	ld.global.s64 %rd4, [%rd1];
+	setp.gt.s64 %p0, %rd4, 0;
+	setp.lt.s64 %p1, %rd4, 0;
+	selp.b64 %rd5, -1, 0, %p1;
+	selp.b64 %rd6, 1, %rd5, %p0;
+	st.global.s64 [%rd3], %rd6;
+Erf f32: `erf` cannot be emitted yet
+Erf f16: `erf` cannot be emitted yet
+Erf bf16: `erf` cannot be emitted yet
+Sin f32: `sin` cannot be emitted yet
+Sin f16: `sin` cannot be emitted yet
+Sin bf16: `sin` cannot be emitted yet
+Cos f32: `cos` cannot be emitted yet
+Cos f16: `cos` cannot be emitted yet
+Cos bf16: `cos` cannot be emitted yet
+Tanh f32: `tanh` cannot be emitted yet
+Tanh f16: `tanh` cannot be emitted yet
+Tanh bf16: `tanh` cannot be emitted yet
+Not bool
+	ld.global.u8 %r0, [%rd1];
+	setp.ne.u32 %p0, %r0, 0;
+	not.pred %p1, %p0;
+	selp.b32 %r1, 1, 0, %p1;
+	st.global.u8 [%rd3], %r1;
+IsNaN f32
+	ld.global.f32 %f0, [%rd1];
+	setp.nan.f32 %p0, %f0, %f0;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsNaN f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	setp.nan.f32 %p0, %f0, %f0;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsNaN bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	setp.nan.f32 %p0, %f0, %f0;
+	selp.b32 %r2, 1, 0, %p0;
+	st.global.u8 [%rd3], %r2;
+IsInf(Either) f32
+	ld.global.f32 %f0, [%rd1];
+	abs.f32 %f1, %f0;
+	setp.eq.f32 %p0, %f1, 0f7F800000;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsInf(Either) f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	abs.f32 %f1, %f0;
+	setp.eq.f32 %p0, %f1, 0f7F800000;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsInf(Either) bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	abs.f32 %f1, %f0;
+	setp.eq.f32 %p0, %f1, 0f7F800000;
+	selp.b32 %r2, 1, 0, %p0;
+	st.global.u8 [%rd3], %r2;
+IsInf(Positive) f32
+	ld.global.f32 %f0, [%rd1];
+	setp.eq.f32 %p0, %f0, 0f7F800000;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsInf(Positive) f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	setp.eq.f32 %p0, %f0, 0f7F800000;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsInf(Positive) bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	setp.eq.f32 %p0, %f0, 0f7F800000;
+	selp.b32 %r2, 1, 0, %p0;
+	st.global.u8 [%rd3], %r2;
+IsInf(Negative) f32
+	ld.global.f32 %f0, [%rd1];
+	setp.eq.f32 %p0, %f0, 0fFF800000;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsInf(Negative) f16
+	ld.global.b16 %h0, [%rd1];
+	cvt.f32.f16 %f0, %h0;
+	setp.eq.f32 %p0, %f0, 0fFF800000;
+	selp.b32 %r0, 1, 0, %p0;
+	st.global.u8 [%rd3], %r0;
+IsInf(Negative) bf16
+	ld.global.b16 %h0, [%rd1];
+	cvt.u32.u16 %r0, %h0;
+	shl.b32 %r1, %r0, 16;
+	mov.b32 %f0, %r1;
+	setp.eq.f32 %p0, %f0, 0fFF800000;
+	selp.b32 %r2, 1, 0, %p0;
+	st.global.u8 [%rd3], %r2;

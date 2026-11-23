@@ -1,0 +1,41 @@
+.version 8.4
+.target sm_89
+.address_size 64
+
+.visible .entry elementwise(
+	.param .u64 elementwise_param_0,
+	.param .u64 elementwise_param_1,
+	.param .u64 elementwise_param_2
+)
+{
+	.reg .b32 %r<2>;
+	.reg .b64 %rd<20>;
+	.reg .f32 %f<3>;
+	ld.param.u64 %rd0, [elementwise_param_0];
+	cvta.to.global.u64 %rd1, %rd0;
+	ld.param.u64 %rd2, [elementwise_param_1];
+	cvta.to.global.u64 %rd3, %rd2;
+	ld.param.u64 %rd4, [elementwise_param_2];
+	cvta.to.global.u64 %rd5, %rd4;
+	mov.u32 %r0, %ctaid.x;
+	cvt.s64.u32 %rd6, %r0;
+	mov.u32 %r1, %tid.x;
+	cvt.s64.u32 %rd7, %r1;
+	mul.lo.s64 %rd8, %rd6, 37;
+	add.s64 %rd9, %rd7, %rd8;
+	mul.lo.s64 %rd10, %rd9, 4;
+	add.s64 %rd11, %rd1, %rd10;
+	ld.global.f32 %f0, [%rd11];
+	mul.lo.s64 %rd12, %rd6, 37;
+	add.s64 %rd13, %rd7, %rd12;
+	mul.lo.s64 %rd14, %rd13, 4;
+	add.s64 %rd15, %rd3, %rd14;
+	ld.global.f32 %f1, [%rd15];
+	add.rn.f32 %f2, %f0, %f1;
+	mul.lo.s64 %rd16, %rd6, 37;
+	add.s64 %rd17, %rd7, %rd16;
+	mul.lo.s64 %rd18, %rd17, 4;
+	add.s64 %rd19, %rd5, %rd18;
+	st.global.f32 [%rd19], %f2;
+	ret;
+}
