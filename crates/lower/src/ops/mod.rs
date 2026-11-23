@@ -13,7 +13,7 @@ mod reduce;
 mod shape;
 
 use crate::error::LowerError;
-use crate::stage::{Binding, LoweredGroup, Operand, StageBuilder};
+use crate::stage::{Binding, GroupBuilder, LoweredGroup, Operand, Stage, StageBuilder};
 use ptxc_core::{Idx, IndexVec};
 use ptxc_graph::{Graph, Node, NodeId, Op, ValueId};
 use ptxc_loop::{ComputeError, ComputeName, TensorExpr};
@@ -84,6 +84,16 @@ impl<'g> NodeContext<'g> {
         LowerError::Compute { node: self.id, source }
     }
 
+    /// The stage `stage` builds, if its definition is well-formed.
+    fn finish(&self, stage: StageBuilder<'_>) -> Result<Stage, LowerError> {
+        stage.finish().map_err(|source| self.ill_formed(source))
+    }
+
+    /// An empty group for this node's stages.
+    const fn group(&self) -> GroupBuilder<'g> {
+        GroupBuilder::new(self.graph)
+    }
+
     /// One stage computing the node's single output as the expression
     /// `build` makes, over spatial axes of the output's shape; no stage if
     /// no one reads the output.
@@ -92,13 +102,11 @@ impl<'g> NodeContext<'g> {
         build: impl FnOnce(&mut StageBuilder<'_>) -> Result<TensorExpr, LowerError>,
     ) -> Result<LoweredGroup, LowerError> {
         let Some(output) = self.needed_output() else { return Ok(LoweredGroup::default()) };
-        let no_intermediates = IndexVec::new();
         let shape = self.graph.value(output).ty().shape();
-        let mut stage = StageBuilder::new(self.graph, &no_intermediates, self.name(), shape);
+        let mut stage = StageBuilder::new(self.graph, IndexVec::new(), self.name(), shape);
         let expr = build(&mut stage)?;
         stage.output(Binding::Value(output), expr);
-        let stage = stage.finish().map_err(|source| self.ill_formed(source))?;
-        Ok(LoweredGroup::new(IndexVec::new(), vec![stage]))
+        Ok(LoweredGroup::new(IndexVec::new(), vec![self.finish(stage)?]))
     }
 
     /// One stage computing the node's output elementwise from its operands,

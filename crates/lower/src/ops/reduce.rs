@@ -6,10 +6,10 @@ use crate::compose::{add, div, f32, mul, select, sub, unary};
 use crate::error::LowerError;
 use crate::precision::{arithmetic_dtype, convert, demote, promote};
 use crate::stage::{Binding, LoweredGroup, Operand, StageBuilder};
-use ptxc_core::{Axis, DType, Dim, ElementCount, IndexVec, Shape};
+use ptxc_core::{Axis, DType, Dim, ElementCount, Shape};
 use ptxc_graph::{
-    ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, Layout, ReduceAttrs, ReduceOp,
-    ScanDirection, TensorType, TieBreak, ValueId,
+    ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, ReduceAttrs, ReduceOp,
+    ScanDirection, TieBreak, ValueId,
 };
 use ptxc_loop::{
     ArgKind as LoopArgKind, BinaryOp, ComputeError, ExprId, InfSign, IterVarId,
@@ -18,17 +18,17 @@ use ptxc_loop::{
 
 /// The reduction axes of one stage and how many elements each output
 /// element combines.
-struct Over {
+pub(super) struct Over {
     axes: Vec<IterVarId>,
-    count: ElementCount,
+    pub(super) count: ElementCount,
 }
 
 impl Over {
-    fn apply(&self, op: LoopReduceOp, body: TensorExpr) -> TensorExpr {
+    pub(super) fn apply(&self, op: LoopReduceOp, body: TensorExpr) -> TensorExpr {
         TensorExpr::Reduce { op, axes: self.axes.clone(), body: Box::new(body) }
     }
 
-    fn sum(&self, body: TensorExpr) -> TensorExpr {
+    pub(super) fn sum(&self, body: TensorExpr) -> TensorExpr {
         self.apply(LoopReduceOp::Sum, body)
     }
 }
@@ -42,7 +42,7 @@ pub(super) fn reduce(
         return log_sum_exp(cx, input, attrs);
     }
     cx.one_stage(|stage| {
-        let (x, over) = load_reduced(cx, stage, input, attrs)?;
+        let (x, over) = load_reduced(cx, stage, input, &attrs.axes, attrs.keep_dims)?;
         if x.dtype.is_float() {
             let total = float_pass(attrs.op, promote(x.expr.clone(), x.dtype), &over);
             return Ok(demote(total, x.dtype));
@@ -51,22 +51,23 @@ pub(super) fn reduce(
     })
 }
 
-/// `x` read at each element its output element reduces, and the axes
-/// reduced over. A reduction over no axes reduces each element alone,
-/// through an axis of extent 1.
-fn load_reduced(
+/// `input` read at each element its output element reduces over
+/// `reduced`, and the axes reduced over. A reduction over no axes reduces
+/// each element alone, through an axis of extent 1.
+pub(super) fn load_reduced(
     cx: &NodeContext<'_>,
     stage: &mut StageBuilder<'_>,
     input: ValueId,
-    attrs: &ReduceAttrs,
+    reduced: &[Axis],
+    keep: KeepDims,
 ) -> Result<(Operand, Over), LowerError> {
     let shape = cx.graph.value(input).ty().shape();
-    let (index, mut axes) = reduced_index(cx, stage, shape, &attrs.axes, attrs.keep_dims)?;
+    let (index, mut axes) = reduced_index(cx, stage, shape, reduced, keep)?;
     if axes.is_empty() {
         axes.push(stage.reduce_axis(Dim::new(1)).0);
     }
     let x = stage.load(Binding::Value(input), index);
-    Ok((x, Over { axes, count: reduced_count(shape, &attrs.axes) }))
+    Ok((x, Over { axes, count: reduced_count(shape, reduced) }))
 }
 
 /// The input index for one output element: a new reduction axis for each
@@ -179,17 +180,19 @@ fn log_sum_exp(
     attrs: &ReduceAttrs,
 ) -> Result<LoweredGroup, LowerError> {
     let Some(output) = cx.needed_output() else { return Ok(LoweredGroup::default()) };
-    let ty = cx.graph.value(output).ty();
-    let mut intermediates = IndexVec::new();
-    let max = intermediates.push(TensorType::new(DType::F32, ty.shape().clone(), Layout::RowMajor));
-    let wide = |x: &Operand| convert(x.expr.clone(), x.dtype, DType::F32);
+    let shape = cx.graph.value(output).ty().shape();
+    let (axes, keep) = (&attrs.axes[..], attrs.keep_dims);
+    let mut group = cx.group();
+    let max = group.intermediate(shape);
 
-    let mut first = StageBuilder::new(cx.graph, &intermediates, cx.named("max"), ty.shape());
-    let (x, over) = load_reduced(cx, &mut first, input, attrs)?;
+    let mut first = group.stage(cx.named("max"), shape);
+    let (x, over) = load_reduced(cx, &mut first, input, axes, keep)?;
     first.output(Binding::Intermediate(max), over.apply(LoopReduceOp::Max, wide(&x)));
+    let first = cx.finish(first)?;
+    group.push(first);
 
-    let mut second = StageBuilder::new(cx.graph, &intermediates, cx.named("sum"), ty.shape());
-    let (x, over) = load_reduced(cx, &mut second, input, attrs)?;
+    let mut second = group.stage(cx.named("sum"), shape);
+    let (x, over) = load_reduced(cx, &mut second, input, axes, keep)?;
     let spatial = second.spatial().to_vec();
     let m = second.load(Binding::Intermediate(max), spatial).expr;
     let shifted = add(m.clone(), float_pass(ReduceOp::LogSumExp, sub(wide(&x), m.clone()), &over));
@@ -198,12 +201,14 @@ fn log_sum_exp(
     let result =
         if x.dtype.is_float() { demote(result, x.dtype) } else { truncated(result, x.dtype) };
     second.output(Binding::Value(output), result);
+    let second = cx.finish(second)?;
+    group.push(second);
+    Ok(group.finish())
+}
 
-    let stages = [first, second]
-        .into_iter()
-        .map(|stage| stage.finish().map_err(|source| cx.ill_formed(source)))
-        .collect::<Result<_, _>>()?;
-    Ok(LoweredGroup::new(intermediates, stages))
+/// `x` as f32, the type statistics are computed in.
+pub(super) fn wide(x: &Operand) -> TensorExpr {
+    convert(x.expr.clone(), x.dtype, DType::F32)
 }
 
 /// `ArgMax` or `ArgMin` along one axis, compared in the input's own type.
