@@ -14,7 +14,7 @@ It plays the role spike plays for rvsim.
 | Float format tests | every encoding round-trips; every f32 rounds to nearest-even | nothing | `cargo test` (exhaustive: `--release -- --ignored`) |
 | Loop-interpreter checks | scheduled kernels compute what the graph interpreter computes, without races | nothing | `cargo test` |
 | ptxas checks | every emitted kernel assembles for its target | ptxas (the flake; CI fetches NVIDIA's checksummed redistributable) | `cargo test` |
-| GPU tests | every op family's kernels match the loop interpreter bit for bit on the device; the runtime is correct | GPU | `cargo test --features gpu` |
+| GPU tests | every op family's kernels, and whole compiled programs run by the runtime, match the loop interpreter bit for bit on the device | GPU | `cargo test --features gpu` |
 | ONNX conformance | interpreter and GPU agree with the official node tests | `data/onnx` | `ptxc conformance` |
 | Differential fuzzing | random well-typed graphs agree across executors | GPU for `--backend gpu` | `ptxc fuzz` |
 | Whole models | accuracy on real data matches PyTorch | models, datasets, cached references | `ptxc check-model` |

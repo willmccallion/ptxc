@@ -19,10 +19,12 @@ ptxc-core.workspace = true
 ptxc-target.workspace = true
 ptxc-program.workspace = true
 ptxc-cuda.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
 ptxc-codegen.workspace = true
+ptxc-compiler.workspace = true
 ptxc-graph.workspace = true
 ptxc-loop.workspace = true
 ptxc-schedule.workspace = true
