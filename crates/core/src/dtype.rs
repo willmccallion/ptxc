@@ -28,6 +28,41 @@ pub enum DType {
 }
 
 impl DType {
+    /// Every element type, in declaration order.
+    pub const ALL: [Self; 10] = [
+        Self::F32,
+        Self::F16,
+        Self::Bf16,
+        Self::F8E4M3Fn,
+        Self::F8E5M2,
+        Self::I8,
+        Self::U8,
+        Self::I32,
+        Self::I64,
+        Self::Bool,
+    ];
+
+    /// The type's name in ptxc's text formats, such as `f32` or `f8e4m3fn`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::F16 => "f16",
+            Self::Bf16 => "bf16",
+            Self::F8E4M3Fn => "f8e4m3fn",
+            Self::F8E5M2 => "f8e5m2",
+            Self::I8 => "i8",
+            Self::U8 => "u8",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::Bool => "bool",
+        }
+    }
+
+    /// The type `name` names.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|dtype| dtype.name() == name)
+    }
+
     /// The bytes one element occupies in device memory and in ONNX
     /// `raw_data`.
     pub const fn element_size(self) -> ByteSize {

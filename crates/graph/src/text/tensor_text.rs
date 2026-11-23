@@ -1,6 +1,6 @@
 //! Element types, tensor types and constant data as text.
 
-use super::attr::{TextWord, push_formatted, text_words};
+use super::attr::{TextWord, push_formatted};
 use super::cursor::Cursor;
 use super::element_text::{ElementText, Fnv64};
 use super::error::{ParseError, ParseErrorKind};
@@ -13,18 +13,18 @@ use ptxc_core::{DType, Dim, HostTensor, Shape, TensorData, with_tensor_data};
 /// ones print a content hash, so golden files stay readable.
 const INLINE_LIMIT: usize = 16;
 
-text_words! {
-    DType {
-        DType::F32 => "f32",
-        DType::F16 => "f16",
-        DType::Bf16 => "bf16",
-        DType::F8E4M3Fn => "f8e4m3fn",
-        DType::F8E5M2 => "f8e5m2",
-        DType::I8 => "i8",
-        DType::U8 => "u8",
-        DType::I32 => "i32",
-        DType::I64 => "i64",
-        DType::Bool => "bool",
+/// Element types use their names from `ptxc-core`, shared with loop IR's
+/// text.
+impl TextWord for DType {
+    const EXPECTED: &'static str =
+        "`f32` `f16` `bf16` `f8e4m3fn` `f8e5m2` `i8` `u8` `i32` `i64` `bool` ";
+
+    fn word(self) -> &'static str {
+        self.name()
+    }
+
+    fn from_word(word: &str) -> Option<Self> {
+        Self::from_name(word)
     }
 }
 
@@ -187,4 +187,18 @@ fn content_hash(tensor: &HostTensor) -> u64 {
     }
     with_tensor_data!(tensor.data(), values => values.iter().for_each(|value| value.hash(&mut hash)));
     hash.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_expected_words_list_every_element_type() {
+        let listed: Vec<&str> =
+            DType::EXPECTED.split_whitespace().map(|word| word.trim_matches('`')).collect();
+
+        let names: Vec<&str> = DType::ALL.iter().map(|dtype| dtype.name()).collect();
+        assert_eq!(listed, names);
+    }
 }

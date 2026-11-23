@@ -8,6 +8,7 @@
     reason = "test code: a panic is a test failure, and scales are compared exactly on purpose"
 )]
 
+mod dtype;
 mod index;
 mod kernel_name;
 mod quant;
