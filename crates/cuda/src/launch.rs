@@ -2,7 +2,7 @@
 //! launching, and checks the arguments against the kernel's parameters.
 
 use crate::error::CudaError;
-use crate::memory::DeviceBuffer;
+use crate::memory::{DeviceBuffer, DeviceSlice};
 use crate::module::Function;
 use crate::stream::Stream;
 use ptxc_core::{ByteSize, KernelName};
@@ -47,6 +47,8 @@ pub struct Unset;
 pub enum KernelArg<'a> {
     /// A buffer, passed as its device address.
     Buffer(&'a DeviceBuffer),
+    /// Part of a buffer, passed as its first byte's device address.
+    Slice(DeviceSlice<'a>),
     /// A `.u32` or `.s32` parameter's bits.
     U32(u32),
     /// A `.u64` or `.s64` parameter's bits.
@@ -58,6 +60,12 @@ pub enum KernelArg<'a> {
 impl<'a> From<&'a DeviceBuffer> for KernelArg<'a> {
     fn from(buffer: &'a DeviceBuffer) -> Self {
         Self::Buffer(buffer)
+    }
+}
+
+impl<'a> From<DeviceSlice<'a>> for KernelArg<'a> {
+    fn from(slice: DeviceSlice<'a>) -> Self {
+        Self::Slice(slice)
     }
 }
 
@@ -86,7 +94,7 @@ struct ArgSlot([u8; 8]);
 impl KernelArg<'_> {
     const fn size(&self) -> ByteSize {
         match self {
-            Self::Buffer(_) | Self::U64(_) => ByteSize::new(8),
+            Self::Buffer(_) | Self::Slice(_) | Self::U64(_) => ByteSize::new(8),
             Self::U32(_) | Self::F32(_) => ByteSize::new(4),
         }
     }
@@ -95,6 +103,7 @@ impl KernelArg<'_> {
         let mut bytes = [0_u8; 8];
         match self {
             Self::Buffer(buffer) => bytes = buffer.address().to_ne_bytes(),
+            Self::Slice(slice) => bytes = slice.address().to_ne_bytes(),
             Self::U64(value) => bytes = value.to_ne_bytes(),
             Self::U32(value) => bytes[..4].copy_from_slice(&value.to_ne_bytes()),
             Self::F32(value) => bytes[..4].copy_from_slice(&value.to_ne_bytes()),
@@ -167,7 +176,11 @@ impl Launch<'_, GridDim, BlockDim> {
         if !context.is(stream.context()) {
             return Err(CudaError::ForeignContext("the stream"));
         }
-        let foreign = |arg: &KernelArg<'_>| matches!(arg, KernelArg::Buffer(buffer) if !context.is(buffer.context()));
+        let foreign = |arg: &KernelArg<'_>| match arg {
+            KernelArg::Buffer(buffer) => !context.is(buffer.context()),
+            KernelArg::Slice(slice) => !context.is(slice.context()),
+            KernelArg::U32(_) | KernelArg::U64(_) | KernelArg::F32(_) => false,
+        };
         if self.args.iter().any(foreign) {
             return Err(CudaError::ForeignContext("a buffer argument"));
         }

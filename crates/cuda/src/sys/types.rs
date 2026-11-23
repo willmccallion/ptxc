@@ -27,6 +27,12 @@ pub(crate) const CU_JIT_ERROR_LOG_BUFFER: CuJitOption = 5;
 /// `CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES`: that buffer's size.
 pub(crate) const CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES: CuJitOption = 6;
 
+/// `CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR`.
+pub(crate) const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
+
+/// `CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR`.
+pub(crate) const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
+
 /// `CU_STREAM_DEFAULT`: a stream that synchronizes with the legacy default
 /// stream, so the synchronous copies (which run there) are ordered with it.
 pub(crate) const CU_STREAM_DEFAULT: c_uint = 0;

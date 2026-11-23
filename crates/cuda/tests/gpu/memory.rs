@@ -1,7 +1,7 @@
 //! Device buffers and host copies.
 
 use crate::context;
-use ptxc_core::ByteSize;
+use ptxc_core::{ByteOffset, ByteSize};
 use ptxc_cuda::CudaError;
 
 #[test]
@@ -58,4 +58,38 @@ fn dropped_buffers_give_their_memory_back() {
         let buffer = context.alloc(gibibyte).unwrap();
         drop(buffer);
     }
+}
+
+#[test]
+fn a_slice_must_lie_within_its_buffer() {
+    let buffer = context().alloc(ByteSize::new(16)).unwrap();
+
+    assert_eq!(
+        buffer.slice(ByteOffset::new(8), ByteSize::new(8)).unwrap().size(),
+        ByteSize::new(8)
+    );
+    let past = buffer.slice(ByteOffset::new(9), ByteSize::new(8)).unwrap_err();
+    let overflowing = buffer.slice(ByteOffset::new(u64::MAX), ByteSize::new(2)).unwrap_err();
+
+    assert!(matches!(past, CudaError::SliceBounds { .. }), "{past}");
+    assert!(matches!(overflowing, CudaError::SliceBounds { .. }), "{overflowing}");
+}
+
+#[test]
+fn a_stream_copies_between_slices_in_order() {
+    let context = context();
+    let mut buffer = context.alloc(ByteSize::new(8)).unwrap();
+    buffer.copy_from_host(&[1, 2, 3, 4, 0, 0, 0, 0]).unwrap();
+    let stream = context.stream().unwrap();
+    let low = buffer.slice(ByteOffset::new(0), ByteSize::new(4)).unwrap();
+    let high = buffer.slice(ByteOffset::new(4), ByteSize::new(4)).unwrap();
+
+    stream.copy(low, high).unwrap();
+    let mismatch = stream.copy(low, buffer.all()).unwrap_err();
+    stream.synchronize().unwrap();
+
+    let mut back = [0_u8; 8];
+    buffer.copy_to_host(&mut back).unwrap();
+    assert_eq!(back, [1, 2, 3, 4, 1, 2, 3, 4]);
+    assert!(matches!(mismatch, CudaError::SliceSizes { .. }), "{mismatch}");
 }

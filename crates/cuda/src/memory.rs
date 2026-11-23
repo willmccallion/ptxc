@@ -4,7 +4,7 @@
 use crate::context::Context;
 use crate::error::CudaError;
 use crate::sys::CuDevicePtr;
-use ptxc_core::ByteSize;
+use ptxc_core::{ByteOffset, ByteSize};
 
 /// A device allocation, freed on drop.
 #[derive(Debug)]
@@ -40,6 +40,23 @@ impl DeviceBuffer {
     /// The buffer's size.
     pub const fn size(&self) -> ByteSize {
         self.size
+    }
+
+    /// The whole buffer as a slice.
+    pub const fn all(&self) -> DeviceSlice<'_> {
+        DeviceSlice { buffer: self, offset: ByteOffset::new(0), size: self.size }
+    }
+
+    /// The `size` bytes from `offset`, if they lie within the buffer.
+    pub const fn slice(
+        &self,
+        offset: ByteOffset,
+        size: ByteSize,
+    ) -> Result<DeviceSlice<'_>, CudaError> {
+        match offset.get().checked_add(size.get()) {
+            Some(end) if end <= self.size.get() => Ok(DeviceSlice { buffer: self, offset, size }),
+            _ => Err(CudaError::SliceBounds { offset, size, buffer: self.size }),
+        }
     }
 
     /// Overwrites the whole buffer with `bytes`, which must be its size. The
@@ -87,4 +104,30 @@ impl DeviceBuffer {
 /// `size` as the driver's `size_t`.
 pub(crate) fn to_usize(size: ByteSize) -> Result<usize, CudaError> {
     usize::try_from(size.get()).map_err(|_| CudaError::TooLarge(size))
+}
+
+/// A byte range within a device buffer: a kernel argument, or an end of a
+/// device-to-device copy.
+#[derive(Clone, Copy, Debug)]
+pub struct DeviceSlice<'a> {
+    buffer: &'a DeviceBuffer,
+    offset: ByteOffset,
+    size: ByteSize,
+}
+
+impl DeviceSlice<'_> {
+    /// The slice's length.
+    pub const fn size(&self) -> ByteSize {
+        self.size
+    }
+
+    /// The device address of the slice's first byte, within its buffer by
+    /// construction.
+    pub(crate) const fn address(&self) -> CuDevicePtr {
+        self.buffer.address() + self.offset.get()
+    }
+
+    pub(crate) const fn context(&self) -> &Context {
+        self.buffer.context()
+    }
 }
