@@ -8,7 +8,7 @@
 	.param .u64 gather_param_2
 )
 {
-	.reg .b16 %h<2>;
+	.reg .b16 %h<1>;
 	.reg .b32 %r<5>;
 	.reg .b64 %rd<17>;
 	.reg .f32 %f<1>;
@@ -36,7 +36,6 @@
 	mov.b32 %f0, %r4;
 	mul.lo.s64 %rd15, %rd9, 2;
 	add.s64 %rd16, %rd5, %rd15;
-	cvt.rn.bf16.f32 %h1, %f0;
-	st.global.b16 [%rd16], %h1;
+	st.global.b16 [%rd16], %h0;
 	ret;
 }

@@ -12,13 +12,14 @@ mod mma;
 mod ops;
 mod values;
 
-use crate::ast::{B64, FunctionBuilder, PtxModule, Reg};
+use crate::ast::{B16, B64, F32, FunctionBuilder, PtxModule, Reg};
 use known::Known;
 use memory::Storage;
 use ptxc_loop::{BufferId, LoweredKernel, VarId};
 use ptxc_target::Target;
 use std::collections::HashMap;
 use thiserror::Error;
+use values::Narrow;
 
 /// A kernel codegen cannot emit.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -56,6 +57,9 @@ struct Selector<'k> {
     vars: HashMap<VarId, Reg<B64>>,
     storage: HashMap<BufferId, Storage>,
     known: Known,
+    /// Each f32 register widened from a narrow float's memory form, with
+    /// that form, which a store of the register reuses.
+    narrow_forms: HashMap<Reg<F32>, (Reg<B16>, Narrow)>,
 }
 
 impl<'k> Selector<'k> {
@@ -66,6 +70,7 @@ impl<'k> Selector<'k> {
             vars: HashMap::new(),
             storage: HashMap::new(),
             known: Known::default(),
+            narrow_forms: HashMap::new(),
         }
     }
 }
