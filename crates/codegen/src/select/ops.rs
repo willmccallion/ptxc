@@ -206,10 +206,53 @@ impl Selector<'_> {
             BinaryOp::LessOrEqual => compare(b, Compare::Le),
             BinaryOp::Greater => compare(b, Compare::Gt),
             BinaryOp::GreaterOrEqual => compare(b, Compare::Ge),
-            BinaryOp::Pow | BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => {
+            BinaryOp::Pow => Held::from(self.int_pow((x, y), signedness)),
+            BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => {
                 return Err(unsupported(op.name()));
             }
         })
+    }
+
+    /// `x` to the power `y`, wrapping, as `ptxc_core::arith::wrapping_pow`
+    /// computes it: square-and-multiply over every bit of a non-negative
+    /// `y`. A negative `y` truncates the float power, which is 1 for a base
+    /// of 1, ±1 for -1, `i64::MAX` for 0 (saturated), and 0 otherwise.
+    fn int_pow<C: Int>(&mut self, (x, y): (Reg<C>, Reg<C>), signedness: Signedness) -> Reg<C> {
+        let b = &mut self.builder;
+        let (zero, one) = (Value::<C>::immediate(0), Value::<C>::immediate(1));
+        let mut result = b.mov(C::BITS, one);
+        let mut square = x;
+        for bit in 0..C::WIDTH {
+            let shifted =
+                b.int(Op::Shr, Signedness::Unsigned, y.into(), Value::<C>::immediate(bit));
+            let low = b.int(Op::And, Signedness::Bits, shifted.into(), one);
+            let set = b.compare_int(Compare::Ne, Signedness::Bits, low.into(), zero);
+            let product = b.int(Op::Mul, signedness, result.into(), square.into());
+            result = b.select(C::BITS, product.into(), result.into(), set);
+            square = b.int(Op::Mul, signedness, square.into(), square.into());
+        }
+        let truncated = self.negative_int_pow((x, y));
+        let b = &mut self.builder;
+        let negative = b.compare_int(Compare::Lt, signedness, y.into(), zero);
+        b.select(C::BITS, truncated.into(), result.into(), negative)
+    }
+
+    /// `x` to a negative power `y`, truncated toward zero.
+    fn negative_int_pow<C: Int>(&mut self, (x, y): (Reg<C>, Reg<C>)) -> Reg<C> {
+        let b = &mut self.builder;
+        let (zero, one, minus_one) =
+            (Value::<C>::immediate(0), Value::<C>::immediate(1), Value::<C>::immediate(-1));
+        let parity = b.int(Op::And, Signedness::Bits, y.into(), one);
+        let odd = b.compare_int(Compare::Ne, Signedness::Bits, parity.into(), zero);
+        let power_of_minus_one = b.select(C::BITS, minus_one, one, odd);
+        let saturated = Value::<C>::immediate(C::LOW_I64_MAX);
+        let is_zero = b.compare_int(Compare::Eq, Signedness::Bits, x.into(), zero);
+        let truncated = b.select(C::BITS, saturated, zero, is_zero);
+        let is_minus_one = b.compare_int(Compare::Eq, Signedness::Bits, x.into(), minus_one);
+        let truncated =
+            b.select(C::BITS, power_of_minus_one.into(), truncated.into(), is_minus_one);
+        let is_one = b.compare_int(Compare::Eq, Signedness::Bits, x.into(), one);
+        b.select(C::BITS, one, truncated.into(), is_one)
     }
 
     fn bool_binary(
