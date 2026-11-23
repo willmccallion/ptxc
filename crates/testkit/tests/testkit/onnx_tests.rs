@@ -10,7 +10,7 @@ use ptxc_onnx_proto::{
     GraphProto, ModelProto, NodeProto, OperatorSetIdProto, TensorProto, TensorShapeProto,
     TypeProto, ValueInfoProto,
 };
-use ptxc_testkit::onnx_tests::{LoadError, TestCase, TestOp, cases};
+use ptxc_testkit::onnx_tests::{LoadError, TestCase, TestOp, case_dirs, cases};
 use std::path::Path;
 
 fn info(name: &str, dtype: DataType, dims: &[i64]) -> ValueInfoProto {
@@ -235,4 +235,16 @@ fn a_case_names_its_single_op_or_is_composite() {
     assert_eq!(op_of(&graph), TestOp::Composite);
     assert_eq!(op_of(&single), TestOp::Single("Reshape".to_owned()));
     assert_eq!(op_of(&foreign), TestOp::Single("ai.onnx.ml.Reshape".to_owned()));
+}
+
+#[test]
+fn case_directories_list_in_name_order_without_loading() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("test_b")).unwrap();
+    std::fs::create_dir_all(root.path().join("test_a")).unwrap();
+    std::fs::write(root.path().join("notes.txt"), "not a case").unwrap();
+
+    let dirs = case_dirs(root.path()).unwrap();
+
+    assert_eq!(dirs, [root.path().join("test_a"), root.path().join("test_b")]);
 }
