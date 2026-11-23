@@ -901,6 +901,7 @@ name = "ptxc-target"
 version = "0.1.0"
 dependencies = [
  "ptxc-core",
+ "thiserror",
 ]
 
 [[package]]
