@@ -182,7 +182,8 @@ group's outputs are only the values read outside it. In M2,
 `Partitioned::one_node_per_group` is the only partitioner.
 
 `View` groups (reshape, or squeeze on contiguous data) produce no kernel:
-they become buffer aliases in the memory plan.
+they become buffer aliases in the memory plan. Until the memory plan aliases
+them, lowering gives a reshape a copy stage like any other op.
 
 ### Graph optimisation (`ptxc-graph-opt`)
 
