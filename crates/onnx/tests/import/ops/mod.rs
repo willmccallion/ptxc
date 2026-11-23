@@ -5,6 +5,7 @@ mod activation;
 mod constant;
 mod conv;
 mod elementwise;
+mod gather;
 mod matmul;
 mod norm;
 mod pool;

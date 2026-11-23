@@ -150,6 +150,26 @@ fn a_shape_from_a_graph_input_names_the_input_and_imports_once_bound() {
 }
 
 #[test]
+fn shapes_computed_in_the_graph_are_known_at_import() {
+    let nodes = vec![
+        node("Shape", &["x"], &["shape"], vec![]),
+        node("Gather", &["shape", "first"], &["batch"], vec![]),
+        node("Concat", &["batch", "rest"], &["target"], vec![int("axis", 0)]),
+        node("Reshape", &["x", "target"], &["y"], vec![]),
+    ];
+    let constants = vec![i64_tensor("first", &[1], &[0]), i64_tensor("rest", &[1], &[-1])];
+
+    let graph = text(&model(
+        nodes,
+        vec![fixed("x", FLOAT, &[2, 3, 4])],
+        constants,
+        vec![fixed("y", FLOAT, &[2, 12])],
+    ));
+
+    assert!(graph.contains("reshape<shape=[2, 12]>"), "{graph}");
+}
+
+#[test]
 fn a_declared_output_that_differs_from_the_inferred_type_is_an_error() {
     let model = model(
         vec![node("Relu", &["x"], &["y"], vec![])],
