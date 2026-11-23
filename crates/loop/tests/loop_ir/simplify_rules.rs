@@ -238,3 +238,19 @@ fn fusing_keeps_the_other_terms() {
     let expected = f.arena.add(f.x, f.inner);
     assert_eq!(f.simplify(with_inner), expected);
 }
+
+#[test]
+fn a_remainder_by_zero_never_fuses() {
+    let mut f = fixture();
+    let zero = f.c(0);
+    let quotient = f.arena.floor_div(f.x, zero);
+    let remainder = f.arena.floor_mod(f.x, zero);
+    let _in_the_arena = (quotient, f.simplify(quotient));
+    let sum = f.arena.add(f.x, remainder);
+
+    let simplified = f.simplify(sum);
+
+    let mut terms = [f.x, remainder];
+    terms.sort();
+    assert_eq!(f.arena.get(simplified), ptxc_loop::Expr::Add(terms[0], terms[1]));
+}

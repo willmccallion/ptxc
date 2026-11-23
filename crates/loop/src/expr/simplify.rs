@@ -214,7 +214,11 @@ fn build_fused(arena: &mut ExprArena, sum: LinearSum) -> ExprId {
 fn fuse_once(arena: &ExprArena, sum: &LinearSum) -> Option<LinearSum> {
     sum.terms().find_map(|(atom, coefficient)| {
         let Expr::FloorMod(x, divisor) = arena.get(atom) else { return None };
+        // The identity needs a divisor; with 0 both terms are undefined.
         let Expr::Const(factor) = arena.get(divisor) else { return None };
+        if factor == 0 {
+            return None;
+        }
         let quotient = arena.find(Expr::FloorDiv(x, divisor))?;
         if sum.coefficient(quotient) != coefficient.checked_mul(factor)? {
             return None;
