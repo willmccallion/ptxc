@@ -14,13 +14,14 @@ use thiserror::Error;
 #[error("ptxc has no target for {0}; supported: {sm_89}", sm_89 = SmVersion::SM_89)]
 pub struct UnsupportedSm(pub SmVersion);
 
-/// `sm_89`, with the PTX ISA version that introduced it, so its modules load
-/// on any driver that knows `sm_89` (D36). The limits are compute capability
-/// 8.9's, as an RTX 4060 Ti's driver reports them; registers per thread is
-/// from the CUDA programming guide, as no device attribute gives it.
+/// `sm_89`, with PTX ISA 8.4, the first version with all of its FP8
+/// instructions, so its modules load on CUDA 12.4 drivers and later (D50).
+/// The limits are compute capability 8.9's, as an RTX 4060 Ti's driver
+/// reports them; registers per thread is from the CUDA programming guide,
+/// as no device attribute gives it.
 const SM_89: Target = Target {
     sm: SmVersion::SM_89,
-    ptx_isa: PtxIsaVersion::new(7, 8),
+    ptx_isa: PtxIsaVersion::new(8, 4),
     limits: Limits {
         warp_size: ThreadCount::new(32),
         registers_per_thread: RegisterCount::new(255),

@@ -816,3 +816,38 @@ the old one.
   an interface before the search that shapes it. These two rules make every
   stage a valid GPU kernel. The differential tests run every lowered op
   family under them in the loop interpreter, races and barriers checked.
+
+## D50. sm_89 targets PTX ISA 8.4, and FP8 converts in hardware
+
+- **Context:** codegen converts every FP8 load, store, cast and constant.
+  sm_89's `cvt.rn.satfinite.e4m3x2.f32` and `cvt.rn.f16x2.e4m3x2` need PTX
+  ISA 8.1. Its FP8 `mma.sync`, which M3 uses, needs 8.4. D36 fixed the
+  preset at 7.8.
+- **Options:**
+  - keep 7.8 and convert FP8 in software, about twenty integer
+    instructions per element;
+  - declare each module's version from the features it uses, so a target
+    carries a minimum and a maximum;
+  - raise the preset to 8.4.
+- **Choice:** the sm_89 preset declares 8.4.
+  - FP8 converts with one `cvt` each way.
+  - A cast or store that overflows FP8 without saturating fixes up the
+    saturated result. E4M3FN overflows to NaN above 464, and E5M2 to
+    infinity from 61440: the ties where rounding to nearest even leaves
+    the largest finite value.
+  - An integer cast to a float narrower than f32 goes through an f32
+    rounded to odd. sm_89 has no direct `cvt` from an integer to bf16
+    (it needs sm_90), and rounding twice through f32 differs from
+    rounding once for some integers above 2^24.
+- **Reason:** FP8 is sm_89's headline datatype, and software conversion
+  would tax every FP8 tensor to support drivers older than CUDA 12.4
+  (2024). Per-module versions add a second version to every target to
+  serve those drivers. The emitted text still does not depend on which
+  driver or ptxas produced it.
+- **Evidence:** ptxas 13.5, `--gpu-name sm_89`:
+  - FP8 `cvt` at 8.0: "requires .target sm_90 or higher"; accepted at 8.1.
+  - FP8 `mma.sync.m16n8k32` at 8.3: "requires PTX ISA .version 8.4 or
+    later"; accepted at 8.4.
+  - `cvt.rn.bf16.s32`: "requires .target sm_90 or higher".
+- **Supersedes:** D36's choice of the SM's minimum version. Its check that
+  the driver supports the preset's version stands.
