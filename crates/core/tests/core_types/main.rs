@@ -1,5 +1,5 @@
 //! Core vocabulary types: typed indices, shapes and axes, sizes, host
-//! tensors and quantization parameters.
+//! tensors, quantization parameters, kernel names and durations.
 
 #![allow(
     clippy::unwrap_used,
@@ -9,7 +9,9 @@
 )]
 
 mod index;
+mod kernel_name;
 mod quant;
 mod shape;
 mod size;
 mod tensor;
+mod time;
