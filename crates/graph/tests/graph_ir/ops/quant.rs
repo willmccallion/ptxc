@@ -135,8 +135,8 @@ fn qmatmul_operands_and_result_must_match_their_grids() {
     assert!(matches!(wrong_b.infer(&[&a, &b]), Err(TypeError::MixedDTypes { .. })));
     let i32_output = qmatmul(per_tensor(QuantDType::I8), per_tensor(QuantDType::I32));
     assert_eq!(i32_output.infer(&[&a, &b]), Err(TypeError::UnsupportedDType(DType::I32)));
-    let wide_output = qmatmul(per_tensor(QuantDType::I8), per_axis(QuantDType::U8, 1, 5));
-    assert!(matches!(wide_output.infer(&[&a, &b]), Err(TypeError::QuantMapCount { .. })));
+    let wide_b = qmatmul(per_axis(QuantDType::I8, 1, 5), per_tensor(QuantDType::U8));
+    assert!(matches!(wide_b.infer(&[&a, &b]), Err(TypeError::QuantMapCount { .. })));
     let short = tensor_type(DType::I8, &[5, 4]);
     assert!(matches!(
         qmatmul(per_tensor(QuantDType::I8), per_tensor(QuantDType::U8)).infer(&[&a, &short]),
@@ -168,7 +168,7 @@ fn qconv_follows_conv_shapes_on_the_output_grid() {
     let (x, w) = qconv_operands();
 
     let inferred =
-        qconv(per_axis(QuantDType::U8, 1, 8)).infer(&[&x, &w, &tensor_type(DType::I32, &[8])]);
+        qconv(per_tensor(QuantDType::U8)).infer(&[&x, &w, &tensor_type(DType::I32, &[8])]);
 
     assert_eq!(inferred, Ok(vec![tensor_type(DType::U8, &[1, 8, 3, 3])]));
 }
@@ -193,12 +193,42 @@ fn qconv_operands_and_result_must_match_their_grids() {
         qconv(per_tensor(QuantDType::U8)).infer(&[&w, &w]),
         Err(TypeError::MixedDTypes { .. })
     ));
-    assert!(matches!(
-        qconv(per_axis(QuantDType::U8, 1, 3)).infer(&[&x, &w]),
-        Err(TypeError::QuantMapCount { .. })
-    ));
+    assert_eq!(
+        qconv(per_axis(QuantDType::U8, 1, 8)).infer(&[&x, &w]),
+        Err(TypeError::QuantAxis(axis(1)))
+    );
     assert_eq!(
         qconv(per_tensor(QuantDType::I32)).infer(&[&x, &w]),
         Err(TypeError::UnsupportedDType(DType::I32))
     );
+}
+
+#[test]
+fn qmatmul_maps_vary_only_by_row_of_a_and_column_of_b() {
+    let (a, b) = (tensor_type(DType::U8, &[2, 3]), tensor_type(DType::I8, &[3, 4]));
+    let attrs = |a_params, b_params| QMatMulAttrs {
+        a: a_params,
+        b: b_params,
+        output: per_tensor(QuantDType::U8),
+    };
+
+    let by_row = attrs(per_axis(QuantDType::U8, 0, 2), per_axis(QuantDType::I8, 1, 4));
+    let a_by_inner = attrs(per_axis(QuantDType::U8, 1, 3), per_tensor(QuantDType::I8));
+    let b_by_inner = attrs(per_tensor(QuantDType::U8), per_axis(QuantDType::I8, 0, 3));
+
+    assert_eq!(by_row.infer(&[&a, &b]), Ok(vec![tensor_type(DType::U8, &[2, 4])]));
+    assert_eq!(a_by_inner.infer(&[&a, &b]), Err(TypeError::QuantAxis(axis(1))));
+    assert_eq!(b_by_inner.infer(&[&a, &b]), Err(TypeError::QuantAxis(axis(0))));
+}
+
+#[test]
+fn qconv_maps_vary_only_by_output_channel_of_the_weights() {
+    let (x, w) = qconv_operands();
+    let per_input_channel =
+        QConvAttrs { weights: per_axis(QuantDType::I8, 1, 3), ..qconv(per_tensor(QuantDType::U8)) };
+    let per_channel_input =
+        QConvAttrs { input: per_axis(QuantDType::U8, 1, 3), ..qconv(per_tensor(QuantDType::U8)) };
+
+    assert_eq!(per_input_channel.infer(&[&x, &w]), Err(TypeError::QuantAxis(axis(1))));
+    assert_eq!(per_channel_input.infer(&[&x, &w]), Err(TypeError::QuantAxis(axis(1))));
 }

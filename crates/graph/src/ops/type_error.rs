@@ -115,6 +115,10 @@ pub enum TypeError {
         /// The number of maps.
         maps: usize,
     },
+    /// Quantization maps that vary along an axis where the op allows only
+    /// one map: an axis its arithmetic sums over, or a result's.
+    #[error("quantization maps may not vary along axis {}", .0.index())]
+    QuantAxis(Axis),
     /// Attention's per-sample valid key counts used with a KV cache, which
     /// ONNX does not allow.
     #[error("nonpad_kv_seqlen cannot be used with past or present key and value")]
