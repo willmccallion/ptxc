@@ -503,3 +503,29 @@ the old one.
   guide, as no attribute gives it.
 - **Supersedes:** D11's "which `ptxc-runtime` derives from the driver's
   reported version".
+
+## D37. CUDA handles: shared contexts, byte buffers, no device-visible host memory
+
+- **Context:** `ptxc-cuda` is the only crate allowed unsafe code, so
+  everything above it, including kernel launches, must be a safe API.
+- **Options and choices:**
+  - *Ownership:* handles borrowing the context with lifetimes, or holding
+    an `Arc` of it. **`Arc`:** `ptxc-runtime` can then own modules,
+    buffers and streams together, without self-referential lifetimes. The
+    function table is a process-wide `&'static`, as libcuda is never
+    unloaded (D24).
+  - *Buffers:* typed `DeviceBuffer<T>` or bytes. **Bytes:** the memory plan
+    is a byte arena at offsets, and `HostTensor` already knows its element
+    type.
+  - *Launch soundness:* Rust cannot check what a kernel does. **No host
+    memory is mapped into the device's address space** (no pinned, mapped
+    or managed memory), so a wrong kernel corrupts only device memory and
+    fails with a CUDA error; the launch builder also checks the arguments
+    against the kernel's parameter sizes (`cuFuncGetParamInfo`). Pinned
+    staging buffers for CUDA graphs (M4) need a new decision.
+  - *Current context:* an explicit guard, or setting it on every call.
+    **Every call** makes its context current (`cuCtxSetCurrent`), so
+    handles work from any thread, as `cargo test`'s threads need.
+- **Consequence:** copies are synchronous and run on the legacy default
+  stream, so ptxc's streams are created blocking (`CU_STREAM_DEFAULT`) to
+  keep copies ordered after the kernels queued before them.
