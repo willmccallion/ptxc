@@ -10,7 +10,7 @@
 {
 	.reg .b16 %h<2>;
 	.reg .b32 %r<5>;
-	.reg .b64 %rd<19>;
+	.reg .b64 %rd<17>;
 	.reg .f32 %f<1>;
 	ld.param.u64 %rd0, [gather_param_0];
 	cvta.to.global.u64 %rd1, %rd0;
@@ -34,11 +34,9 @@
 	cvt.u32.u16 %r3, %h0;
 	shl.b32 %r4, %r3, 16;
 	mov.b32 %f0, %r4;
-	mul.lo.s64 %rd15, %rd6, 6;
-	add.s64 %rd16, %rd7, %rd15;
-	mul.lo.s64 %rd17, %rd16, 2;
-	add.s64 %rd18, %rd5, %rd17;
+	mul.lo.s64 %rd15, %rd9, 2;
+	add.s64 %rd16, %rd5, %rd15;
 	cvt.rn.bf16.f32 %h1, %f0;
-	st.global.b16 [%rd18], %h1;
+	st.global.b16 [%rd16], %h1;
 	ret;
 }

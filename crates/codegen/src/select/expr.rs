@@ -17,8 +17,17 @@ impl Selector<'_> {
         }
     }
 
-    /// Index expression `id` in an `s64` register.
+    /// Index expression `id` in an `s64` register, computed once a block.
     pub(super) fn index(&mut self, id: ExprId) -> Result<Reg<B64>, CodegenError> {
+        if let Some(held) = self.known.index(id) {
+            return Ok(held);
+        }
+        let held = self.computed_index(id)?;
+        self.known.remember_index(id, held);
+        Ok(held)
+    }
+
+    fn computed_index(&mut self, id: ExprId) -> Result<Reg<B64>, CodegenError> {
         let signed = Signedness::Signed;
         let pair = |this: &mut Self, a, b| -> Result<_, CodegenError> {
             Ok((this.index_operand(a)?, this.index_operand(b)?))
@@ -90,8 +99,17 @@ impl Selector<'_> {
         })
     }
 
-    /// Value expression `expr`, held in registers.
+    /// Value expression `expr`, held in registers, computed once a block.
     pub(super) fn value(&mut self, expr: &ValueExpr) -> Result<Held, CodegenError> {
+        if let Some(held) = self.known.value(expr) {
+            return Ok(held);
+        }
+        let held = self.computed_value(expr)?;
+        self.known.remember_value(expr, held);
+        Ok(held)
+    }
+
+    fn computed_value(&mut self, expr: &ValueExpr) -> Result<Held, CodegenError> {
         let buffers = self.kernel.buffers();
         match expr {
             ValueExpr::Load { buffer, index } => self.load(*buffer, *index),

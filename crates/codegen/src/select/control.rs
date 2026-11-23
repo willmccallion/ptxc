@@ -45,6 +45,8 @@ impl Selector<'_> {
                 let extent = i64::try_from(extent.get()).map_err(|_| CodegenError::TooLarge)?;
                 let counter = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
                 let _previous = self.vars.insert(*var, counter);
+                let outer = self.known.clone();
+                self.known.forget_values();
                 let (top, exit) = (self.builder.label(), self.builder.label());
                 self.builder.place(top);
                 let done = self.builder.compare_int(
@@ -58,6 +60,7 @@ impl Selector<'_> {
                 self.builder.increment(counter);
                 self.builder.branch(top, None);
                 self.builder.place(exit);
+                self.known.leave(outer);
                 Ok(())
             }
             Stmt::If { condition, then } => {
@@ -67,8 +70,10 @@ impl Selector<'_> {
                     self.builder.compare_int(Compare::Ge, Signedness::Signed, index.into(), bound);
                 let skip = self.builder.label();
                 self.builder.branch(skip, Some((outside, true)));
+                let outer = self.known.clone();
                 self.statement(then)?;
                 self.builder.place(skip);
+                self.known.leave(outer);
                 Ok(())
             }
             Stmt::Alloc { buffer, body } => {
@@ -82,10 +87,13 @@ impl Selector<'_> {
             }
             Stmt::Store { buffer, index, value } => {
                 let value = self.value(value)?;
-                self.store(*buffer, *index, value)
+                self.store(*buffer, *index, value)?;
+                self.known.forget_reads_of(*buffer);
+                Ok(())
             }
             Stmt::Barrier => {
                 self.builder.barrier();
+                self.known.forget_values();
                 Ok(())
             }
         }

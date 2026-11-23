@@ -39,9 +39,24 @@ impl Selector<'_> {
         Ok(())
     }
 
+    /// The address of element `index` of `buffer`, and its space, computed
+    /// once a block.
+    fn element(
+        &mut self,
+        buffer: BufferId,
+        index: ExprId,
+    ) -> Result<(Space, Address), CodegenError> {
+        if let Some(at) = self.known.address(buffer, index) {
+            return Ok(at);
+        }
+        let at = self.computed_element(buffer, index)?;
+        self.known.remember_address(buffer, index, at.clone());
+        Ok(at)
+    }
+
     /// The address of element `index` of `buffer`, and its space. A
     /// constant index becomes the address's immediate offset.
-    fn element(
+    fn computed_element(
         &mut self,
         buffer: BufferId,
         index: ExprId,
