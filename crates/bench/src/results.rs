@@ -48,6 +48,8 @@ pub(crate) struct Case<P> {
     pub(crate) params: P,
     pub(crate) verified: bool,
     pub(crate) clocks: SeriesClocks,
+    /// The launches each sample batched; a sample is their time per launch.
+    pub(crate) iterations_per_sample: u32,
     pub(crate) samples_us: Vec<f64>,
     pub(crate) median_us: f64,
     pub(crate) p10_us: f64,
@@ -92,6 +94,7 @@ impl<P> Case<P> {
             params,
             verified,
             clocks: SeriesClocks { before, after, held },
+            iterations_per_sample: series.batch,
             samples_us: series.samples.iter().map(|sample| sample.get()).collect(),
             median_us: summary.median.get(),
             p10_us: summary.p10.get(),
@@ -184,7 +187,7 @@ mod tests {
     }
 
     fn series(samples: &[f64]) -> Series {
-        Series { samples: samples.iter().copied().map(Microseconds::new).collect() }
+        Series { samples: samples.iter().copied().map(Microseconds::new).collect(), batch: 4 }
     }
 
     fn results(cases: Vec<Case<Shape>>) -> Results<Shape> {
@@ -250,6 +253,7 @@ mod tests {
         assert_eq!(first["clocks"]["after"]["events"][0], "sw_power_cap");
         assert_eq!(first["clocks"]["held"], true);
         assert_eq!(first["median_us"], 2.0);
+        assert_eq!(first["iterations_per_sample"], 4);
     }
 
     #[test]

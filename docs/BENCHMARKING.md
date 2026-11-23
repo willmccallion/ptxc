@@ -29,9 +29,14 @@ upgrade shows up in the data.
   temperature and throttle reasons (`nvidia-smi --query-gpu`) before and
   after each series, and marks a series invalid if the clocks moved.
 - **Timing.**
-  - CUDA events around each iteration on one stream, after a warmup of at
-    least 20 iterations and 1 s.
-  - Then at least 100 timed iterations, or 2 s, whichever is longer.
+  - A warmup of at least 20 iterations and 1 s, each between CUDA events on
+    one stream.
+  - Then at least 100 timed samples, or 2 s, whichever is longer. A sample
+    is a batch of back-to-back launches between two events, its size the
+    smallest power of two the warmup's median says lasts 1 ms, and records
+    the time per launch. Short kernels are timed in batches, so the events'
+    0.5 µs resolution and the gaps between launches stay small against
+    each sample.
   - Reported as the median, with p10 and p90 alongside, interpolated
     linearly between the nearest ranks as numpy's default percentile is.
     Raw samples are kept in the JSON.
@@ -149,6 +154,7 @@ One file per suite and framework:
       "id": "gemm/f16/NN/4096x4096x4096",
       "params": { "m": 4096, "n": 4096, "k": 4096, "dtype": "f16", "layout": "NN" },
       "verified": true,
+      "iterations_per_sample": 256,
       "clocks": {
         "before": { "sm_mhz": 2520, "mem_mhz": 9001, "temperature_c": 52, "events": [] },
         "after": { "sm_mhz": 2520, "mem_mhz": 9001, "temperature_c": 61, "events": ["sw_power_cap"] },
