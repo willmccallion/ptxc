@@ -1,12 +1,14 @@
-//! `cargo xtask fetch onnx-tests`: downloads the pinned ONNX release, checks
-//! its SHA-256, and unpacks its node tests into `data/onnx/<tag>/node/`.
+//! `cargo xtask fetch onnx-tests | imagenetv2`: downloads a pinned archive,
+//! checks its SHA-256, and unpacks one directory of it under `data/`: the
+//! ONNX node tests into `data/onnx/<tag>/node/`, ImageNetV2 into
+//! `data/datasets/imagenetv2/`.
 
 mod download;
 mod extract;
 #[cfg(test)]
 mod test_archive;
 
-use crate::pin::{ONNX_SDIST, ONNX_TAG, PinnedArchive};
+use crate::pin::{IMAGENET_V2, ONNX_SDIST, ONNX_TAG, PinnedArchive};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -33,17 +35,34 @@ pub(crate) enum FetchError {
 /// already in place.
 pub(crate) fn onnx_tests(workspace: &Path) -> Result<(), FetchError> {
     let relative = Path::new("data/onnx").join(ONNX_TAG).join("node");
-    let destination = workspace.join(&relative);
+    fetch(workspace, &ONNX_SDIST, &relative, &format!("the ONNX {ONNX_TAG} node tests"))
+}
+
+/// Fetches ImageNetV2's matched-frequency images, unless they are already in
+/// place.
+pub(crate) fn imagenet_v2(workspace: &Path) -> Result<(), FetchError> {
+    fetch(workspace, &IMAGENET_V2, Path::new("data/datasets/imagenetv2"), "ImageNetV2")
+}
+
+/// Downloads `pin`, checks it, and unpacks it into `workspace/relative`,
+/// unless that directory already exists.
+fn fetch(
+    workspace: &Path,
+    pin: &PinnedArchive,
+    relative: &Path,
+    what: &str,
+) -> Result<(), FetchError> {
+    let destination = workspace.join(relative);
     if destination.is_dir() {
-        eprintln!("{} already holds the ONNX {ONNX_TAG} node tests", relative.display());
+        eprintln!("{} already holds {what}", relative.display());
         return Ok(());
     }
-    eprintln!("downloading {}", ONNX_SDIST.url);
-    let archive = download::download(ONNX_SDIST.url)
-        .map_err(|source| FetchError::Download { url: ONNX_SDIST.url, source: Box::new(source) })?;
-    verify_checksum(&archive, &ONNX_SDIST)?;
-    unpack_atomically(&archive, ONNX_SDIST.node_tests_prefix, &destination)?;
-    eprintln!("unpacked the ONNX {ONNX_TAG} node tests into {}", relative.display());
+    eprintln!("downloading {}", pin.url);
+    let archive = download::download(pin.url, pin.size)
+        .map_err(|source| FetchError::Download { url: pin.url, source: Box::new(source) })?;
+    verify_checksum(&archive, pin)?;
+    unpack_atomically(&archive, pin, &destination)?;
+    eprintln!("unpacked {what} into {}", relative.display());
     Ok(())
 }
 
@@ -60,7 +79,7 @@ fn verify_checksum(archive: &[u8], pin: &PinnedArchive) -> Result<(), FetchError
 /// place, so an interrupted fetch never leaves a partial `destination`.
 fn unpack_atomically(
     archive: &[u8],
-    prefix: &'static str,
+    pin: &PinnedArchive,
     destination: &Path,
 ) -> Result<(), FetchError> {
     let staging = destination.with_extension("partial");
@@ -68,7 +87,7 @@ fn unpack_atomically(
         std::fs::remove_dir_all(&staging)
             .map_err(|source| FetchError::Write { path: staging.clone(), source })?;
     }
-    extract::extract_prefix(archive, prefix, &staging)?;
+    extract::extract_prefix(archive, pin.packing, pin.prefix, &staging)?;
     std::fs::rename(&staging, destination)
         .map_err(|source| FetchError::Write { path: destination.to_owned(), source })
 }
@@ -81,7 +100,9 @@ mod tests {
         url: "https://example.invalid/archive.tar.gz",
         // SHA-256 of "abc", from FIPS 180-2.
         sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-        node_tests_prefix: "node",
+        size: crate::pin::ArchiveSize(3),
+        packing: crate::pin::Packing::TarGz,
+        prefix: "pkg/node",
     };
 
     #[test]
@@ -105,7 +126,7 @@ mod tests {
         let destination = workspace.path().join("node");
         let archive = test_archive::tarball(&[("pkg/node/test_abs/model.onnx", "model")]);
 
-        unpack_atomically(&archive, "pkg/node", &destination).unwrap();
+        unpack_atomically(&archive, &PIN, &destination).unwrap();
 
         let model = std::fs::read_to_string(destination.join("test_abs/model.onnx")).unwrap();
         assert_eq!(model, "model");
@@ -121,7 +142,7 @@ mod tests {
         std::fs::write(staging.join("leftover"), "stale").unwrap();
         let archive = test_archive::tarball(&[("pkg/node/test_abs/model.onnx", "model")]);
 
-        unpack_atomically(&archive, "pkg/node", &destination).unwrap();
+        unpack_atomically(&archive, &PIN, &destination).unwrap();
 
         assert!(destination.join("test_abs/model.onnx").exists());
         assert!(!destination.join("leftover").exists());
@@ -133,17 +154,17 @@ mod tests {
         let destination = workspace.path().join("node");
         let archive = test_archive::tarball(&[("pkg/other/file", "x")]);
 
-        let error = unpack_atomically(&archive, "pkg/node", &destination).unwrap_err();
+        let error = unpack_atomically(&archive, &PIN, &destination).unwrap_err();
 
         assert!(matches!(error, FetchError::NothingUnderPrefix { .. }), "{error}");
         assert!(!destination.exists());
     }
 
     #[test]
-    fn pinned_sdist_digest_is_lowercase_sha256_hex() {
-        let digest = ONNX_SDIST.sha256;
-
-        assert_eq!(digest.len(), 64);
-        assert!(digest.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+    fn pinned_digests_are_lowercase_sha256_hex() {
+        for digest in [ONNX_SDIST.sha256, IMAGENET_V2.sha256] {
+            assert_eq!(digest.len(), 64);
+            assert!(digest.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+        }
     }
 }
