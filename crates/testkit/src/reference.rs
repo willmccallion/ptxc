@@ -174,8 +174,25 @@ pub fn inputs(directory: &Path) -> Result<Vec<HostTensor>, ReferenceError> {
 /// ONNX Runtime's cached outputs for `model` on the input set in `inputs`,
 /// from the workspace's `data/reference/`.
 pub fn ort_reference(model: &Path, inputs: &Path) -> Result<Vec<HostTensor>, ReferenceError> {
-    let root = workspace_root()?.join("data").join("reference");
-    ort_reference_under(&root, model, inputs)
+    ort_reference_under(&reference_root()?, model, inputs)
+}
+
+/// The workspace's cache of reference outputs, `data/reference/`.
+pub fn reference_root() -> Result<PathBuf, ReferenceError> {
+    Ok(workspace_root()?.join("data").join("reference"))
+}
+
+/// Where the outputs for `model` on the input set in `inputs` are cached
+/// under `root`, one directory per tool: `root/<model sha256>/<input set
+/// id>/`.
+pub fn cache_directory(
+    root: &Path,
+    model: &Path,
+    inputs: &Path,
+) -> Result<PathBuf, ReferenceError> {
+    let bytes = std::fs::read(model)
+        .map_err(|source| ReferenceError::Io { path: model.to_path_buf(), source })?;
+    Ok(root.join(hex(&Sha256::digest(&bytes))).join(input_set_id(inputs)?))
 }
 
 /// ONNX Runtime's cached outputs for `model` on the input set in `inputs`,
@@ -186,9 +203,7 @@ pub fn ort_reference_under(
     model: &Path,
     inputs: &Path,
 ) -> Result<Vec<HostTensor>, ReferenceError> {
-    let bytes = std::fs::read(model)
-        .map_err(|source| ReferenceError::Io { path: model.to_path_buf(), source })?;
-    let directory = root.join(hex(&Sha256::digest(&bytes))).join(input_set_id(inputs)?);
+    let directory = cache_directory(root, model, inputs)?;
     let missing = || {
         let arguments =
             format!("reference --model {} --inputs {}", model.display(), inputs.display());
