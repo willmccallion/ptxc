@@ -346,13 +346,17 @@ settled to a constant when `r`'s bounds stay within one multiple of `c`, and
 `c*floordiv(x, c) + floormod(x, c) = x`, so split and fuse leave plain
 indices.
 
-**Loop-IR interpreter.** `interp/` runs a `LoweredKernel` on the CPU. Each
-thread block executes its threads in lockstep, phase by phase between
-barriers, and `race.rs` flags shared-memory addresses written and read by
-different threads within one phase. `Mma` and `LdMatrix` are interpreted from
-the PTX ISA's fragment layouts. A schedule is therefore checked against
-`ptxc-interp` with no GPU. Most scheduling bugs (wrong tiling, a missing
-barrier, a bad swizzle, a wrong fragment layout) are caught by `cargo test`.
+**Loop-IR interpreter.** `interp/` runs a `LoweredKernel` on the CPU (D41).
+Each thread block executes its threads in lockstep, statement by statement,
+with the threads an `If` admits active, and every value is rounded or wrapped
+to its element type at each operation, as a GPU computes it. Memory starts
+unset: reading an element no one stored, or leaving an output element
+unwritten, is an error. `race.rs` flags two threads touching one shared
+element between barriers (one of them writing) and two threads writing one
+global element. In M3, `Mma` and `LdMatrix` are interpreted from the PTX
+ISA's fragment layouts. A schedule is therefore checked with no GPU: most
+scheduling bugs (wrong tiling, a missing barrier, a bad swizzle, a wrong
+fragment layout) are caught by `cargo test`.
 
 ### Lowering (`ptxc-lower`)
 

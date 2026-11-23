@@ -594,3 +594,22 @@ the old one.
   GEMM schedules apply to each stage, and lowering handles one reduction
   shape well instead of many shapes slowly. It is TVM's model, which the
   M3 and M5 rules follow.
+
+## D41. The loop interpreter computes as a GPU does
+
+- **Context:** `ptxc-interp` is the reference: it widens floats and
+  accumulates in f64 (D19). The loop interpreter checks schedules and,
+  from M2 on, that it agrees with the GPU on every conformance kernel.
+- **Options:** reuse the reference's numerics; or round every operation to
+  its element type, as the GPU does.
+- **Choice:** round every operation: floats to their type (f32 results are
+  exact through f64, whose precision suffices), integers wrapped to their
+  width, casts from floats to integers truncated and saturated as PTX's
+  `cvt.rzi.sat` does. Threads run in lockstep with masks; memory starts
+  unset; races are errors.
+- **Reason:** a schedule's reassociation (cross-thread trees, split
+  reductions) changes f32 results exactly as it will on the device, so the
+  interpreter predicts the GPU's output rather than the reference's, and
+  the GPU agreement check in M2's exit criteria can be exact for integer and
+  arg-reduction kernels. Agreement with the reference stays a tolerance
+  check, as it is for the GPU.
