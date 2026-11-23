@@ -93,3 +93,33 @@ fn a_stream_copies_between_slices_in_order() {
     assert_eq!(back, [1, 2, 3, 4, 1, 2, 3, 4]);
     assert!(matches!(mismatch, CudaError::SliceSizes { .. }), "{mismatch}");
 }
+
+#[test]
+fn live_buffers_have_distinct_aligned_device_addresses() {
+    let context = context();
+    let (first, second) =
+        (context.alloc(ByteSize::new(4)).unwrap(), context.alloc(ByteSize::new(4)).unwrap());
+
+    let (a, b) = (first.device_address().get(), second.device_address().get());
+
+    assert_ne!(a, b);
+    assert!(a != 0 && a % 256 == 0 && b % 256 == 0, "{a:#x} {b:#x}");
+}
+
+#[test]
+fn streams_have_distinct_driver_handles() {
+    let context = context();
+    let (first, second) = (context.stream().unwrap(), context.stream().unwrap());
+
+    assert!(!first.handle().is_null());
+    assert_ne!(first.handle(), second.handle());
+}
+
+#[test]
+fn a_loaded_library_finds_its_symbols_and_names_a_missing_one() {
+    let library = ptxc_cuda::Library::open(c"libcuda.so.1").unwrap();
+
+    assert!(library.symbol(c"cuInit").is_ok());
+    let missing = library.symbol(c"cuNoSuchFunction").unwrap_err();
+    assert!(missing.starts_with("cuNoSuchFunction"), "{missing}");
+}

@@ -6,6 +6,17 @@ use crate::error::CudaError;
 use crate::sys::CuDevicePtr;
 use ptxc_core::{ByteOffset, ByteSize};
 
+/// A device address, for passing to another CUDA library.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DeviceAddress(u64);
+
+impl DeviceAddress {
+    /// The address.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 /// A device allocation, freed on drop.
 #[derive(Debug)]
 pub struct DeviceBuffer {
@@ -40,6 +51,12 @@ impl DeviceBuffer {
     /// The buffer's size.
     pub const fn size(&self) -> ByteSize {
         self.size
+    }
+
+    /// The buffer's first byte's device address, valid while the buffer
+    /// lives.
+    pub const fn device_address(&self) -> DeviceAddress {
+        DeviceAddress(self.address)
     }
 
     /// The whole buffer as a slice.

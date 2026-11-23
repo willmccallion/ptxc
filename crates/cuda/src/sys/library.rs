@@ -14,19 +14,21 @@ unsafe extern "C" {
 }
 
 /// An opened shared library, kept loaded for the rest of the process.
+/// Besides libcuda, `ptxc-bench` opens its baseline library with it (D24,
+/// D55).
 #[derive(Debug)]
-pub(crate) struct Library(NonNull<c_void>);
+pub struct Library(NonNull<c_void>);
 
 impl Library {
     /// Opens `name`, or returns `dlerror`'s message.
-    pub(crate) fn open(name: &CStr) -> Result<Self, String> {
+    pub fn open(name: &CStr) -> Result<Self, String> {
         // SAFETY: `name` is NUL-terminated; dlopen has no other precondition.
         let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW) };
         NonNull::new(handle).map(Self).ok_or_else(last_error)
     }
 
     /// The address of `symbol`, or `dlerror`'s message.
-    pub(crate) fn symbol(&self, symbol: &CStr) -> Result<NonNull<c_void>, String> {
+    pub fn symbol(&self, symbol: &CStr) -> Result<NonNull<c_void>, String> {
         // SAFETY: the handle came from dlopen and is never closed, and
         // `symbol` is NUL-terminated.
         let address = unsafe { dlsym(self.0.as_ptr(), symbol.as_ptr()) };

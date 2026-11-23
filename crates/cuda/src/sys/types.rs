@@ -45,7 +45,7 @@ macro_rules! handles {
         $(#[$doc])*
         #[repr(transparent)]
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        pub(crate) struct $name(*mut c_void);
+        pub(crate) struct $name(pub(crate) *mut c_void);
 
         impl $name {
             /// The null handle, for out-parameters the driver fills in.

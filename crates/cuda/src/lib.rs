@@ -30,6 +30,7 @@ pub use driver::Driver;
 pub use error::CudaError;
 pub use event::Event;
 pub use launch::{BlockDim, GridDim, KernelArg, Launch, Unset};
-pub use memory::{DeviceBuffer, DeviceSlice};
+pub use memory::{DeviceAddress, DeviceBuffer, DeviceSlice};
 pub use module::{Function, Module};
 pub use stream::Stream;
+pub use sys::Library;

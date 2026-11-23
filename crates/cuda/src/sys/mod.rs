@@ -5,5 +5,5 @@ mod library;
 mod types;
 
 pub(crate) use functions::Api;
-pub(crate) use library::Library;
+pub use library::Library;
 pub(crate) use types::*;
