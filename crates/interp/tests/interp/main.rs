@@ -4,5 +4,17 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+mod activation;
+mod attention;
 mod builders;
+mod conv;
+mod elementwise;
+mod gather;
 mod interpreter;
+mod matmul;
+mod norm;
+mod pool;
+mod quant;
+mod reduce;
+mod resize;
+mod shape;
