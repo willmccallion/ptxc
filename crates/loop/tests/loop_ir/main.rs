@@ -6,6 +6,7 @@ mod compute_build;
 mod compute_errors;
 mod compute_types;
 mod expressions;
+mod interp;
 mod lower;
 mod schedule_properties;
 mod schedule_rules;
