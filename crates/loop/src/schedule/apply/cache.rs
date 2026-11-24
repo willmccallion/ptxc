@@ -3,7 +3,7 @@
 use crate::compute::{ComputeDef, IndexVar, TensorExpr, TensorParamId};
 use crate::expr::ExprId;
 use crate::schedule::error::ScheduleError;
-use crate::schedule::loop_tree::{CacheRead, LoopAnnotation, LoopId, LoopTree};
+use crate::schedule::loop_tree::{CacheRead, LoopId, LoopTree};
 
 /// Where a load sits in its output's expression.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -38,7 +38,7 @@ impl LoopTree {
         // shared index, so the tile is the box that index covers.
         let input = compute.inputs().get(tensor).ok_or(ScheduleError::UnknownTensor(tensor))?;
         let found = self.current_loop(at)?;
-        if found.annotation != LoopAnnotation::Serial {
+        if !found.annotation.runs_serially() {
             let (tensor, at) = (input.name.clone(), found.name.clone());
             return Err(ScheduleError::CacheNotSerial { tensor, at });
         }

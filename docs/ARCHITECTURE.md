@@ -289,13 +289,14 @@ impl Schedule<Open> {
 }
 impl Schedule<Validated> { pub fn lower(&self) -> Result<LoweredKernel, LowerError> }
 
-pub enum Primitive {                                    // compute-at, pipeline and layout
+pub enum Primitive {                                    // compute-at and layout
     Split { loop_: LoopId, factors: Vec<SplitFactor> },  // come with M3
     Reorder { order: Vec<LoopId> }, Fuse { loops: Vec<LoopId> },
     Bind { loop_: LoopId, axis: ThreadAxis },          // blockIdx/threadIdx.{x,y,z}; never an empty loop
     Unroll { loop_: LoopId }, Vectorize { loop_: LoopId },
     CacheRead { tensor: TensorParamId, at: LoopId },   // the input's tile in shared memory, filled at `at`
     Tensorize { m: LoopId, n: LoopId, k: LoopId, instruction: MmaInstruction }, // one mma per warp
+    Pipeline { loop_: LoopId, stages: StageCount },     // the tiles staged at `loop_` filled `stages - 1` ahead
 }
 ```
 
@@ -364,6 +365,16 @@ one row of both, aligned, with one `AsyncCopy`: its bounds are its first
 element's, and it copies zeros where they fail. The fill commits its
 copies and waits for them before the second barrier (D63). A tile no such
 run fits copies one element at a time.
+
+A pipelined loop's tiles are filled ahead, as CUTLASS's multistage
+mainloop does (D64). Each tile's buffer holds `S` iterations' copies, one
+per stage, and a load reads the copy `i mod S`. A barrier and the first
+`S - 1` iterations' copies, a commit each, come before the loop. Each
+iteration waits until at most `S - 2` groups are in flight, so its own
+copies have landed, passes a barrier, starts the copies of iteration
+`i + S - 1` into the slot iteration `i - 1` read, commits them, and
+computes. Validation requires an input staged at the loop and counts each
+tile `S` times against shared memory.
 
 `Tensorize` makes the innermost three loops of a product one `mma` tile per
 warp, the block's `threadIdx.x` its 32 lanes (D58). Validation checks the

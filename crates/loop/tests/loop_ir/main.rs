@@ -11,6 +11,7 @@ mod expressions;
 mod fused;
 mod interp;
 mod lower;
+mod pipeline;
 mod schedule_properties;
 mod schedule_rules;
 mod schedule_support;

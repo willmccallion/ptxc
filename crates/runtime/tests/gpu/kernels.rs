@@ -2,7 +2,7 @@
 //! math program on awkward values, casts, integer edge cases, reductions
 //! through shared memory, and unrolled loops.
 
-use crate::device::{check_against_interpreter, match_interpreter};
+use crate::device::{check_against_interpreter, match_interpreter, pipelined};
 use ptxc_core::float::{F16, Overflow};
 use ptxc_core::{DType, Dim, HostTensor, Shape, TensorData};
 use ptxc_loop::{
@@ -284,6 +284,37 @@ fn an_unrolled_tile_of_accumulators_matches_bit_for_bit() {
     ];
 
     let _outputs = match_interpreter(&kernel, &inputs, "").unwrap();
+}
+
+/// An f32 product on the SIMT rule's staged tiles, pipelined over 2 to 4
+/// stages, with extents that overhang every tile, matches bit for bit.
+#[test]
+fn a_pipelined_simt_product_matches_bit_for_bit() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("product"));
+    let lhs = compute.input(TensorName::new("a"), DType::F32, shape(&[70, 100]));
+    let rhs = compute.input(TensorName::new("b"), DType::F32, shape(&[100, 45]));
+    let (_, row) = compute.spatial(VarName::new("i"), Dim::new(70));
+    let (_, column) = compute.spatial(VarName::new("j"), Dim::new(45));
+    let (axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(100));
+    let product = binary(
+        BinaryOp::Mul,
+        &TensorExpr::Load { tensor: lhs, index: vec![row, k] },
+        &TensorExpr::Load { tensor: rhs, index: vec![k, column] },
+    );
+    let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![axis], body: Box::new(product) };
+    compute.output(TensorName::new("out"), sum);
+    let compute = Arc::new(compute.finish().unwrap());
+    let values = |count: u16, seed: f32| -> Vec<f32> {
+        (0..count).map(|n| f32::from(n).mul_add(0.731, seed).sin()).collect()
+    };
+    let inputs = [
+        HostTensor::new(shape(&[70, 100]), values(7000, 1.0).into()).unwrap(),
+        HostTensor::new(shape(&[100, 45]), values(4500, 2.0).into()).unwrap(),
+    ];
+
+    for stages in 2..=4 {
+        let _outputs = match_interpreter(&pipelined(&compute, stages), &inputs, "").unwrap();
+    }
 }
 
 /// `floordiv(i - 9, d)` and `floormod(i - 9, d)` for powers of two `d` and

@@ -5,7 +5,8 @@ use crate::interp::{floats, target};
 use proptest::prelude::*;
 use ptxc_core::{DType, Dim};
 use ptxc_loop::{
-    ComputeDef, Open, Schedule, TileOrder, print_kernel, print_schedule, run, unrolled,
+    ComputeDef, Open, Primitive, Schedule, StageCount, TileOrder, print_kernel, print_schedule,
+    run, unrolled,
 };
 use ptxc_target::{MmaInstruction, MmaShape};
 use ptxc_testkit::golden;
@@ -94,6 +95,23 @@ fn a_staged_tile_whose_origin_is_odd_copies_element_by_element() {
 fn copied_run(kernel: &str, tensor: &str) -> Option<u64> {
     let copy = kernel.lines().find(|line| line.contains(&format!("<- async %{tensor}[")))?;
     copy.split(" run ").nth(1)?.split_whitespace().next()?.parse().ok()
+}
+
+#[test]
+fn a_product_pipelined_over_two_to_four_stages_matches_the_serial_product() {
+    for extents in [[32, 16, 64], [32, 16, 40]] {
+        let compute = product(extents, TileOrder::RowMajor);
+        for count in 2..=4 {
+            let mut schedule = tensorized(&compute, ONE_TILE);
+            let at = schedule.loops().caches()[0].at;
+            let stages = StageCount::new(count).unwrap();
+            schedule.apply(Primitive::Pipeline { loop_: at, stages }).unwrap();
+
+            let [pipelined, serial] = tensorized_and_serial(&compute, schedule);
+
+            assert_eq!(pipelined, serial, "{extents:?} over {count} stages");
+        }
+    }
 }
 
 #[test]

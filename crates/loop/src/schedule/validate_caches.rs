@@ -1,11 +1,12 @@
 //! Checks the inputs staged in shared memory against the final nest and
-//! the target: where each stage sits, and that the tiles fit.
+//! the target: where each stage sits, that each pipelined loop has tiles to
+//! fill ahead, and that the tiles fit.
 
 use super::apply::cache::{LoadSite, loads_of};
 use super::error::ScheduleError;
 use super::loop_tree::{CacheRead, LoopAnnotation, LoopKind, LoopTree};
 use crate::compute::ComputeDef;
-use crate::lower::tile_extents;
+use crate::lower::{slots_at, tile_extents};
 use ptxc_core::{ByteSize, Dim};
 use ptxc_target::Target;
 
@@ -19,6 +20,7 @@ pub(super) fn check_caches(
     for cache in tree.caches() {
         check_placement(compute, tree, cache)?;
     }
+    check_pipelines(tree)?;
     let tiles = tile_extents(compute, tree)?;
     check_shared_memory(compute, tree, &tiles, target)?;
     Ok(tiles)
@@ -34,7 +36,7 @@ fn check_placement(
 ) -> Result<(), ScheduleError> {
     let name = || compute.inputs()[cache.tensor].name.clone();
     let at = &tree.loops[cache.at];
-    if !tree.nest.contains(&cache.at) || at.annotation != LoopAnnotation::Serial {
+    if !tree.nest.contains(&cache.at) || !at.annotation.runs_serially() {
         return Err(ScheduleError::CacheNotSerial { tensor: name(), at: at.name.clone() });
     }
     let shares_reduction = tree.nest.iter().any(|&id| {
@@ -54,7 +56,20 @@ fn check_placement(
     Ok(())
 }
 
-/// The tiles together fit the shared memory a block has.
+/// Every pipelined loop has an input staged at it.
+fn check_pipelines(tree: &LoopTree) -> Result<(), ScheduleError> {
+    for &id in &tree.nest {
+        let found = &tree.loops[id];
+        let pipelined = matches!(found.annotation, LoopAnnotation::Pipelined(_));
+        if pipelined && !tree.caches().iter().any(|cache| cache.at == id) {
+            return Err(ScheduleError::PipelineUnstaged(found.name.clone()));
+        }
+    }
+    Ok(())
+}
+
+/// The tiles together, each as many times as its loop's pipeline has
+/// stages, fit the shared memory a block has.
 fn check_shared_memory(
     compute: &ComputeDef,
     tree: &LoopTree,
@@ -64,7 +79,9 @@ fn check_shared_memory(
     let mut bytes: u64 = 0;
     for (cache, extents) in tree.caches().iter().zip(tiles) {
         let element = compute.inputs()[cache.tensor].dtype.element_size().get();
-        let tile = extents.iter().try_fold(element, |size, dim| size.checked_mul(dim.get()));
+        let slots = slots_at(tree, cache.at).get();
+        let tile =
+            extents.iter().try_fold(element * slots, |size, dim| size.checked_mul(dim.get()));
         bytes =
             tile.and_then(|tile| bytes.checked_add(tile)).ok_or(ScheduleError::ExtentOverflow)?;
     }

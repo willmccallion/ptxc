@@ -20,6 +20,23 @@ impl SplitFactor {
     }
 }
 
+/// A software pipeline's stages: how many iterations' tiles shared memory
+/// holds at once; at least 2.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct StageCount(u32);
+
+impl StageCount {
+    /// `stages`, if it is at least 2.
+    pub const fn new(stages: u32) -> Option<Self> {
+        if stages >= 2 { Some(Self(stages)) } else { None }
+    }
+
+    /// The stages.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// A CUDA grid or block axis a loop can be bound to.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ThreadAxis {
@@ -57,8 +74,7 @@ impl ThreadAxis {
 }
 
 /// One step that transforms a loop tree, as TVM's schedule primitives.
-/// The compute-at, tensorize, pipeline and layout steps come with M3's
-/// tensor-core schedules.
+/// The compute-at and layout steps come with M3's tensor-core schedules.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Primitive {
     /// Splits a loop into an outer loop and one inner loop per factor,
@@ -117,5 +133,15 @@ pub enum Primitive {
         tensor: TensorParamId,
         /// The loop whose every iteration fills the tile.
         at: LoopId,
+    },
+    /// Fills the tiles staged at a serial loop `stages - 1` iterations
+    /// ahead, as CUTLASS's multistage mainloop does: shared memory holds
+    /// `stages` iterations' tiles, and an iteration computes on its own
+    /// while the next ones' copies are in flight.
+    Pipeline {
+        /// The loop the tiles are staged at.
+        loop_: LoopId,
+        /// The iterations' tiles held at once.
+        stages: StageCount,
     },
 }

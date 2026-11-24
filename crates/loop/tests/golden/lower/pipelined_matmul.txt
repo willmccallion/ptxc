@@ -1,0 +1,45 @@
+kernel matmul(%a: i32[128] read, %b: i32[128] read, %out: i32[64] write)
+  grid(2, 2, 1) block(4, 4, 1) smem 384
+  %i.0 = blockIdx.y
+  %i.1 = threadIdx.y
+  %j.0 = blockIdx.x
+  %j.1 = threadIdx.x
+  alloc %acc: i32[1] local {
+    %acc[0] = 0:i32
+    alloc %a_tile: i32[48] shared {
+      alloc %b_tile: i32[48] shared {
+        barrier
+        if %i.1 * 4 + %j.1 < 4 {
+          %a_tile[(%i.1 * 4 + %j.1) * 4] <- async %a[%i.0 * 64 + %j.1 * 16] run 4
+        }
+        if %i.1 * 4 + %j.1 < 4 {
+          %b_tile[(%i.1 * 4 + %j.1) * 4] <- async %b[%j.1 * 8 + %j.0 * 4] run 4
+        }
+        async commit
+        if %i.1 * 4 + %j.1 < 4 {
+          %a_tile[16 + (%i.1 * 4 + %j.1) * 4] <- async %a[%i.0 * 64 + %j.1 * 16 + 4] run 4
+        }
+        if %i.1 * 4 + %j.1 < 4 {
+          %b_tile[16 + (%i.1 * 4 + %j.1) * 4] <- async %b[%j.1 * 8 + %j.0 * 4 + 32] run 4
+        }
+        async commit
+        for %k.0 in 4 {
+          async wait 1
+          barrier
+          if %k.0 + 2 < 4 {
+            if %i.1 * 4 + %j.1 < 4 {
+              %a_tile[floormod(%k.0 + 2, 3) * 16 + (%i.1 * 4 + %j.1) * 4] <- async %a[%i.0 * 64 + %j.1 * 16 + %k.0 * 4 + 8] run 4 if %k.0 * 4 + 8 < 16
+            }
+            if %i.1 * 4 + %j.1 < 4 {
+              %b_tile[floormod(%k.0 + 2, 3) * 16 + (%i.1 * 4 + %j.1) * 4] <- async %b[%j.1 * 8 + %j.0 * 4 + %k.0 * 32 + 64] run 4 if %j.1 + %k.0 * 4 + 8 < 16
+            }
+          }
+          async commit
+          for %k.1 in 4 {
+            %acc[0] = add(%acc[0], mul(%a_tile[floormod(%k.0, 3) * 16 + %i.1 * 4 + %k.1], %b_tile[floormod(%k.0, 3) * 16 + %j.1 + %k.1 * 4]))
+          }
+        }
+      }
+    }
+    %out[%i.1 * 8 + %i.0 * 32 + %j.1 + %j.0 * 4] = %acc[0]
+  }

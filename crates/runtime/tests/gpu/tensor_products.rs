@@ -4,7 +4,7 @@
 //! On inputs whose sums are exact they match the loop interpreter bit for
 //! bit (D58).
 
-use crate::device::{match_interpreter_exactly, target};
+use crate::device::{match_interpreter_exactly, pipelined, target};
 use ptxc_loop::TileOrder;
 use ptxc_schedule::default_schedule;
 use ptxc_testkit::tensorized::{Operands, exact_inputs, product};
@@ -27,6 +27,23 @@ fn every_mma_type_matches_the_interpreter_exactly_at_the_sweeps_kinds_of_shape()
                 let case = format!("{instruction:?}, {extents:?}, b {b_order:?}");
 
                 assert!(kernel.multiplies_on_tensor_cores(), "{case}");
+                let _outputs =
+                    match_interpreter_exactly(&kernel, &exact_inputs(&compute), &case).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn every_mma_type_pipelined_over_two_to_four_stages_matches_the_interpreter_exactly() {
+    for &instruction in target().mma() {
+        for extents in [[100, 100, 100], [64, 50, 18]] {
+            let compute =
+                product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor));
+            for stages in 2..=4 {
+                let kernel = pipelined(&compute, stages);
+                let case = format!("{instruction:?}, {extents:?}, {stages} stages");
+
                 let _outputs =
                     match_interpreter_exactly(&kernel, &exact_inputs(&compute), &case).unwrap();
             }

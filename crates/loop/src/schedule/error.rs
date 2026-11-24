@@ -128,6 +128,10 @@ pub enum ScheduleError {
     /// lowering does not combine with one yet.
     #[error("input {0} cannot be staged in a reduction shared between threads")]
     CacheCrossThread(TensorName),
+    /// A pipelined loop at which no input is staged, so there is nothing to
+    /// fill ahead.
+    #[error("loop {0} is pipelined, but no input is staged at it")]
+    PipelineUnstaged(VarName),
     /// A tensorized loop whose extent is not the instruction's.
     #[error("loop {loop_} has {actual:?} iterations, but the mma's tile has {expected:?}")]
     TensorizeExtent {
