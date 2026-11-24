@@ -2,6 +2,7 @@
 
 mod arithmetic;
 mod async_copy;
+mod definitions;
 mod function;
 mod instr;
 mod matrix;
@@ -11,6 +12,7 @@ mod reg;
 
 pub(crate) use arithmetic::{Int, Signedness};
 pub(crate) use async_copy::CopySize;
+pub(crate) use definitions::Var;
 pub(crate) use function::{Array, Function, FunctionBuilder};
 pub(crate) use instr::{BinaryOp, Compare, CvtMode, Instr, Label, PtxType, Space, UnaryOp};
 pub(crate) use matrix::{MatrixOrder, MmaOp};

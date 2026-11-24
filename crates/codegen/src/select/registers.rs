@@ -8,7 +8,7 @@
 
 use super::memory::Place;
 use super::{CodegenError, Selector};
-use crate::ast::{B32, BinaryOp, Class, CvtMode, PtxType, Reg, RegClass, Signedness, Value};
+use crate::ast::{B32, BinaryOp, Class, CvtMode, PtxType, Reg, RegClass, Signedness, Value, Var};
 use ptxc_loop::{BufferId, Expr, ExprArena, ExprId, FragmentTile, LoweredKernel, MemScope, Stmt};
 use std::collections::HashSet;
 
@@ -118,7 +118,7 @@ impl Computed<'_> {
 
 /// The register and first byte of the element `offset` bytes into an array
 /// held in `words`.
-pub(super) fn register_place(words: &[Reg<B32>], offset: i64) -> Result<Place, CodegenError> {
+pub(super) fn register_place(words: &[Var<B32>], offset: i64) -> Result<Place, CodegenError> {
     let offset = u64::try_from(offset).map_err(|_| CodegenError::Unbound)?;
     let word = usize::try_from(offset / WORD_BYTES).map_err(|_| CodegenError::TooLarge)?;
     let word = *words.get(word).ok_or(CodegenError::Unbound)?;
@@ -158,11 +158,11 @@ impl Selector<'_> {
     /// The `ty` field of `word` from `byte`, extended as a load extends it.
     fn read_word<C: Class>(
         &mut self,
-        word: Reg<B32>,
+        word: Var<B32>,
         byte: WordByte,
         ty: PtxType,
     ) -> Result<Reg<C>, CodegenError> {
-        let bits = field_bits(ty)?;
+        let (bits, word) = (field_bits(ty)?, word.reg());
         if bits == WORD_BITS {
             return Ok(self.builder.reinterpret(PtxType::B32, word));
         }
@@ -184,7 +184,7 @@ impl Selector<'_> {
     /// word's other bytes.
     fn write_word<C: Class>(
         &mut self,
-        word: Reg<B32>,
+        word: Var<B32>,
         byte: WordByte,
         ty: PtxType,
         value: Reg<C>,
@@ -204,7 +204,7 @@ impl Selector<'_> {
         let field = self.builder.int(BinaryOp::And, bitwise, value.into(), field_mask(bits));
         let placed = self.shifted(BinaryOp::Shl, field, byte);
         let others = Value::immediate(kept_bits(bits, byte));
-        let kept = self.builder.int(BinaryOp::And, bitwise, word.into(), others);
+        let kept = self.builder.int(BinaryOp::And, bitwise, word.reg().into(), others);
         let merged = self.builder.int(BinaryOp::Or, bitwise, kept.into(), placed.into());
         self.builder.assign(word, PtxType::B32, merged.into());
         Ok(())
