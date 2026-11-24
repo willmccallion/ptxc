@@ -1223,3 +1223,34 @@ the old one.
   stages give double buffering as a case of it. The interpreter checks every wait and barrier, so a schedule
   with too few of either fails on the CPU. The tuner can search the stage
   count against shared memory.
+
+## D65. Default schedules pipeline every tile but the 128 by 128 one
+
+- **Context:** #153 added pipelining (D64), and the default matmul rules
+  had to choose stage counts. Swept on the RTX 4060 Ti against one stage
+  (D63):
+  - the SIMT tile and the 64 by 64 tensor-core tile gain at 2, 3 or 4
+    stages;
+  - the 128 by 128 tile loses 3 to 10% at 2 and at 3. Registers fall with
+    pipelining and occupancy does not change, and preferring the most
+    shared memory per SM changes nothing.
+  - Its loop has 255 instructions an iteration against 151. With one copy
+    of each tile, ptxas folds every `ldmatrix` address into a register
+    and an immediate outside the loop; with a slot that rotates, it
+    recomputes the 24 addresses every iteration.
+  - A pipelined loop's slot, `floormod(k, S)`, was also divided again in
+    every guarded load of a SIMT body, which made 3 stages up to 4 times
+    slower than 1.
+- **Choice:**
+  - Codegen computes each loop body's dividing index expressions that the
+    body's own loops and elements do not change once, at its start, as it
+    already did for the kernel's grid-only ones (#145).
+  - The SIMT tile and the 64 by 64 tile pipeline over four stages, or as
+    many as fit shared memory if fewer: a power of two makes the slot a
+    mask, and four was as fast as two or faster everywhere measured.
+  - The 128 by 128 tile is not pipelined until its addresses rotate
+    cheaply.
+- **Reason:** each choice is the faster one measured, and none gives up
+  the large tile's speed. Pipelining the large tile profitably needs
+  `ldmatrix` addresses that advance with the slot by an immediate or one
+  add, as CUTLASS's iterators do, which is codegen work of its own (#155).

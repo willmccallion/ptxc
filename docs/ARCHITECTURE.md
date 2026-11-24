@@ -460,7 +460,9 @@ and the GPU tests check them.
   integers), it tiles it on tensor cores instead: a block's four warps each
   hold 4 by 8 `mma` tiles of a 128 by 128 block tile, or 2 by 4 of a 64 by
   64 one where fewer than 32 large tiles cover the output, both operands
-  staged two `mma` steps deep and the innermost tile tensorized (D58).
+  staged two `mma` steps deep and the innermost tile tensorized (D58). The
+  SIMT tile and the 64 by 64 one pipeline their steps over four stages, or
+  as many as fit shared memory; the 128 by 128 one is not pipelined (D65).
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's
