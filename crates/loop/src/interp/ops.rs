@@ -115,6 +115,13 @@ fn compare(op: BinaryOp, lhs: Value, rhs: Value, dtype: DType) -> Option<bool> {
     }
 }
 
+/// `lhs * rhs + addend` on f32 values, rounded once. Computing in f64 and
+/// rounding to f32 would round twice where the sum is inexact in f64.
+pub(super) fn mul_add(lhs: Value, rhs: Value, addend: Value) -> Value {
+    let [lhs, rhs, addend] = [lhs, rhs, addend].map(|value| f64_to_f32(value.float()));
+    Value::Float(f64::from(lhs.mul_add(rhs, addend)))
+}
+
 fn float_binary(op: BinaryOp, a: f64, b: f64) -> f64 {
     match op {
         BinaryOp::Add => a + b,

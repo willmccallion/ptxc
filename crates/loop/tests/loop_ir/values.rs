@@ -40,3 +40,15 @@ fn constants_and_indices_read_no_buffer() {
     assert!(!constant.reads(BufferId::new(0)));
     assert!(then_side.reads(BufferId::new(2)));
 }
+
+#[test]
+fn a_multiply_add_reads_the_buffers_of_all_three_operands() {
+    let fused = ValueExpr::MulAdd {
+        lhs: Box::new(load(0)),
+        rhs: Box::new(load(1)),
+        addend: Box::new(load(2)),
+    };
+
+    assert!((0..3).all(|buffer| fused.reads(BufferId::new(buffer))));
+    assert!(!fused.reads(BufferId::new(3)));
+}

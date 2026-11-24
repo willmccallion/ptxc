@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+use super::value::Value;
 use super::*;
 use crate::compute::Scalar;
 use crate::expr::ExprId;
@@ -220,4 +221,18 @@ fn threads_of_different_blocks_writing_one_global_element_race() {
     let neighbours = Stmt::Store { buffer: BufferId::new(Y), index: shifted, value: float(0.0) };
     let error = run(&with_body(&base, neighbours), &[input()]);
     assert_eq!(error.err(), Some(RunError::Race { buffer: TensorName::new("y"), index: 1 }));
+}
+
+/// `a * b + c` is `1 + 2^-23 + 2^-24 - 2^-70`, just below halfway between
+/// two f32s. Rounded once it goes down; rounded first to f64 it would lose
+/// the `2^-70`, land on the halfway point and tie to the even neighbour
+/// above.
+#[test]
+fn a_multiply_add_rounds_once_where_rounding_through_f64_would_round_twice() {
+    let (epsilon, scale) = (f64::from(f32::EPSILON), 2.0_f64.powi(-12));
+    let factors = [scale * (1.0 + epsilon), scale * (1.0 - epsilon)].map(Value::Float);
+
+    let fused = super::ops::mul_add(factors[0], factors[1], Value::Float(1.0 + epsilon));
+
+    assert_eq!(fused, Value::Float(1.0 + epsilon));
 }

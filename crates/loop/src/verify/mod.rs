@@ -232,6 +232,16 @@ impl Scope<'_> {
                 Ok(types::binary(*op, self.value(lhs)?, self.value(rhs)?)?)
             }
             ValueExpr::Cast { to, value, .. } => self.value(value).map(|_| *to),
+            ValueExpr::MulAdd { lhs, rhs, addend } => {
+                for operand in [lhs, rhs, addend] {
+                    let actual = self.value(operand)?;
+                    if actual != DType::F32 {
+                        let place = "a multiply-add".to_owned();
+                        return Err(VerifyError::WrongType { place, expected: DType::F32, actual });
+                    }
+                }
+                Ok(DType::F32)
+            }
             ValueExpr::Select { condition, then, otherwise } => {
                 let condition = self.value(condition)?;
                 if condition != DType::Bool {

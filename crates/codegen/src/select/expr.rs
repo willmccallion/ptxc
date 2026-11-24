@@ -165,6 +165,13 @@ impl Selector<'_> {
                 let (then, otherwise) = (self.value(then)?, self.value(otherwise)?);
                 self.select(condition, then, otherwise)
             }
+            ValueExpr::MulAdd { lhs, rhs, addend } => {
+                let operands = (self.value(lhs)?, self.value(rhs)?, self.value(addend)?);
+                let (Held::Float(lhs), Held::Float(rhs), Held::Float(addend)) = operands else {
+                    return Err(CodegenError::Unsupported { op: "a multiply-add off f32" });
+                };
+                Ok(Held::Float(self.builder.fma(lhs.into(), rhs.into(), addend.into())))
+            }
         }
     }
 
