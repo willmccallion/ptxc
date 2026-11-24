@@ -7,7 +7,7 @@
 use super::bind;
 use super::matmul_loops::{batch_loops, bind_blocks, parts, pipeline_step, stage_operands};
 use super::matmul_shape::Product;
-use crate::tiling::{TensorCoreTile, TileLayout, TileShape};
+use crate::tiling::{TensorCoreTile, TileShape};
 use ptxc_core::Dim;
 use ptxc_loop::{
     ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, StageCount, Swizzle,
@@ -17,17 +17,15 @@ use ptxc_target::{MmaInstruction, MmaShape, Target};
 
 /// Hand-picked until the search tunes them: four warps, each holding 4 by
 /// 8 `mma` tiles, over a block tile of 128 by 128 at f16's m16n8, staged
-/// two `mma` steps deep, so an f16 step stages 16 KiB. It is neither
-/// pipelined nor swizzled: computing its `ldmatrix` addresses for a
-/// rotating slot costs it more than pipelining gains until those addresses
-/// are cheap (#155), and unpipelined, a swizzle loses on grids of one wave,
-/// whose blocks wait on their loads in step (D67)...
+/// two `mma` steps deep, so an f16 step stages 16 KiB, its steps
+/// pipelined over two stages and its tiles swizzled. Either alone is
+/// slower; together they are faster on all but the smallest grids, and
+/// three stages are no faster (D68)...
 const LARGE: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 4, columns: 8 },
     steps: 2,
-    stages: None,
-    layout: TileLayout::Plain,
+    stages: StageCount::new(2),
 };
 
 /// ...and, for an output too small for enough large tiles, four warps
@@ -39,7 +37,6 @@ const SMALL: TensorCoreTile = TensorCoreTile {
     per_warp: TileShape { rows: 2, columns: 4 },
     steps: 2,
     stages: StageCount::new(4),
-    layout: TileLayout::Swizzled,
 };
 
 /// The blocks a grid of large tiles needs to keep a GPU busy: about one per
@@ -95,9 +92,7 @@ pub(crate) fn tiled_on_tensor_cores(
     bind(schedule, row_warp, ThreadAxis::ThreadY)?;
     bind(schedule, column_warp, ThreadAxis::ThreadZ)?;
     stage_operands(schedule, product, step)?;
-    if tile.layout == TileLayout::Swizzled {
-        swizzle_tiles(schedule, product)?;
-    }
+    swizzle_tiles(schedule, product)?;
     pipeline_step(schedule, product, (step, tile.step(shape)), target)?;
     for loop_ in [step_depth, row_tile, column_tile] {
         schedule.apply(Primitive::Unroll { loop_ })?;

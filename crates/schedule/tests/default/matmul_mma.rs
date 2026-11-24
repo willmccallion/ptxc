@@ -52,13 +52,15 @@ fn a_product_with_a_grid_of_32_large_tiles_takes_them_and_a_smaller_one_does_not
 
     assert_eq!(launch_dims(large_launch), ([32, 1, 1], [32, 2, 2]));
     assert_eq!(launch_dims(square_launch), ([32, 1, 1], [32, 2, 2]));
-    // The large tile is not pipelined; the small one has four stages.
-    assert_eq!(kernels[0].smem().get(), 2 * 128 * 32 * 2);
-    // The large tile's are plain; the small one's swizzled, `a`'s rows of
-    // 32 halves and `b`'s of 64 each moving 16-byte units by their row's
-    // place among 8.
+    // The large tile has two stages of its 128 by 32 and 32 by 128 slices,
+    // the small one four of its 64 by 32 and 32 by 64 ones.
+    assert_eq!(kernels[0].smem().get(), 2 * 2 * 128 * 32 * 2);
+    // Both swizzle their tiles' 16-byte units by their row's place among
+    // 8: the large tile's `a` rows of 32 halves and `b` rows of 128, and
+    // the small tile's of 32 and 64.
     let [large_text, small_text] = kernels.each_ref().map(print_kernel);
-    assert!(!large_text.contains("swizzle"), "{large_text}");
+    assert!(large_text.contains("%a_tile: f16[8192] shared swizzle<3,4,3>"), "{large_text}");
+    assert!(large_text.contains("%b_tile: f16[8192] shared swizzle<3,4,4>"), "{large_text}");
     assert!(small_text.contains("%a_tile: f16[8192] shared swizzle<3,4,3>"), "{small_text}");
     assert!(small_text.contains("%b_tile: f16[8192] shared swizzle<3,4,3>"), "{small_text}");
     assert_eq!(launch_dims(small_launch), ([96, 1, 1], [32, 2, 2]));

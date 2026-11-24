@@ -1343,3 +1343,43 @@ the old one.
   a sum of values with disjoint bits is their exclusive-or. The analysis
   runs on what codegen emits, so it sees the lane arithmetic that the loop
   IR does not express.
+
+## D68. The 128 by 128 tile pipelines over two stages, swizzled
+
+- **Context:**
+  - Alone, neither change pays on this tile. Pipelined but plain, it is
+    3 to 12% slower from 1024³ to 4096³ (D65). Swizzled but unpipelined,
+    grids of one wave lose 5 to 10% (D67).
+  - Together they cover each other's loss. The pipeline keeps each
+    block's next loads in flight while it computes, so the two blocks an
+    SM holds no longer wait in step. The swizzle removes the bank
+    conflicts that otherwise bind the pipelined loop.
+- **Options:** two or three stages, plain or swizzled. Four stages need
+  64 KiB a block, which leaves one block an SM.
+- **Measured:** f16 NN on the RTX 4060 Ti locked at 2700 MHz, two
+  interleaved rounds that agree within 0.4%, as a share of cuBLAS:
+
+  | shape | unpipelined, plain | 2 stages, swizzled | 3 stages, swizzled |
+  |---|---|---|---|
+  | 1024³ | 74.7% | 76.3% | 75.8% |
+  | 2048³ | 79.2% | 82.7% | 82.9% |
+  | 3000³ | 82.4% | 85.3% | 85.5% |
+  | 4096³ | 80.2% | 87.5% | 87.2% |
+  | 8192³ | 71.8% | 75.9% | 72.3% |
+  | geomean | 77.5% | 81.4% | 80.5% |
+
+  - Of the other shapes using the tile, two stages make 4096×2304×768
+    12% faster, 4096×3072×768 11%, 1024×3072×768 5%, 4096×768×3072 4.5%
+    and 1000³ 2%.
+  - 1024×768×3072 is unchanged (+0.5%). 1024×768×768 is 2.8% slower: a
+    grid of one wave and 24 steps, whose fill the pipeline adds to.
+- **Choice:**
+  - The 128 by 128 tile pipelines over two stages and is swizzled.
+  - Every tensor-core tile is now swizzled where its rows have a swizzle,
+    so the schedule no longer carries a layout choice.
+- **Supersedes:** D65's leaving the 128 by 128 tile unpipelined, and D67's
+  leaving it plain.
+- **Reason:** it is the fastest measured, and the one loss is under 3%
+  on the smallest grid. The pipelined loop still does much more integer
+  work an iteration than the unpipelined one: 287 instructions against
+  152 at 4096³, and 322 against 286 at 3000³. That is #155's to remove.
