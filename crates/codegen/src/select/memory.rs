@@ -1,6 +1,7 @@
 //! Where each buffer lives, element addresses, and loads and stores.
 
 use super::lanes::WARP_LANES;
+use super::registers::{WORD_BYTES, WordByte, register_place};
 use super::values::{Held, Narrow, Stored, memory_type, stored};
 use super::{CodegenError, Selector};
 use crate::ast::{
@@ -16,6 +17,30 @@ pub(super) enum Storage {
     Global(Reg<B64>),
     /// A declared shared or local array.
     Array { space: Space, name: String },
+    /// A local or fragment array held in registers, 4 bytes a register.
+    Registers(Vec<Reg<B32>>),
+}
+
+/// Where an element is.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(super) enum Place {
+    /// Memory, in a space at an address.
+    Memory(Space, Address),
+    /// Bytes of a register holding 4 bytes of an array, from `byte`.
+    Register { word: Reg<B32>, byte: WordByte },
+}
+
+/// The place of the element `offset` bytes into `storage`.
+pub(super) fn place_in(storage: &Storage, offset: i64) -> Result<Place, CodegenError> {
+    Ok(match storage {
+        Storage::Global(base) => {
+            Place::Memory(Space::Global, Address::Reg { base: base.id(), offset })
+        }
+        Storage::Array { space, name } => {
+            Place::Memory(*space, Address::Array { name: name.clone(), offset })
+        }
+        Storage::Registers(words) => register_place(words, offset)?,
+    })
 }
 
 impl Selector<'_> {
@@ -40,19 +65,24 @@ impl Selector<'_> {
             MemScope::Local | MemScope::Global => (Space::Local, bytes),
             MemScope::Fragment(_) => (Space::Local, bytes / WARP_LANES),
         };
-        let stem = if space == Space::Shared { "shared" } else { "local" };
-        let name = self.builder.array(space, stem, bytes);
-        let _new = self.storage.insert(buffer, Storage::Array { space, name });
+        let storage = if self.registers.contains(&buffer) {
+            Storage::Registers(
+                (0..bytes.div_ceil(WORD_BYTES)).map(|_| self.builder.reg()).collect(),
+            )
+        } else {
+            let stem = if space == Space::Shared { "shared" } else { "local" };
+            Storage::Array { space, name: self.builder.array(space, stem, bytes) }
+        };
+        let _new = self.storage.insert(buffer, storage);
         Ok(())
     }
 
-    /// The address of element `index` of `buffer`, and its space, computed
-    /// once a block.
+    /// Where element `index` of `buffer` is, computed once a block.
     pub(super) fn element(
         &mut self,
         buffer: BufferId,
         index: ExprId,
-    ) -> Result<(Space, Address), CodegenError> {
+    ) -> Result<Place, CodegenError> {
         if let Some(at) = self.known.address(buffer, index) {
             return Ok(at);
         }
@@ -61,25 +91,32 @@ impl Selector<'_> {
         Ok(at)
     }
 
-    /// The address of element `index` of `buffer`, and its space. A
-    /// constant index becomes the address's immediate offset.
-    fn computed_element(
+    /// The address of element `index` of `buffer`, which is in memory.
+    pub(super) fn memory_element(
         &mut self,
         buffer: BufferId,
         index: ExprId,
     ) -> Result<(Space, Address), CodegenError> {
+        match self.element(buffer, index)? {
+            Place::Memory(space, addr) => Ok((space, addr)),
+            Place::Register { .. } => {
+                Err(CodegenError::Unsupported { op: "a vector access to registers" })
+            }
+        }
+    }
+
+    /// Where element `index` of `buffer` is. A constant index becomes the
+    /// address's immediate offset, or picks the register holding it.
+    fn computed_element(&mut self, buffer: BufferId, index: ExprId) -> Result<Place, CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
-        let storage = self.storage.get(&buffer).ok_or(CodegenError::Unbound)?.clone();
         if let Expr::Const(position) = self.kernel.exprs().get(index) {
             let offset = position.checked_mul(size).ok_or(CodegenError::TooLarge)?;
-            return Ok(match storage {
-                Storage::Global(base) => (Space::Global, Address::Reg { base: base.id(), offset }),
-                Storage::Array { space, name } => (space, Address::Array { name, offset }),
-            });
+            return place_in(self.storage.get(&buffer).ok_or(CodegenError::Unbound)?, offset);
         }
         let position = self.index(index)?;
-        self.address_at(buffer, position)
+        let (space, addr) = self.address_at(buffer, position)?;
+        Ok(Place::Memory(space, addr))
     }
 
     /// The address of the element of `buffer` at `position`, and its space.
@@ -100,6 +137,9 @@ impl Selector<'_> {
         let (space, base) = match storage {
             Storage::Global(base) => (Space::Global, base),
             Storage::Array { space, name } => (space, self.builder.address_of(&name)),
+            Storage::Registers(_) => {
+                return Err(CodegenError::Unsupported { op: "a computed index into registers" });
+            }
         };
         let at = self.builder.int(BinaryOp::Add, Signedness::Signed, base.into(), scaled.into());
         Ok((space, Address::Reg { base: at.id(), offset: 0 }))
@@ -109,21 +149,21 @@ impl Selector<'_> {
     pub(super) fn load(&mut self, buffer: BufferId, index: ExprId) -> Result<Held, CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let at = self.element(buffer, index)?;
-        Ok(self.load_at(dtype, at))
+        self.load_at(dtype, &at)
     }
 
     /// The element of `dtype` at `at`, as a held value.
-    pub(super) fn load_at(&mut self, dtype: DType, (space, addr): (Space, Address)) -> Held {
+    pub(super) fn load_at(&mut self, dtype: DType, at: &Place) -> Result<Held, CodegenError> {
         let ty = memory_type(dtype);
-        match (dtype, Narrow::of(dtype)) {
-            (DType::F32, _) => Held::Float(self.builder.load::<F32>(space, ty, addr)),
+        Ok(match (dtype, Narrow::of(dtype)) {
+            (DType::F32, _) => Held::Float(self.read::<F32>(at, ty)?),
             (_, Some(kind)) => {
-                let bits = self.builder.load::<B16>(space, ty, addr);
+                let bits = self.read::<B16>(at, ty)?;
                 Held::Float(self.widened(bits, kind))
             }
-            (DType::I64, _) => Held::Int64(self.builder.load::<B64>(space, ty, addr)),
+            (DType::I64, _) => Held::Int64(self.read::<B64>(at, ty)?),
             (DType::Bool, _) => {
-                let byte = self.builder.load::<B32>(space, ty, addr);
+                let byte = self.read::<B32>(at, ty)?;
                 let zero = Value::<B32>::int(0);
                 Held::Bool(self.builder.compare_int(
                     Compare::Ne,
@@ -132,8 +172,8 @@ impl Selector<'_> {
                     zero,
                 ))
             }
-            _ => Held::Int32(self.builder.load::<B32>(space, ty, addr)),
-        }
+            _ => Held::Int32(self.read::<B32>(at, ty)?),
+        })
     }
 
     /// Stores `value` as element `index` of `buffer`.
@@ -145,19 +185,23 @@ impl Selector<'_> {
     ) -> Result<(), CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let at = self.element(buffer, index)?;
-        self.store_at(dtype, at, value);
-        Ok(())
+        self.store_at(dtype, &at, value)
     }
 
     /// Stores `value` as the element of `dtype` at `at`.
-    pub(super) fn store_at(&mut self, dtype: DType, (space, addr): (Space, Address), value: Held) {
+    pub(super) fn store_at(
+        &mut self,
+        dtype: DType,
+        at: &Place,
+        value: Held,
+    ) -> Result<(), CodegenError> {
         let ty = memory_type(dtype);
         let form = self.narrow_form(value, dtype);
         match form.unwrap_or_else(|| stored(&mut self.builder, value, dtype)) {
-            Stored::F32(value) => self.builder.store(space, ty, addr, value.into()),
-            Stored::Half(value) => self.builder.store(space, ty, addr, value.into()),
-            Stored::Int32(value) => self.builder.store(space, ty, addr, value.into()),
-            Stored::Int64(value) => self.builder.store(space, ty, addr, value.into()),
+            Stored::F32(value) => self.write(at, ty, value),
+            Stored::Half(value) => self.write(at, ty, value),
+            Stored::Int32(value) => self.write(at, ty, value),
+            Stored::Int64(value) => self.write(at, ty, value),
         }
     }
 

@@ -3,13 +3,11 @@
 //! 8, where every access the run makes starts aligned to its size, as a
 //! staged tile's fill makes them.
 
+use super::registers::WORD_BYTES;
 use super::{CodegenError, Selector};
 use crate::ast::{B32, B64, PtxType, Reg, Value};
 use ptxc_core::Dim;
 use ptxc_loop::{BufferId, Constant, ExprId, Stmt, ValueExpr, VarId};
-
-/// The bytes of one word of a vector access.
-const WORD_BYTES: u64 = 4;
 
 impl Selector<'_> {
     /// Emits `body`, run for each `var` below `extent`, as one vector load
@@ -58,13 +56,13 @@ impl Selector<'_> {
         let first = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
         let _previous = self.vars.insert(var, first);
         let values: Vec<Reg<B32>> = if let Some((buffer, from)) = source {
-            let (space, addr) = self.element(buffer, from)?;
+            let (space, addr) = self.memory_element(buffer, from)?;
             self.builder.load_vector(space, addr, words)
         } else {
             let zero = self.builder.mov(PtxType::B32, Value::<B32>::int(0));
             (0..words).map(|_| zero).collect()
         };
-        let (space, addr) = self.element(target, index)?;
+        let (space, addr) = self.memory_element(target, index)?;
         self.builder.store_vector(space, addr, &values);
         self.known.forget_reads_of(target);
         Ok(())

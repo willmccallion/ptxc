@@ -227,6 +227,22 @@ fn a_row_sum_and_argmax_reduce_through_shared_memory() {
     check_against_interpreter(argmax, &[HostTensor::new(shape(&[3, 300]), halves.into()).unwrap()]);
 }
 
+/// A row maximum of `i8`s, each thread's partial maximum held in a byte of
+/// a register, which must read back sign-extended for negatives to compare
+/// below positives.
+#[test]
+fn a_row_max_of_signed_bytes_orders_negatives_below_positives() {
+    let values: Vec<i8> =
+        (0..900_i32).map(|n| i8::try_from((n * 37) % 256 - 128).unwrap()).collect();
+    let max = rows(DType::I8, |axis, body| TensorExpr::Reduce {
+        op: ReduceOp::Max,
+        axes: vec![axis],
+        body: Box::new(body),
+    });
+
+    check_against_interpreter(max, &[HostTensor::new(shape(&[3, 300]), values.into()).unwrap()]);
+}
+
 /// `out[i, j] = sum over k of a[i, k] * b[k, j]`, its rows and columns
 /// split by 2 and its reduction by 4, with a thread's 2 by 2 tile and each
 /// step's depth unrolled; the uneven extents leave guards in the copies.

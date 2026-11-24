@@ -14,6 +14,7 @@ mod math;
 mod memory;
 mod mma;
 mod ops;
+mod registers;
 mod values;
 mod vector;
 
@@ -23,7 +24,7 @@ use known::Known;
 use memory::Storage;
 use ptxc_loop::{BufferId, LoweredKernel, VarId, VarRanges};
 use ptxc_target::Target;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use values::{Held, Narrow};
 
@@ -83,6 +84,8 @@ struct Selector<'k> {
     lane: Option<Lane>,
     /// The values each variable bound so far takes.
     ranges: VarRanges,
+    /// The local and fragment arrays held in registers.
+    registers: HashSet<BufferId>,
 }
 
 impl<'k> Selector<'k> {
@@ -98,6 +101,7 @@ impl<'k> Selector<'k> {
             elements: HashMap::new(),
             lane: None,
             ranges: kernel.thread_ranges(),
+            registers: registers::register_arrays(kernel),
         }
     }
 }

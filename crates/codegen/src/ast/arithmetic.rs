@@ -58,6 +58,17 @@ impl FunctionBuilder {
         dst
     }
 
+    /// Sets `dst`, a register already holding a value, to `value`, of the
+    /// same width, its bits as the type `ty` names.
+    pub(crate) fn assign<From: Class, To: Class>(
+        &mut self,
+        dst: Reg<To>,
+        ty: PtxType,
+        value: Value<From>,
+    ) {
+        self.push(Instr::Mov { ty, dst: dst.id(), src: value.operand() });
+    }
+
     pub(crate) fn float(&mut self, op: BinaryOp, a: Value<F32>, b: Value<F32>) -> Reg<F32> {
         let dst = self.reg();
         self.push(Instr::Binary {

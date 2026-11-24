@@ -86,6 +86,22 @@ impl ValueExpr {
         }
     }
 
+    /// Every load in the expression: its buffer and index.
+    pub fn loads(&self) -> Vec<(BufferId, ExprId)> {
+        match self {
+            Self::Load { buffer, index } => vec![(*buffer, *index)],
+            Self::Const(_) | Self::Index { .. } | Self::Element(_) => Vec::new(),
+            Self::Unary(_, value) | Self::Cast { value, .. } => value.loads(),
+            Self::Binary(_, lhs, rhs) => {
+                [lhs, rhs].iter().flat_map(|operand| operand.loads()).collect()
+            }
+            Self::Select { condition: first, then: second, otherwise: third }
+            | Self::MulAdd { lhs: first, rhs: second, addend: third } => {
+                [first, second, third].iter().flat_map(|operand| operand.loads()).collect()
+            }
+        }
+    }
+
     /// Whether the expression loads from `buffer` anywhere in it.
     pub fn reads(&self, buffer: BufferId) -> bool {
         match self {

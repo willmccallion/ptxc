@@ -182,10 +182,25 @@ mod tests {
     use super::{
         BufferId, Condition, ForKind, FragmentTile, Stmt, TileAccess, TileOrder, ValueExpr,
     };
-    use crate::compute::Scalar;
+    use crate::compute::{BinaryOp, Scalar};
     use crate::expr::{ExprId, VarId};
     use ptxc_core::{DType, Dim, Idx};
     use ptxc_target::{MmaInstruction, MmaShape};
+
+    #[test]
+    fn a_value_lists_every_load_in_it_with_its_index() {
+        let (first, second) = (ExprId::new(1), ExprId::new(2));
+        let load =
+            |buffer, index| Box::new(ValueExpr::Load { buffer: BufferId::new(buffer), index });
+        let sum = Box::new(ValueExpr::Binary(BinaryOp::Add, load(1, second), load(2, first)));
+        let value =
+            ValueExpr::Select { condition: load(0, first), then: sum, otherwise: load(3, first) };
+
+        let loads = value.loads();
+
+        let expected = [(0, first), (1, second), (2, first), (3, first)];
+        assert_eq!(loads, expected.map(|(buffer, index)| (BufferId::new(buffer), index)));
+    }
 
     fn store_loading(buffer: usize) -> Stmt {
         let index = ExprId::new(0);

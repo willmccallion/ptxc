@@ -9,8 +9,9 @@
 //! and a loop's later iterations may see memory its body stored, so bodies
 //! are scoped.
 
+use super::memory::Place;
 use super::values::Held;
-use crate::ast::{Address, B64, Reg, Space};
+use crate::ast::{B64, Reg};
 use ptxc_loop::{BufferId, ExprId, ValueExpr};
 use std::collections::HashMap;
 
@@ -18,7 +19,7 @@ use std::collections::HashMap;
 #[derive(Clone, Default)]
 pub(super) struct Known {
     indices: HashMap<ExprId, Reg<B64>>,
-    addresses: HashMap<(BufferId, ExprId), (Space, Address)>,
+    addresses: HashMap<(BufferId, ExprId), Place>,
     values: HashMap<ValueExpr, Held>,
 }
 
@@ -31,16 +32,11 @@ impl Known {
         let _previous = self.indices.insert(id, held);
     }
 
-    pub(super) fn address(&self, buffer: BufferId, index: ExprId) -> Option<(Space, Address)> {
+    pub(super) fn address(&self, buffer: BufferId, index: ExprId) -> Option<Place> {
         self.addresses.get(&(buffer, index)).cloned()
     }
 
-    pub(super) fn remember_address(
-        &mut self,
-        buffer: BufferId,
-        index: ExprId,
-        at: (Space, Address),
-    ) {
+    pub(super) fn remember_address(&mut self, buffer: BufferId, index: ExprId, at: Place) {
         let _previous = self.addresses.insert((buffer, index), at);
     }
 
@@ -74,6 +70,7 @@ impl Known {
 mod tests {
     use super::Known;
     use crate::ast::{Address, B64, F32, Reg, Space};
+    use crate::select::memory::Place;
     use crate::select::values::Held;
     use ptxc_core::Idx;
     use ptxc_loop::{BufferId, ExprArena, ExprId, ValueExpr};
@@ -100,7 +97,8 @@ mod tests {
     #[test]
     fn what_is_remembered_is_found_and_nothing_else() {
         let (first, second) = (ExprId::new(0), ExprId::new(1));
-        let at = (Space::Global, Address::Reg { base: Reg::<B64>::new(5).id(), offset: 0 });
+        let at =
+            Place::Memory(Space::Global, Address::Reg { base: Reg::<B64>::new(5).id(), offset: 0 });
         let mut known = knowing(&[first], &[(load(0), 7)]);
 
         known.remember_address(BufferId::new(2), first, at.clone());

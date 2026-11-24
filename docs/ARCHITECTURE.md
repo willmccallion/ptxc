@@ -464,7 +464,12 @@ and the GPU tests check them.
 - `generate` first expands the loops a schedule marks unrolled, as TVM's
   `UnrollLoop` pass does: one copy of the body per value, indices
   simplified and guards the ranges decide resolved. A thread's tile of
-  accumulators then takes constant offsets, which ptxas keeps in registers.
+  accumulators then takes constant indices.
+- A local or fragment array of elements of at most 4 bytes, every access
+  to which is at a constant index once unrolled, is held in registers by
+  codegen itself, as LLVM's SROA does for NVVM: one 32-bit register per 4
+  bytes, a narrower element shifted and masked out of its word, and merged
+  in. Other local arrays are `.local` arrays (D62).
 - Instruction selection uses the target's `PtxIsaVersion` and `SmVersion`
   to choose instructions:
   - `cp.async` requires sm_80 or later;
@@ -491,8 +496,8 @@ and the GPU tests check them.
   `sm_89` preset declares 8.4 (D50), which FP8 `mma` also needs.
 - Fragments follow the PTX ISA's lane layouts, which only codegen knows
   (D58, `select/lanes.rs`). Each lane keeps its elements of a fragment's
-  tiles in a local array, at constant offsets once the loops over a warp's
-  tiles are unrolled, so ptxas keeps them in registers. A multiplicand
+  tiles in a local array, held in registers once the loops over a warp's
+  tiles are unrolled; `ldmatrix` and `mma` take its words. A multiplicand
   loads with one `ldmatrix` (`.x4` or `.x2`, `.trans` for a 16-bit tile
   stored the other way) where its tile's rows are 16-byte aligned in shared
   memory, and element by element otherwise. Each `Mma` is one `mma.sync`,

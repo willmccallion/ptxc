@@ -1145,3 +1145,28 @@ the old one.
   ONNX's bit for bit, including where ONNX lets the sum overflow. The
   sums cost one pass over each operand, against a product that reads each
   of them once per tile of the other.
+
+## D62. Codegen holds constant-indexed local arrays in registers
+
+- **Context:** codegen declares accumulators and `mma` fragments as
+  `.local` arrays and relied on ptxas to keep them in registers, which it
+  does where every access is at a constant offset. ptxas 13.5 stops doing
+  so in any function with a `cp.async`, whatever its cache operator or
+  address form; a 40-line kernel reproduces it. Every staged kernel is to
+  fill its tiles with `cp.async` (#108), which would move every fragment
+  to the stack.
+- **Options:** keep synchronous fills and stage through registers, as
+  pre-Ampere GEMMs do; or hold the arrays in registers in codegen, as
+  LLVM's SROA does before NVVM emits PTX, so ptxas never sees them as
+  memory.
+- **Choice:** codegen holds a local or fragment array of elements of at
+  most 4 bytes in registers when every access to it is at a constant index
+  after unrolling. Each 4 bytes is one 32-bit register; `ldmatrix` and
+  `mma` take the words, and a narrower element is shifted and masked out of
+  its word, or merged into it, as a load or store of its type would.
+  Arrays with a computed index stay in local memory.
+- **Reason:** NVCC's code never depends on ptxas promoting local memory,
+  because NVVM hands it registers; doing the same keeps register residency
+  under ptxc's control and independent of what else a kernel contains.
+  Fragments are already accessed at constant indices for ptxas's sake, so
+  the rule holds every fragment the default schedules make.
