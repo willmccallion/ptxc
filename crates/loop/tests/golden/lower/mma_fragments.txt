@@ -21,7 +21,9 @@ kernel warp(%a: f16[256] read, %b: f16[128] read, %c: f32[128] write)
             %b_fragment[0] = tile %b_tile[0] stride 16 transposed
             %c_fragment[0] = fill(0.0:f32)
             %c_fragment[0] = mma.m16n8k16.f16.f32(%a_fragment[0], %b_fragment[0], %c_fragment[0])
-            tile %c[0] stride 8 = %c_fragment[0]
+            each %c_fragment[0] as (%row, %column) {
+              %c[0 + %row * 8 + %column] = element(%c_fragment)
+            }
           }
         }
       }

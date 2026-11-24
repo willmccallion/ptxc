@@ -338,7 +338,6 @@ pub enum Stmt {
     FragmentFill { fragment: FragmentTile, value: Scalar },              // the whole warp at once
     FragmentLoad { fragment: FragmentTile, source: BufferId, at: TileAccess }, // from shared memory
     Mma { instruction: MmaInstruction, a: FragmentTile, b: FragmentTile, accumulator: FragmentTile },
-    FragmentStore { fragment: FragmentTile, target: BufferId, at: TileAccess },
     FragmentEach { fragment: FragmentTile, row: VarId, column: VarId, body: Box<Stmt> }, // ValueExpr::Element
     // M3: AsyncCopy, AsyncCommit, AsyncWait
 }
@@ -472,8 +471,8 @@ and the GPU tests check them.
   tiles are unrolled, so ptxas keeps them in registers. A multiplicand
   loads with one `ldmatrix` (`.x4` or `.x2`, `.trans` for a 16-bit tile
   stored the other way) where its tile's rows are 16-byte aligned in shared
-  memory, and element by element otherwise. Each `Mma` is one `mma.sync`;
-  stores and `FragmentEach` go element by element.
+  memory, and element by element otherwise. Each `Mma` is one `mma.sync`,
+  and `FragmentEach` runs its body once per element of the lane (D59).
 - Transcendental functions are emitted inline from the math programs the
   loop interpreter evaluates, one instruction per step (D51).
 - **Validation:** in tests every emitted module is assembled by ptxas

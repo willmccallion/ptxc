@@ -102,9 +102,6 @@ impl Scope<'_> {
             Stmt::Mma { instruction, a, b, accumulator } => {
                 self.mma(*instruction, [*a, *b, *accumulator])
             }
-            Stmt::FragmentStore { fragment, target, at } => {
-                self.tile_store(*fragment, *target, *at)
-            }
             Stmt::FragmentEach { fragment, row, column, body } => {
                 self.each(*fragment, [*row, *column], body)
             }

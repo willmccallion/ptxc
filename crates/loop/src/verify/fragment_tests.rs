@@ -9,7 +9,7 @@ use crate::stmt::{
     Access, Buffer, BufferId, Condition, FragmentShape, FragmentTile, KernelParam, KernelVar,
     LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
-use crate::test_kernels::warp_kernel;
+use crate::test_kernels::{store_each, warp_kernel};
 use ptxc_core::{DType, Dim, ElementCount, Idx};
 use ptxc_target::{MmaShape, SmVersion, ThreadsPerBlock, preset};
 
@@ -90,7 +90,7 @@ fn a_whole_product_verifies() {
             Stmt::FragmentLoad { fragment: product.b, source: product.tile, at: half },
             Stmt::FragmentFill { fragment: product.c, value: Scalar::zero(DType::F32) },
             mma([product.a, product.b, product.c]),
-            Stmt::FragmentStore { fragment: product.c, target: product.output, at: half },
+            store_each(&mut product.kernel, product.c, (product.output, half)),
         ])
     });
 
@@ -138,7 +138,7 @@ fn fragments_move_only_between_shared_tiles_and_memory_in_bounds() {
     });
     let into_input = verified(|product| {
         let at = product.at(0, 16);
-        Stmt::FragmentStore { fragment: product.a, target: product.input, at }
+        store_each(&mut product.kernel, product.a, (product.input, at))
     });
 
     assert_eq!(from_global, Err(VerifyError::TileNotShared(TensorName::new("input"))));
