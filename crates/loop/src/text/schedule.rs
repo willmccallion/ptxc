@@ -2,6 +2,7 @@
 //! trace.
 
 use super::index::write_index;
+use crate::compute::ComputeDef;
 use crate::schedule::{LoopAnnotation, LoopId, LoopKind, LoopTree, Primitive, Schedule};
 use ptxc_core::Idx;
 use std::fmt::Write;
@@ -38,7 +39,7 @@ pub fn print_schedule<S>(schedule: &Schedule<S>) -> String {
     out.push_str("trace\n");
     for step in schedule.trace().steps() {
         out.push_str("  ");
-        write_step(&mut out, loops, step);
+        write_step(&mut out, (compute, loops), step);
         out.push('\n');
     }
     out
@@ -68,7 +69,7 @@ fn write_loop(out: &mut String, loops: &LoopTree, id: LoopId, depth: usize) {
     out.push('\n');
 }
 
-fn write_step(out: &mut String, loops: &LoopTree, step: &Primitive) {
+fn write_step(out: &mut String, (compute, loops): (&ComputeDef, &LoopTree), step: &Primitive) {
     let name = |id: LoopId| format!("%{}", loops.loops()[id].name);
     let list = |ids: &[LoopId]| ids.iter().map(|&id| name(id)).collect::<Vec<_>>().join(", ");
     let _infallible = match step {
@@ -82,5 +83,8 @@ fn write_step(out: &mut String, loops: &LoopTree, step: &Primitive) {
         Primitive::Bind { loop_, axis } => write!(out, "bind {} {}", name(*loop_), axis.name()),
         Primitive::Unroll { loop_ } => write!(out, "unroll {}", name(*loop_)),
         Primitive::Vectorize { loop_ } => write!(out, "vectorize {}", name(*loop_)),
+        Primitive::CacheRead { tensor, at } => {
+            write!(out, "cache_read {} {}", compute.inputs()[*tensor].name, name(*at))
+        }
     };
 }

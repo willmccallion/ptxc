@@ -13,7 +13,7 @@ use ptxc_loop::{
 };
 use std::sync::Arc;
 
-fn tensor(dims: &[u64], data: impl Into<TensorData>) -> HostTensor {
+pub(crate) fn tensor(dims: &[u64], data: impl Into<TensorData>) -> HostTensor {
     HostTensor::new(shape(dims), data.into()).unwrap()
 }
 
@@ -22,7 +22,7 @@ fn floats(output: &HostTensor) -> Vec<f32> {
     values.clone()
 }
 
-fn ints(output: &HostTensor) -> Vec<i64> {
+pub(crate) fn ints(output: &HostTensor) -> Vec<i64> {
     match output.data() {
         TensorData::I64(values) => values.clone(),
         TensorData::I32(values) => values.iter().map(|&value| i64::from(value)).collect(),
@@ -60,7 +60,7 @@ fn argmax(rows: u64, columns: u64, tie: TieBreak) -> Arc<ComputeDef> {
     Arc::new(compute.finish().unwrap())
 }
 
-fn run_default(
+pub(crate) fn run_default(
     compute: &Arc<ComputeDef>,
     inputs: &[HostTensor],
 ) -> Result<Vec<HostTensor>, RunError> {
@@ -327,6 +327,20 @@ fn scheduled(
     steps: &[crate::schedule_properties::Step],
     binds: &[(usize, usize)],
 ) -> Option<Schedule<ptxc_loop::Validated>> {
+    shaped(compute, steps, binds).validate(&target()).ok()
+}
+
+/// The SM 8.9 target random schedules are validated for.
+pub(crate) fn target() -> ptxc_target::Target {
+    ptxc_target::preset(ptxc_target::SmVersion::SM_89).unwrap()
+}
+
+/// The open schedule `steps` and `binds` shape, skipping any they reject.
+pub(crate) fn shaped(
+    compute: &Arc<ComputeDef>,
+    steps: &[crate::schedule_properties::Step],
+    binds: &[(usize, usize)],
+) -> Schedule<ptxc_loop::Open> {
     let (mut schedule, _) = open(compute);
     for step in steps {
         let nest = schedule.loops().nest().to_vec();
@@ -339,7 +353,7 @@ fn scheduled(
         let _rejected_or_applied =
             schedule.apply(Primitive::Bind { loop_, axis: AXES[axis % AXES.len()] });
     }
-    schedule.validate(&ptxc_target::preset(ptxc_target::SmVersion::SM_89).unwrap()).ok()
+    schedule
 }
 
 proptest::proptest! {

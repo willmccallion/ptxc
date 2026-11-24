@@ -276,8 +276,8 @@ The trace is replayable, serialisable, and is exactly what a tuning record
 stores.
 
 ```rust
-pub struct Schedule<S> { compute: Arc<ComputeDef>, loops: LoopTree, trace: Trace, state: PhantomData<S> }
-pub struct Open; pub struct Validated;
+pub struct Schedule<S> { compute: Arc<ComputeDef>, loops: LoopTree, trace: Trace, state: S }
+pub struct Open; pub struct Validated { threads: ThreadsPerBlock, tiles: Vec<Vec<Dim>> }
 
 impl Schedule<Open> {
     pub fn new(compute: Arc<ComputeDef>) -> Self;                        // spatial loops outermost, then reductions
@@ -289,11 +289,12 @@ impl Schedule<Open> {
 }
 impl Schedule<Validated> { pub fn lower(&self) -> Result<LoweredKernel, LowerError> }
 
-pub enum Primitive {                                    // M2's; cache, compute-at, tensorize,
-    Split { loop_: LoopId, factors: Vec<SplitFactor> },  // pipeline and layout come with M3
+pub enum Primitive {                                    // compute-at, tensorize, pipeline
+    Split { loop_: LoopId, factors: Vec<SplitFactor> },  // and layout come with M3
     Reorder { order: Vec<LoopId> }, Fuse { loops: Vec<LoopId> },
     Bind { loop_: LoopId, axis: ThreadAxis },          // blockIdx/threadIdx.{x,y,z}; never an empty loop
     Unroll { loop_: LoopId }, Vectorize { loop_: LoopId },
+    CacheRead { tensor: TensorParamId, at: LoopId },   // the input's tile in shared memory, filled at `at`
 }
 ```
 
@@ -304,7 +305,14 @@ extent rounds the outer loop up and adds a guard `index < extent`.
 
 `validate` checks the schedule against the target: thread counts, shared
 memory, that `Tensorize` names an intrinsic the target supports, and that
-vector widths are allowed.
+vector widths are allowed. `Validated` keeps what the checks established
+for lowering: the block's thread count and each staged tile's extents.
+
+`CacheRead` stages an input as TVM's `cache_read` with `compute_at` does.
+Its loads must share one index without gathers. The tile spans the serial
+loops inside `at` and every loop bound to a thread, since the block shares
+it; along each input axis it is a box, so validation refuses an index that
+does not grow affinely, with non-negative coefficients, over those loops.
 
 **3. Lowered kernel: an explicit loop nest.** This is a tree of owned
 statements, as in TVM's TIR. Index arithmetic and data arithmetic are
@@ -337,10 +345,14 @@ spatial point inside its first reduction loop, as TVM's
 threads' partials in shared memory with a halving tree, with barriers only
 where every thread reaches them, as TVM's cross-thread allreduce does.
 Arg-reductions combine (value, position) pairs by a rule that depends only
-on both, so any loop order or thread split gives the same position.
+on both, so any loop order or thread split gives the same position. A
+staged input's loop allocates its tile, and each iteration fills it between
+two barriers, the block's threads copying elements in rounds, before the
+loads read the tile instead of global memory.
 `verify` checks what code generation relies on: variables bound where read,
 buffers used as their scope and access allow, shared and local accesses
-provably in bounds (with `If` conditions narrowing ranges), no barrier under
+provably in bounds (with `If` conditions narrowing ranges and capping the
+very index they compare), no barrier under
 a thread-dependent condition, and well-typed values.
 
 Index expressions (`Expr::{Var, Const, Add, Mul, FloorDiv, FloorMod, Min, Max}`)

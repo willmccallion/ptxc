@@ -1,8 +1,9 @@
 //! The lowering context: the kernel being built, and how compute-level
 //! indices, loads and values become kernel-level ones.
 
+use super::cache::{Tile, allocate_tiles};
 use crate::compute::{ComputeDef, IndexVar, TensorExpr, TensorParamId};
-use crate::expr::{Expr, ExprArena, ExprId, Simplifier, VarId, VarRanges};
+use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 use crate::schedule::{Guard, LoopAnnotation, LoopId, LoopKind, LoopTree};
 use crate::stmt::{
     Access, Buffer, BufferId, Condition, ForKind, KernelParam, KernelVar, MemScope, Stmt, ValueExpr,
@@ -31,6 +32,8 @@ pub(super) struct Lowerer<'s> {
     pub(super) outputs: Vec<BufferId>,
     loaded: HashMap<VarId, VarId>,
     ranges: VarRanges,
+    /// The tiles of the inputs staged in shared memory.
+    pub(super) tiles: Vec<Tile>,
 }
 
 impl<'s> Lowerer<'s> {
@@ -54,6 +57,7 @@ impl<'s> Lowerer<'s> {
             outputs: Vec::new(),
             loaded: HashMap::new(),
             ranges: tree.ranges(),
+            tiles: Vec::new(),
         };
         lowerer.add_params();
         lowerer
@@ -94,6 +98,21 @@ impl<'s> Lowerer<'s> {
     ) -> BufferId {
         let name = crate::compute::TensorName::new(name);
         self.buffers.push(Buffer { name, dtype, scope, size: ElementCount::new(size) })
+    }
+
+    /// `tensor`'s global buffer.
+    pub(super) fn input_buffer(&self, tensor: TensorParamId) -> BufferId {
+        self.inputs[tensor]
+    }
+
+    /// Adds `var`'s range, for simplifying expressions that read it.
+    pub(super) fn insert_range(&mut self, var: VarId, range: Interval) {
+        self.ranges.insert(var, range);
+    }
+
+    /// Bounds of `id`'s value over the variables' ranges, if they have them.
+    pub(super) fn bounds(&self, id: ExprId) -> Option<Interval> {
+        self.exprs.bounds(id, &self.ranges)
     }
 
     /// `expr`, a constant, in the kernel arena.
@@ -200,6 +219,9 @@ impl<'s> Lowerer<'s> {
         let sub = |this: &mut Self, operand: &TensorExpr| Box::new(this.value(operand, reduced));
         match expr {
             TensorExpr::Load { tensor, index } => {
+                if let Some(tile) = self.tile_load(*tensor, index) {
+                    return tile;
+                }
                 let index = self.input_position(*tensor, index);
                 ValueExpr::Load { buffer: self.inputs[*tensor], index }
             }
@@ -223,8 +245,9 @@ impl<'s> Lowerer<'s> {
         }
     }
 
-    /// `body` inside the loops of `loops`, outermost first.
-    pub(super) fn wrap_loops(&self, loops: &[LoopId], body: Stmt) -> Stmt {
+    /// `body` inside the loops of `loops`, outermost first, each loop that
+    /// a tile is staged at filling it first.
+    pub(super) fn wrap_loops(&mut self, loops: &[LoopId], body: Stmt) -> Stmt {
         loops.iter().rev().fold(body, |body, &id| {
             let found = &self.tree.loops()[id];
             let kind = match found.annotation {
@@ -232,12 +255,12 @@ impl<'s> Lowerer<'s> {
                 LoopAnnotation::Vectorized => ForKind::Vectorized,
                 LoopAnnotation::Serial | LoopAnnotation::Bound(_) => ForKind::Serial,
             };
-            Stmt::For {
-                var: VarId::new(id.index()),
-                extent: found.extent,
-                kind,
-                body: Box::new(body),
-            }
+            let extent = found.extent;
+            let tiles = self.tiles_read_in(id, &body);
+            let body = self.fill_before(&tiles, body);
+            let looped =
+                Stmt::For { var: VarId::new(id.index()), extent, kind, body: Box::new(body) };
+            allocate_tiles(&tiles, looped)
         })
     }
 

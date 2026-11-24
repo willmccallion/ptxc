@@ -6,15 +6,15 @@ mod loop_tree;
 mod primitive;
 mod trace;
 mod validate;
+mod validate_caches;
 
 pub use error::ScheduleError;
-pub use loop_tree::{Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree};
+pub use loop_tree::{CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree};
 pub use primitive::{Primitive, SplitFactor, ThreadAxis};
 pub use trace::Trace;
 pub use validate::Validated;
 
 use crate::compute::ComputeDef;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// A schedule being built: primitives can still be applied.
@@ -22,20 +22,21 @@ use std::sync::Arc;
 pub struct Open;
 
 /// How a compute definition's loops run, as a loop tree and the trace of
-/// primitives that shaped it (D4). The state `S` says what may be done next.
+/// primitives that shaped it (D4). The state `S` says what may be done
+/// next, and holds what reaching it established.
 #[derive(Clone, Debug)]
 pub struct Schedule<S> {
     compute: Arc<ComputeDef>,
     loops: LoopTree,
     trace: Trace,
-    state: PhantomData<S>,
+    state: S,
 }
 
 impl Schedule<Open> {
     /// The default nest: one serial loop per axis, spatial axes outermost.
     pub fn new(compute: Arc<ComputeDef>) -> Self {
         let loops = LoopTree::new(&compute);
-        Self { compute, loops, trace: Trace::new(), state: PhantomData }
+        Self { compute, loops, trace: Trace::new(), state: Open }
     }
 
     /// The schedule `trace` builds from the default nest.
@@ -58,6 +59,10 @@ impl Schedule<Open> {
             Primitive::Bind { loop_, axis } => self.record(step, |tree| tree.bind(loop_, axis)),
             Primitive::Unroll { loop_ } => self.record(step, |tree| tree.unroll(loop_)),
             Primitive::Vectorize { loop_ } => self.record(step, |tree| tree.vectorize(loop_)),
+            Primitive::CacheRead { tensor, at } => {
+                let compute = Arc::clone(&self.compute);
+                self.record(step, |tree| tree.cache_read(&compute, tensor, at))
+            }
         }
     }
 

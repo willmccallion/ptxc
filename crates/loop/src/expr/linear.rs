@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 /// means a coefficient overflowed, and the caller keeps the expression as
 /// it was.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub(super) struct LinearSum {
+pub(crate) struct LinearSum {
     terms: BTreeMap<ExprId, i64>,
     constant: i64,
 }
@@ -24,7 +24,7 @@ impl LinearSum {
     }
 
     /// `id` as an affine sum of its atoms.
-    pub(super) fn of(arena: &ExprArena, id: ExprId) -> Option<Self> {
+    pub(crate) fn of(arena: &ExprArena, id: ExprId) -> Option<Self> {
         match arena.get(id) {
             Expr::Const(value) => Some(Self::constant_sum(value)),
             Expr::Add(a, b) => Self::of(arena, a)?.plus(&Self::of(arena, b)?),
@@ -42,7 +42,7 @@ impl LinearSum {
     }
 
     /// The atoms with nonzero coefficients, in id order.
-    pub(super) fn terms(&self) -> impl Iterator<Item = (ExprId, i64)> + '_ {
+    pub(crate) fn terms(&self) -> impl Iterator<Item = (ExprId, i64)> + '_ {
         self.terms.iter().map(|(&atom, &coefficient)| (atom, coefficient))
     }
 

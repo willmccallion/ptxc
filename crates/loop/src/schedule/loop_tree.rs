@@ -2,7 +2,7 @@
 
 use super::error::ScheduleError;
 use super::primitive::ThreadAxis;
-use crate::compute::{ComputeDef, IterKind, IterVarId, VarName};
+use crate::compute::{ComputeDef, IterKind, IterVarId, TensorParamId, VarName};
 use crate::expr::{ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 use ptxc_core::{Dim, Idx, IndexVec};
 
@@ -59,9 +59,24 @@ pub struct Guard {
     pub extent: Dim,
 }
 
-/// The loop nest of one compute definition: every loop made so far, the
-/// current nest from outermost to innermost, each axis's index over the
-/// nest's loop variables, and the guards the nest needs.
+/// An input whose tile each iteration of loop `at` reads is staged in shared
+/// memory, filled by the block's threads before the loop's body, as TVM's
+/// `cache_read` with `compute_at` does.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct CacheRead {
+    /// The input staged.
+    pub tensor: TensorParamId,
+    /// The serial loop whose every iteration fills the tile.
+    pub at: LoopId,
+    /// The compute-level index every load of the input reads.
+    pub index: Vec<ExprId>,
+}
+
+/// The loop nest of one compute definition.
+///
+/// It holds every loop made so far, the current nest from outermost to
+/// innermost, each axis's index over the nest's loop variables, the guards
+/// the nest needs, and the inputs staged in shared memory.
 #[derive(Clone, Debug)]
 pub struct LoopTree {
     pub(super) loops: IndexVec<LoopId, Loop>,
@@ -69,6 +84,7 @@ pub struct LoopTree {
     pub(super) exprs: ExprArena,
     pub(super) axes: IndexVec<IterVarId, ExprId>,
     pub(super) guards: Vec<Guard>,
+    pub(super) caches: Vec<CacheRead>,
 }
 
 impl LoopTree {
@@ -81,6 +97,7 @@ impl LoopTree {
             exprs: ExprArena::new(),
             axes: IndexVec::new(),
             guards: Vec::new(),
+            caches: Vec::new(),
         };
         let mut reductions = Vec::new();
         for iter in compute.iter_vars() {
@@ -123,16 +140,16 @@ impl LoopTree {
         &self.guards
     }
 
+    /// The inputs staged in shared memory, in the order they were staged.
+    pub fn caches(&self) -> &[CacheRead] {
+        &self.caches
+    }
+
     /// Each current loop's variable ranges over `[0, extent)`.
     pub fn ranges(&self) -> VarRanges {
         let mut ranges = VarRanges::new();
         for &id in &self.nest {
-            let last = self.loops[id]
-                .extent
-                .get()
-                .checked_sub(1)
-                .and_then(|last| i64::try_from(last).ok());
-            if let Some(range) = last.and_then(|last| Interval::new(0, last)) {
+            if let Some(range) = Interval::of_loop(self.loops[id].extent) {
                 ranges.insert(Self::var_of(id), range);
             }
         }

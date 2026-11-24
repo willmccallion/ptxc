@@ -1,5 +1,6 @@
 //! Lowers a validated schedule to a `LoweredKernel`.
 
+mod cache;
 mod combine;
 mod context;
 mod cross_thread;
@@ -9,6 +10,7 @@ mod reduction;
 use crate::compute::TensorExpr;
 use crate::schedule::{LoopAnnotation, LoopKind, Schedule, Validated};
 use crate::stmt::{LaunchShape, LoweredKernel, MemScope};
+pub(crate) use cache::tile_extents;
 use context::Lowerer;
 use ptxc_core::KernelName;
 use ptxc_target::{BlockCount, SmemBytes, ThreadsPerBlock};
@@ -20,6 +22,7 @@ impl Schedule<Validated> {
     pub fn lower(&self) -> LoweredKernel {
         let tree = self.loops();
         let mut lowerer = Lowerer::new(self.compute(), tree);
+        lowerer.stage(self.tiles(), self.threads());
         let reduction = self
             .compute()
             .outputs()

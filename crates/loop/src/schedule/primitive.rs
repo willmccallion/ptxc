@@ -1,6 +1,7 @@
 //! `Primitive`: one schedule step.
 
 use super::loop_tree::LoopId;
+use crate::compute::TensorParamId;
 
 /// A split's factor for one of the inner loops it makes; never zero.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -94,5 +95,13 @@ pub enum Primitive {
     Vectorize {
         /// The loop vectorized.
         loop_: LoopId,
+    },
+    /// Stages the tile of an input that each iteration of a serial loop
+    /// reads in shared memory, as TVM's `cache_read` with `compute_at`.
+    CacheRead {
+        /// The input staged.
+        tensor: TensorParamId,
+        /// The loop whose every iteration fills the tile.
+        at: LoopId,
     },
 }
