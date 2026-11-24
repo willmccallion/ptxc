@@ -8,17 +8,33 @@ use super::bind;
 use super::matmul_loops::{batch_loops, bind_blocks, parts, stage_operands};
 use super::matmul_shape::Product;
 use crate::tiling::{TensorCoreTile, TileShape};
-use ptxc_loop::{ComputeDef, Open, Primitive, Schedule, ScheduleError, TensorExpr, ThreadAxis};
-use ptxc_target::{MmaInstruction, Target};
+use ptxc_core::Dim;
+use ptxc_loop::{
+    ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, TensorExpr, ThreadAxis,
+};
+use ptxc_target::{MmaInstruction, MmaShape, Target};
 
-/// Hand-picked until the search tunes it: four warps, each holding 2 by 4
-/// `mma` tiles, over a block tile of 64 by 64 at f16's m16n8, staged two
-/// `mma` steps deep, so an f16 step stages 8 KiB.
-const TILE: TensorCoreTile = TensorCoreTile {
+/// Hand-picked until the search tunes them: four warps, each holding 4 by
+/// 8 `mma` tiles, over a block tile of 128 by 128 at f16's m16n8, staged
+/// two `mma` steps deep, so an f16 step stages 16 KiB...
+const LARGE: TensorCoreTile = TensorCoreTile {
+    warps: TileShape { rows: 2, columns: 2 },
+    per_warp: TileShape { rows: 4, columns: 8 },
+    steps: 2,
+};
+
+/// ...and, for an output too small for enough large tiles, four warps
+/// holding 2 by 4 tiles each, over a block tile of 64 by 64.
+const SMALL: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 2, columns: 4 },
     steps: 2,
 };
+
+/// The blocks a grid of large tiles needs to keep a GPU busy: about one per
+/// SM of a mid-range Ada part, hand-picked from the sweep until tuning
+/// measures each device.
+const FULL_GRID: u64 = 32;
 
 /// The `mma` of `target` that computes `product` of `compute`: one whose
 /// multiplicands are both operands' type and whose accumulator is the
@@ -52,13 +68,14 @@ pub(crate) fn tiled_on_tensor_cores(
     instruction: MmaInstruction,
 ) -> Result<(), ScheduleError> {
     let shape = instruction.shape;
+    let tile = tile_for(schedule, product, shape);
     let batch = batch_loops(schedule, product);
-    let row_factors = [TILE.warps.rows, TILE.per_warp.rows, shape.m.get()];
+    let row_factors = [tile.warps.rows, tile.per_warp.rows, shape.m.get()];
     let [row_block, row_warp, row_tile, m] = parts(schedule, product.row, &row_factors)?;
-    let column_factors = [TILE.warps.columns, TILE.per_warp.columns, shape.n.get()];
+    let column_factors = [tile.warps.columns, tile.per_warp.columns, shape.n.get()];
     let [column_block, column_warp, column_tile, n] =
         parts(schedule, product.column, &column_factors)?;
-    let [step, step_depth, k] = parts(schedule, product.depth, &[TILE.steps, shape.k.get()])?;
+    let [step, step_depth, k] = parts(schedule, product.depth, &[tile.steps, shape.k.get()])?;
     let mut order = batch.clone();
     order.extend([row_block, column_block, row_warp, column_warp]);
     order.extend([step, step_depth, row_tile, column_tile, m, n, k]);
@@ -71,4 +88,21 @@ pub(crate) fn tiled_on_tensor_cores(
         schedule.apply(Primitive::Unroll { loop_ })?;
     }
     schedule.apply(Primitive::Tensorize { m, n, k, instruction })
+}
+
+/// The large tile where `product`, in `schedule`'s default nest, has at
+/// least `FULL_GRID` of them with `shape`'s `mma`, and the small one
+/// otherwise.
+fn tile_for(schedule: &Schedule<Open>, product: Product, shape: MmaShape) -> TensorCoreTile {
+    let extent = |axis: IterVarId| schedule.compute().iter_vars()[axis].extent.get();
+    let loops = schedule.loops().loops();
+    let batch: u64 =
+        batch_loops(schedule, product).iter().map(|&id| loops[id].extent.get()).product();
+    let blocks = |extent: u64, warps: u64, per_warp: u64, mma: Dim| {
+        extent.div_ceil(warps * per_warp * mma.get())
+    };
+    let rows = blocks(extent(product.row), LARGE.warps.rows, LARGE.per_warp.rows, shape.m);
+    let columns =
+        blocks(extent(product.column), LARGE.warps.columns, LARGE.per_warp.columns, shape.n);
+    if batch * rows * columns >= FULL_GRID { LARGE } else { SMALL }
 }
