@@ -38,6 +38,26 @@ fn an_f16_product_gives_blocks_of_four_warps_a_64_by_64_tile_each() {
     golden::check("matmul_mma.txt", &text).unwrap();
 }
 
+#[test]
+fn a_product_with_a_grid_of_32_large_tiles_takes_them_and_a_smaller_one_does_not() {
+    let large = product(DType::F16, [16, 4, 136, 16], PLAIN);
+    let square = product(DType::F16, [1, 1024, 512, 16], PLAIN);
+    let small = product(DType::F16, [1, 1024, 384, 32], PLAIN);
+    let kernels = [&large, &small]
+        .map(|compute| default_schedule(Arc::clone(compute), &target()).unwrap().lower());
+
+    let [(_, large_launch), (_, square_launch), (_, small_launch)] =
+        [large.clone(), square, small].map(scheduled);
+
+    assert_eq!(launch_dims(large_launch), ([32, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(square_launch), ([32, 1, 1], [32, 2, 2]));
+    assert_eq!(kernels[0].smem().get(), 2 * 128 * 32 * 2);
+    assert_eq!(launch_dims(small_launch), ([96, 1, 1], [32, 2, 2]));
+    assert_eq!(kernels[1].smem().get(), 2 * 64 * 32 * 2);
+    let [tiled, serial] = tiled_and_serial(&large, &exact_inputs(&large));
+    assert_eq!(tiled, serial);
+}
+
 /// An 8-bit integer product summed in `i32`, which the `mma` table takes.
 fn integer_product(multiplicands: DType) -> Arc<ComputeDef> {
     let shape = MmaShape { m: Dim::new(16), n: Dim::new(8), k: Dim::new(32) };

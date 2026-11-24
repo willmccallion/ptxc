@@ -10,8 +10,9 @@ use ptxc_schedule::default_schedule;
 use ptxc_testkit::tensorized::{Operands, exact_inputs, product};
 use std::sync::Arc;
 
-/// Rows, columns and depth.
-const SHAPES: [[u64; 3]; 4] = [[64, 64, 64], [100, 100, 100], [1, 256, 96], [128, 96, 48]];
+/// Rows, columns and depth: the last large enough for 128 by 128 tiles.
+const SHAPES: [[u64; 3]; 5] =
+    [[64, 64, 64], [100, 100, 100], [1, 256, 96], [128, 96, 48], [2048, 256, 40]];
 
 #[test]
 fn every_mma_type_matches_the_interpreter_exactly_at_the_sweeps_kinds_of_shape() {

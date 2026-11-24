@@ -435,8 +435,9 @@ and the GPU tests check them.
   memory and each thread's outputs in registers (D56). Where the target has
   an `mma` for the product's operand and sum types (f16, bf16, FP8, 8-bit
   integers), it tiles it on tensor cores instead: a block's four warps each
-  hold 2 by 4 `mma` tiles of a 64 by 64 block tile, both operands staged two
-  `mma` steps deep, and the innermost tile tensorized (D58).
+  hold 4 by 8 `mma` tiles of a 128 by 128 block tile, or 2 by 4 of a 64 by
+  64 one where fewer than 32 large tiles cover the output, both operands
+  staged two `mma` steps deep and the innermost tile tensorized (D58).
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's
