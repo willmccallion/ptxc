@@ -3,7 +3,7 @@
 use super::error::ScheduleError;
 use super::primitive::ThreadAxis;
 use crate::compute::{ComputeDef, IterKind, IterVarId, TensorParamId, VarName};
-use crate::expr::{ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
+use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 use ptxc_core::{Dim, Idx, IndexVec};
 
 ptxc_core::define_index!(
@@ -133,6 +133,15 @@ impl LoopTree {
     /// The index of `axis`, over the nest's loop variables.
     pub fn axis_index(&self, axis: IterVarId) -> ExprId {
         self.axes[axis]
+    }
+
+    /// The loop of the nest whose variable is `axis`'s whole index, if one
+    /// is: each axis's own loop in the default nest, until a split or fuse
+    /// makes its index a combination of loops.
+    pub fn loop_of(&self, axis: IterVarId) -> Option<LoopId> {
+        let Expr::Var(var) = self.exprs.get(self.axes[axis]) else { return None };
+        let id = LoopId::new(var.index());
+        self.nest.contains(&id).then_some(id)
     }
 
     /// The guards the nest must check.
