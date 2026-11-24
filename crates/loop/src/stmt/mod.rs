@@ -139,6 +139,23 @@ pub enum Stmt {
 }
 
 impl Stmt {
+    /// Whether `self` or any statement inside it is an `Mma`.
+    pub(crate) fn has_mma(&self) -> bool {
+        match self {
+            Self::Seq(statements) => statements.iter().any(Self::has_mma),
+            Self::For { body, .. }
+            | Self::If { then: body, .. }
+            | Self::Alloc { body, .. }
+            | Self::LoadIndex { body, .. }
+            | Self::FragmentEach { body, .. } => body.has_mma(),
+            Self::Mma { .. } => true,
+            Self::Store { .. }
+            | Self::Barrier
+            | Self::FragmentFill { .. }
+            | Self::FragmentLoad { .. } => false,
+        }
+    }
+
     /// Whether `self` reads `buffer`, in a stored value or a gather index.
     pub(crate) fn reads(&self, buffer: BufferId) -> bool {
         match self {
@@ -218,6 +235,49 @@ mod tests {
         assert!(each(Stmt::Barrier).reads(buffer(1)));
         assert!(each(store_loading(7)).reads(buffer(7)));
         assert!(!each(Stmt::Barrier).reads(buffer(7)));
+    }
+
+    #[test]
+    fn a_statement_has_an_mma_where_any_statement_inside_it_is_one() {
+        let shape = MmaShape { m: Dim::new(16), n: Dim::new(8), k: Dim::new(16) };
+        let instruction =
+            MmaInstruction { shape, multiplicands: DType::F16, accumulator: DType::F32 };
+        let whole = |index| FragmentTile { buffer: BufferId::new(index), tile: ExprId::new(0) };
+        let mma = Stmt::Mma { instruction, a: whole(0), b: whole(1), accumulator: whole(2) };
+        let (var, index) = (VarId::new(0), ExprId::new(0));
+        let around = |body: Stmt| {
+            [
+                Stmt::Seq(vec![Stmt::Barrier, body.clone()]),
+                Stmt::For {
+                    var,
+                    extent: Dim::new(2),
+                    kind: ForKind::Serial,
+                    body: Box::new(body.clone()),
+                },
+                Stmt::If {
+                    condition: Condition { index, bound: index },
+                    then: Box::new(body.clone()),
+                },
+                Stmt::Alloc { buffer: BufferId::new(3), body: Box::new(body.clone()) },
+                Stmt::LoadIndex {
+                    var,
+                    buffer: BufferId::new(4),
+                    index,
+                    body: Box::new(body.clone()),
+                },
+                Stmt::FragmentEach {
+                    fragment: whole(2),
+                    row: var,
+                    column: var,
+                    body: Box::new(body),
+                },
+            ]
+        };
+        let fill = Stmt::FragmentFill { fragment: whole(2), value: Scalar::bool(false) };
+
+        assert!(around(mma).iter().all(Stmt::has_mma));
+        assert!(!around(store_loading(1)).iter().any(Stmt::has_mma));
+        assert!(!fill.has_mma() && !Stmt::Barrier.has_mma());
     }
 
     #[test]

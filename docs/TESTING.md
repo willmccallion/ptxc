@@ -14,7 +14,7 @@ It plays the role spike plays for rvsim.
 | Float format tests | every encoding round-trips; every f32 rounds to nearest-even | nothing | `cargo test` (exhaustive: `--release -- --ignored`) |
 | Loop-interpreter checks | scheduled kernels compute what the graph interpreter computes, without races | nothing | `cargo test` |
 | ptxas checks | every emitted kernel assembles for its target | ptxas (the flake; CI fetches NVIDIA's checksummed redistributable) | `cargo test` |
-| GPU tests | every op family's kernels, and whole compiled programs run by the runtime, match the loop interpreter bit for bit on the device | GPU | `cargo test --features gpu` |
+| GPU tests | every op family's kernels, and whole compiled programs run by the runtime, match the loop interpreter bit for bit on the device (within tolerance where a stage multiplies on tensor cores, D60) | GPU | `cargo test --features gpu` |
 | ONNX conformance | interpreter and GPU agree with the official node tests | `data/onnx` | `ptxc conformance` |
 | Differential fuzzing | random well-typed graphs agree across executors | GPU for `--backend gpu` | `ptxc fuzz` |
 | Whole models | accuracy on real data matches PyTorch | models, datasets, cached references | `ptxc check-model` |
@@ -87,7 +87,8 @@ right value.
 - The GPU report is diffed against the interpreter report. Any test that
   passes on one backend and not the other is a bug.
 - On the GPU, each data set's outputs must also match the loop
-  interpreter exactly, running the same lowered stages, before they are
+  interpreter exactly (within tolerance where a stage multiplies on tensor
+  cores, D60), running the same lowered stages, before they are
   compared with the expected ones. A difference is a
   `loop_interpreter` failure.
 
@@ -112,7 +113,9 @@ right value.
     interpreter matches the reference within each output's tolerance,
     widened for the longest reduction. A last-bit difference then stays
     one rather than flipping a floor or a comparison;
-  - with `--backend gpu`, the GPU matches the loop interpreter exactly.
+  - with `--backend gpu`, the GPU matches the loop interpreter exactly. A
+    case whose stages multiply on tensor cores is compared within
+    tolerance, and only when it is continuous with moderate inputs (D60).
 - Every case runs on at least two executors through the `Evaluate` trait:
   - the reference interpreter;
   - the loop-IR interpreter;

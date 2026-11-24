@@ -1,5 +1,6 @@
 //! Every op family's random cases, lowered and run stage by stage on the
-//! GPU, each stage matching the loop interpreter exactly.
+//! GPU, each stage matching the loop interpreter exactly, or within
+//! tolerance where it multiplies on tensor cores (D60).
 
 use crate::device::match_interpreter;
 use proptest::strategy::{Strategy, ValueTree};

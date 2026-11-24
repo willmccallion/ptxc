@@ -115,6 +115,12 @@ impl LoweredKernel {
         &self.body
     }
 
+    /// Whether it multiplies on tensor cores, whose sums the hardware
+    /// rounds its own way (D58).
+    pub fn multiplies_on_tensor_cores(&self) -> bool {
+        self.body.has_mma()
+    }
+
     /// The index expressions it reads.
     pub const fn exprs(&self) -> &ExprArena {
         &self.exprs

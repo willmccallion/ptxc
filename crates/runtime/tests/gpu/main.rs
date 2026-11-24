@@ -1,5 +1,6 @@
 //! Kernels ptxc emits, run on a real GPU and compared with the loop
-//! interpreter, which they must match bit for bit, NaN payloads aside.
+//! interpreter, which they must match bit for bit, NaN payloads aside, or
+//! within tolerance where they multiply on tensor cores (D60).
 //! Compiled only with `--features gpu`; without a GPU these fail rather
 //! than skip.
 

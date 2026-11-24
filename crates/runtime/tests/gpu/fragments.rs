@@ -3,12 +3,11 @@
 //! interpreter bit for bit on inputs whose sums are exact in any order,
 //! and an f16 product on random inputs within its tolerance.
 
-use crate::device::{match_interpreter, run_on_device, target};
+use crate::device::{match_interpreter, match_interpreter_exactly, target};
 use ptxc_core::float::F16;
-use ptxc_core::{DType, Dim, ElementCount, HostTensor};
+use ptxc_core::{DType, Dim, HostTensor};
 use ptxc_loop::{ComputeDef, LoweredKernel, TileOrder};
 use ptxc_target::{MmaInstruction, MmaShape};
-use ptxc_testkit::compare::{Tolerance, compare};
 use ptxc_testkit::tensorized::{
     Blocks, Layout, Operands, TileLoops, exact_inputs, product, tensorized,
 };
@@ -40,7 +39,8 @@ fn every_mma_matches_the_interpreter_exactly_with_either_storage_of_b() {
                 let kernel = lowered(&compute, layout, instruction);
                 let case = format!("{instruction:?}, b {b_order:?}, tile loops {tile_loops:?}");
 
-                let _outputs = match_interpreter(&kernel, &exact_inputs(&compute), &case).unwrap();
+                let _outputs =
+                    match_interpreter_exactly(&kernel, &exact_inputs(&compute), &case).unwrap();
             }
         }
     }
@@ -69,7 +69,7 @@ fn operands_read_at_strided_or_overlapping_rows_match_the_interpreter_exactly() 
         let compute = product(instruction, [32, 16, 32], operands);
         let kernel = lowered(&compute, layout, instruction);
 
-        let _outputs = match_interpreter(&kernel, &exact_inputs(&compute), "").unwrap();
+        let _outputs = match_interpreter_exactly(&kernel, &exact_inputs(&compute), "").unwrap();
     }
 }
 
@@ -95,17 +95,11 @@ fn random_halves(compute: &ComputeDef) -> Vec<HostTensor> {
 #[test]
 fn an_f16_product_on_random_inputs_is_within_tolerance_of_the_interpreter() {
     let instruction = target().mma_instruction(F16_SHAPE, DType::F16, DType::F32).unwrap();
-    let depth = 96;
-    let extents = [48, 40, depth];
+    let extents = [48, 40, 96];
     let compute = product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor));
     let layout =
         Layout { tiles: [1, 2], warps: 2, blocks: Blocks::Bound, tile_loops: TileLoops::Unrolled };
     let kernel = lowered(&compute, layout, instruction);
-    let inputs = random_halves(&compute);
 
-    let expected = ptxc_loop::run(&kernel, &inputs).unwrap();
-    let actual = run_on_device(&kernel, &inputs);
-
-    let tolerance = Tolerance::for_dtype(DType::F32).for_reduction(ElementCount::new(depth));
-    compare(&actual[0], &expected[0], tolerance).unwrap();
+    let _outputs = match_interpreter(&kernel, &random_halves(&compute), "").unwrap();
 }
