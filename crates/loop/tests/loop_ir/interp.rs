@@ -32,7 +32,7 @@ pub(crate) fn ints(output: &HostTensor) -> Vec<i64> {
 
 /// `out[i, j] = sum over k of x[i, j, k]` on `i32`, whose sums are exact
 /// in any order.
-fn int_reduction(extents: [u64; 3]) -> Arc<ComputeDef> {
+pub(crate) fn int_reduction(extents: [u64; 3]) -> Arc<ComputeDef> {
     let [i_extent, j_extent, k_extent] = extents;
     let mut compute = ComputeBuilder::new(ComputeName::new("int_sum"));
     let x = compute.input(TensorName::new("x"), DType::I32, shape(&extents));

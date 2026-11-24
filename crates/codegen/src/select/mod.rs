@@ -39,9 +39,11 @@ pub enum CodegenError {
     TooLarge,
 }
 
-/// The PTX module holding `kernel`, for `target`.
+/// The PTX module holding `kernel`, for `target`, with its unrolled loops
+/// expanded first.
 pub fn generate(kernel: &LoweredKernel, target: &Target) -> Result<PtxModule, CodegenError> {
-    let mut selector = Selector::new(kernel);
+    let kernel = ptxc_loop::unrolled(kernel);
+    let mut selector = Selector::new(&kernel);
     selector.parameters();
     selector.thread_indices();
     selector.statement(kernel.body())?;

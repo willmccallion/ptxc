@@ -40,8 +40,9 @@ impl Selector<'_> {
         match stmt {
             Stmt::Seq(stmts) => stmts.iter().try_for_each(|stmt| self.statement(stmt)),
             Stmt::For { var, extent, body, .. } => {
-                // NOTE: unrolled and vectorized loops run as serial ones in
-                // M2; ptxas unrolls short constant loops itself.
+                // NOTE: a vectorized loop runs as a serial one until
+                // vector loads and stores come (#111). Unrolled loops never
+                // reach here: `generate` expands them first.
                 let extent = i64::try_from(extent.get()).map_err(|_| CodegenError::TooLarge)?;
                 let counter = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
                 let _previous = self.vars.insert(*var, counter);
