@@ -511,9 +511,12 @@ and the GPU tests check them.
   `ld.v2`/`ld.v4.b32` and `st.v2`/`st.v4.b32`; every buffer starts 256-byte
   aligned. Any other vectorized loop runs serially.
 - Index arithmetic is numbered once a block, a loop body's entries
-  dropped when it ends. Index expressions that divide and read only grid
-  and block indices, such as a block's place in a grid fused onto
-  `blockIdx.x`, are computed once at the kernel's start. A floored
+  dropped when it ends. Index expressions that divide and read no variable
+  a scope binds are computed once at its start: at the kernel's, those
+  reading only grid and block indices, such as a block's place in a grid
+  fused onto `blockIdx.x`; at a loop body's, those its own loops, gathers
+  and fragment elements do not change, such as a pipelined loop's slot,
+  which every guarded load in the body then reuses. A floored
   division or modulo by a power of two is a shift or a mask; by another
   constant, where the dividend's range (from the launch, loops and
   fragment shapes) is known to lie in `0..2^32`, it is 32-bit unsigned

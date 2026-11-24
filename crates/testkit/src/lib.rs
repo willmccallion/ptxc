@@ -7,6 +7,7 @@ pub mod generate;
 pub mod golden;
 pub mod lowered;
 pub mod onnx_tests;
+pub mod pipelined;
 pub mod ptxas;
 pub mod reference;
 pub mod shrink;

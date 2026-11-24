@@ -1,22 +1,26 @@
-//! The index expressions a kernel computes once, at its start: every
-//! largest one that divides and reads only grid and block indices, which
-//! no loop or fragment element changes, such as the block's place in a
-//! grid fused onto `blockIdx.x`. Value numbering then reuses their
-//! registers everywhere, where each loop body or fragment element would
-//! otherwise divide afresh. Cheaper arithmetic stays where it is used, so
-//! it holds no register for the whole kernel.
+//! The index expressions computed once at the start of a scope, the kernel
+//! or a loop body: every largest one that divides and reads no variable the
+//! scope binds, such as the block's place in a grid fused onto
+//! `blockIdx.x` for the kernel, or a pipelined loop's slot for its body.
+//! Value numbering then reuses their registers everywhere in the scope,
+//! where each nested branch, loop body or fragment element would otherwise
+//! divide afresh. Cheaper arithmetic stays where it is used, so it holds no
+//! register for the whole scope.
 
-use ptxc_loop::{Expr, ExprId, KernelVar, LoweredKernel, Stmt, TileAccess, ValueExpr};
+use ptxc_loop::{Expr, ExprId, LoweredKernel, Stmt, TileAccess, ValueExpr, VarId};
 use std::collections::{HashMap, HashSet};
 
-/// Every largest index expression in `kernel`'s body that divides and
-/// reads only grid and block indices, in the order the body first reads
-/// them.
-pub(super) fn invariant_indices(kernel: &LoweredKernel) -> Vec<ExprId> {
+/// Every largest index expression in `scope`, a statement of `kernel`,
+/// that divides and reads no variable `scope` binds, in the order `scope`
+/// first reads them.
+pub(super) fn invariant_indices(kernel: &LoweredKernel, scope: &Stmt) -> Vec<ExprId> {
     let mut roots = Vec::new();
-    statement_roots(kernel.body(), &mut roots);
+    statement_roots(scope, &mut roots);
+    let mut bound = HashSet::new();
+    bound_vars(scope, &mut bound);
     let mut finder = Finder {
         kernel,
+        bound,
         invariant: HashMap::new(),
         divides: HashMap::new(),
         seen: HashSet::new(),
@@ -26,6 +30,30 @@ pub(super) fn invariant_indices(kernel: &LoweredKernel) -> Vec<ExprId> {
         finder.largest(root);
     }
     finder.found
+}
+
+/// The variables `stmt` binds: its loops', gathers' and fragment elements'.
+fn bound_vars(stmt: &Stmt, bound: &mut HashSet<VarId>) {
+    match stmt {
+        Stmt::Seq(stmts) => stmts.iter().for_each(|stmt| bound_vars(stmt, bound)),
+        Stmt::For { var, body, .. } | Stmt::LoadIndex { var, body, .. } => {
+            let _new = bound.insert(*var);
+            bound_vars(body, bound);
+        }
+        Stmt::FragmentEach { row, column, body, .. } => {
+            bound.extend([*row, *column]);
+            bound_vars(body, bound);
+        }
+        Stmt::If { then: body, .. } | Stmt::Alloc { body, .. } => bound_vars(body, bound),
+        Stmt::Store { .. }
+        | Stmt::Barrier
+        | Stmt::AsyncCopy { .. }
+        | Stmt::AsyncCommit
+        | Stmt::AsyncWait { .. }
+        | Stmt::FragmentFill { .. }
+        | Stmt::FragmentLoad { .. }
+        | Stmt::Mma { .. } => {}
+    }
 }
 
 /// The index expressions `stmt` reads, directly or in its values.
@@ -83,6 +111,8 @@ fn value_roots(value: &ValueExpr, roots: &mut Vec<ExprId>) {
 /// Finds the largest invariant expressions, remembering which it has seen.
 struct Finder<'k> {
     kernel: &'k LoweredKernel,
+    /// The variables the scope binds, which invariant expressions avoid.
+    bound: HashSet<VarId>,
     invariant: HashMap<ExprId, bool>,
     divides: HashMap<ExprId, bool>,
     seen: HashSet<ExprId>,
@@ -118,14 +148,14 @@ impl Finder<'_> {
         divides
     }
 
-    /// Whether `id` reads only grid and block indices.
+    /// Whether `id` reads no variable the scope binds.
     fn is_invariant(&mut self, id: ExprId) -> bool {
         if let Some(&known) = self.invariant.get(&id) {
             return known;
         }
         let invariant = match self.kernel.exprs().get(id) {
             Expr::Const(_) => true,
-            Expr::Var(var) => matches!(self.kernel.vars()[var], KernelVar::Thread { .. }),
+            Expr::Var(var) => !self.bound.contains(&var),
             compound => operands(compound)
                 .is_some_and(|[a, b]| self.is_invariant(a) && self.is_invariant(b)),
         };

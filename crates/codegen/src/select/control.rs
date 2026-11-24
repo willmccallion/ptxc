@@ -1,6 +1,6 @@
 //! Selects loops, branches and barriers.
 
-use super::{CodegenError, Selector};
+use super::{CodegenError, Selector, hoist};
 use crate::ast::{B64, Compare, CvtMode, PtxType, Reg, Signedness, Special, Value};
 use ptxc_core::Dim;
 use ptxc_loop::{Condition, ForKind, Interval, KernelVar, Stmt, ThreadAxis, VarId};
@@ -129,6 +129,9 @@ impl Selector<'_> {
             Value::<B64>::int(extent),
         );
         self.builder.branch(exit, Some((done, true)));
+        for invariant in hoist::invariant_indices(self.kernel, body) {
+            let _held = self.index(invariant)?;
+        }
         self.statement(body)?;
         self.builder.increment(counter);
         self.builder.branch(top, None);
