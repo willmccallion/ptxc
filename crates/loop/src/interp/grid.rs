@@ -5,7 +5,7 @@ use super::memory::Memory;
 use super::ops;
 use super::race::{GlobalWriters, PhaseLog};
 use super::value::{Value, wrap};
-use super::warp::{Tile, warp_of};
+use super::warp::warp_of;
 use crate::expr::{ExprId, VarId};
 use crate::schedule::ThreadAxis;
 use crate::stmt::{BufferId, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
@@ -145,13 +145,10 @@ impl Block<'_, '_> {
             }
             Stmt::FragmentFill { fragment, value } => self.fill(*fragment, *value, active),
             Stmt::FragmentLoad { fragment, source, at } => {
-                self.copy_tile(Tile::Load { fragment: *fragment, other: *source, at: *at }, active)
+                self.load_tile(*fragment, (*source, *at), active)
             }
             Stmt::Mma { instruction, a, b, accumulator } => {
                 self.mma(*instruction, [*a, *b, *accumulator], active)
-            }
-            Stmt::FragmentStore { fragment, target, at } => {
-                self.copy_tile(Tile::Store { fragment: *fragment, other: *target, at: *at }, active)
             }
             Stmt::FragmentEach { fragment, row, column, body } => {
                 self.each_element(*fragment, [*row, *column], body, active)

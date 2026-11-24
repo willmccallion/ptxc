@@ -79,10 +79,6 @@ impl Unroller {
                 b: self.tile(*b),
                 accumulator: self.tile(*accumulator),
             },
-            Stmt::FragmentStore { fragment, target, at } => {
-                let at = TileAccess { origin: self.index(at.origin), ..*at };
-                Stmt::FragmentStore { fragment: self.tile(*fragment), target: *target, at }
-            }
             Stmt::FragmentEach { fragment, row, column, body } => Stmt::FragmentEach {
                 fragment: self.tile(*fragment),
                 row: *row,
@@ -188,48 +184,40 @@ mod tests {
     use ptxc_core::{DType, Dim, ElementCount};
 
     #[test]
-    fn an_unrolled_loop_puts_each_copy_of_a_tile_load_and_store_at_its_own_origin() {
+    fn an_unrolled_loop_puts_each_copy_of_a_tile_load_at_its_own_origin_and_tile() {
         let mut kernel = warp_kernel();
         let mut buffer = |name: &str, scope| {
             let (name, size) = (TensorName::new(name), ElementCount::new(512));
             kernel.buffers.push(Buffer { name, dtype: DType::F16, scope, size })
         };
         let tile = buffer("tile", MemScope::Shared);
-        let staged = buffer("staged", MemScope::Shared);
         let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
         let fragment = buffer("fragment", MemScope::Fragment(shape));
         let step = kernel.vars.push(KernelVar::Loop(crate::compute::VarName::new("step")));
         let (step_expr, tile_size) = (kernel.exprs.var(step), kernel.exprs.constant(256));
         let origin = kernel.exprs.mul(step_expr, tile_size);
         let at = TileAccess { origin, stride: Dim::new(16), order: TileOrder::RowMajor };
-        let whole = FragmentTile { buffer: fragment, tile: kernel.exprs.constant(0) };
-        let copy = Stmt::Seq(vec![
-            Stmt::FragmentLoad { fragment: whole, source: tile, at },
-            Stmt::FragmentStore { fragment: whole, target: staged, at },
-        ]);
+        let each_step = FragmentTile { buffer: fragment, tile: step_expr };
+        let load = Stmt::FragmentLoad { fragment: each_step, source: tile, at };
         kernel.body = Stmt::For {
             var: step,
             extent: Dim::new(2),
             kind: ForKind::Unrolled,
-            body: Box::new(copy),
+            body: Box::new(load),
         };
 
         let expanded = unrolled(&kernel);
 
         let Stmt::Seq(copies) = expanded.body() else { panic!("{:?}", expanded.body()) };
-        let origins: Vec<[Expr; 2]> = copies
+        let places: Vec<[Expr; 2]> = copies
             .iter()
             .map(|copy| match copy {
-                Stmt::Seq(pair) => match pair.as_slice() {
-                    [
-                        Stmt::FragmentLoad { at: load, .. },
-                        Stmt::FragmentStore { at: store, .. },
-                    ] => [load.origin, store.origin].map(|origin| expanded.exprs().get(origin)),
-                    other => panic!("{other:?}"),
-                },
+                Stmt::FragmentLoad { fragment, at, .. } => {
+                    [at.origin, fragment.tile].map(|id| expanded.exprs().get(id))
+                }
                 other => panic!("{other:?}"),
             })
             .collect();
-        assert_eq!(origins, [[Expr::Const(0); 2], [Expr::Const(256); 2]]);
+        assert_eq!(places, [[Expr::Const(0); 2], [Expr::Const(256), Expr::Const(1)]]);
     }
 }

@@ -21,15 +21,6 @@ pub(super) const fn warp_of(thread: usize) -> usize {
     thread / WARP
 }
 
-/// A copy between a fragment's tile and another buffer.
-#[derive(Clone, Copy)]
-pub(super) enum Tile {
-    /// From `other` into `fragment`.
-    Load { fragment: FragmentTile, other: BufferId, at: TileAccess },
-    /// From `fragment` into `other`.
-    Store { fragment: FragmentTile, other: BufferId, at: TileAccess },
-}
-
 /// One warp's tile of a fragment buffer: its shape and where it starts.
 #[derive(Clone, Copy)]
 struct Placed {
@@ -97,28 +88,29 @@ impl Block<'_, '_> {
         })
     }
 
-    /// Copies `tile` element by element for each warp.
-    pub(super) fn copy_tile(&mut self, tile: Tile, active: &[usize]) -> Result<(), RunError> {
-        self.each_warp(active, |block, lead| block.copy_warp_tile(tile, lead))
+    /// Loads `fragment`'s tile element by element from `source`, where
+    /// `at` places it, for each warp.
+    pub(super) fn load_tile(
+        &mut self,
+        fragment: FragmentTile,
+        (source, at): (BufferId, TileAccess),
+        active: &[usize],
+    ) -> Result<(), RunError> {
+        self.each_warp(active, |block, lead| block.load_warp_tile(fragment, (source, at), lead))
     }
 
-    fn copy_warp_tile(&mut self, tile: Tile, lead: usize) -> Result<(), RunError> {
-        let (Tile::Load { fragment, other, at } | Tile::Store { fragment, other, at }) = tile;
+    fn load_warp_tile(
+        &mut self,
+        fragment: FragmentTile,
+        (source, at): (BufferId, TileAccess),
+        lead: usize,
+    ) -> Result<(), RunError> {
         let placed = self.placed(fragment, lead)?;
         let origin = self.uniform(at.origin, lead)?;
         for (row, column) in placed.elements() {
             let elsewhere = at.position(origin, row, column).ok_or(RunError::Index)?;
-            let own = placed.position(row, column)?;
-            match tile {
-                Tile::Load { .. } => {
-                    let value = self.load(other, elsewhere, lead)?;
-                    self.store(placed.buffer, own, value, lead)?;
-                }
-                Tile::Store { .. } => {
-                    let value = self.load(placed.buffer, own, lead)?;
-                    self.store(other, elsewhere, value, lead)?;
-                }
-            }
+            let value = self.load(source, elsewhere, lead)?;
+            self.store(placed.buffer, placed.position(row, column)?, value, lead)?;
         }
         Ok(())
     }

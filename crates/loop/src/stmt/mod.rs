@@ -122,16 +122,6 @@ pub enum Stmt {
         /// The `m × n` accumulator, read and written.
         accumulator: FragmentTile,
     },
-    /// Stores `fragment`'s tile to `target` at `at`; the whole warp
-    /// executes it at once.
-    FragmentStore {
-        /// The fragment's tile stored.
-        fragment: FragmentTile,
-        /// The buffer the tile goes to.
-        target: BufferId,
-        /// Where the tile goes in `target`.
-        at: TileAccess,
-    },
     /// Runs `body` once for each element of `fragment`'s tile, with `row`
     /// and `column` its position and `ValueExpr::Element` its value. The
     /// warp's lanes share the elements as code generation chooses, so each
@@ -160,7 +150,6 @@ impl Stmt {
             Self::Store { value, .. } => value.reads(buffer),
             Self::Barrier | Self::FragmentFill { .. } => false,
             Self::FragmentLoad { source, .. } => *source == buffer,
-            Self::FragmentStore { fragment, .. } => fragment.buffer == buffer,
             Self::Mma { a, b, accumulator, .. } => {
                 [a, b, accumulator].iter().any(|operand| operand.buffer == buffer)
             }
@@ -211,7 +200,6 @@ mod tests {
         let buffer = BufferId::new;
         let whole = |index| FragmentTile { buffer: buffer(index), tile: ExprId::new(0) };
         let load = Stmt::FragmentLoad { fragment: whole(1), source: buffer(2), at };
-        let store = Stmt::FragmentStore { fragment: whole(1), target: buffer(2), at };
         let fill = Stmt::FragmentFill { fragment: whole(1), value: Scalar::bool(false) };
         let shape = MmaShape { m: Dim::new(16), n: Dim::new(8), k: Dim::new(16) };
         let instruction =
@@ -219,7 +207,6 @@ mod tests {
         let mma = Stmt::Mma { instruction, a: whole(3), b: whole(4), accumulator: whole(5) };
 
         assert_eq!([load.reads(buffer(2)), load.reads(buffer(1))], [true, false]);
-        assert_eq!([store.reads(buffer(1)), store.reads(buffer(2))], [true, false]);
         assert!(!fill.reads(buffer(1)));
         assert!((3..=5).all(|operand| mma.reads(buffer(operand))) && !mma.reads(buffer(6)));
         let each = |body| Stmt::FragmentEach {

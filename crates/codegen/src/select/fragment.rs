@@ -78,8 +78,7 @@ fn collect_mmas(stmt: &Stmt, mmas: &mut Vec<(MmaInstruction, [FragmentTile; 3])>
         Stmt::Store { .. }
         | Stmt::Barrier
         | Stmt::FragmentFill { .. }
-        | Stmt::FragmentLoad { .. }
-        | Stmt::FragmentStore { .. } => {}
+        | Stmt::FragmentLoad { .. } => {}
     }
 }
 
@@ -216,27 +215,6 @@ impl Selector<'_> {
             let slot = self.slot(fragment, element)?;
             self.store_at(dtype, slot, value);
         }
-        Ok(())
-    }
-
-    /// Stores the lane's elements of `fragment`'s tile to `target`, where
-    /// `at` places the tile.
-    pub(super) fn store_fragment(
-        &mut self,
-        fragment: FragmentTile,
-        (target, at): (BufferId, TileAccess),
-    ) -> Result<(), CodegenError> {
-        let layout = self.fragment(fragment.buffer)?.layout();
-        let dtype = self.kernel.buffers()[fragment.buffer].dtype;
-        for element in 0..layout.elements() {
-            let place = self.lane_place(layout, element)?;
-            let position = self.tile_position(at, place)?;
-            let slot = self.slot(fragment, element)?;
-            let value = self.load_at(dtype, slot);
-            let address = self.address_at(target, position)?;
-            self.store_at(self.kernel.buffers()[target].dtype, address, value);
-        }
-        self.known.forget_reads_of(target);
         Ok(())
     }
 

@@ -5,7 +5,7 @@
 use super::{Scope, VerifyError};
 use crate::compute::Scalar;
 use crate::expr::{Interval, VarId};
-use crate::stmt::{Access, BufferId, FragmentShape, FragmentTile, MemScope, Stmt, TileAccess};
+use crate::stmt::{BufferId, FragmentShape, FragmentTile, MemScope, Stmt, TileAccess};
 use ptxc_core::{DType, Dim};
 use ptxc_target::{MmaInstruction, ThreadsPerBlock};
 
@@ -67,28 +67,6 @@ impl Scope<'_> {
         }
         self.tile(source, at, shape)?;
         same_type("a fragment load", self.dtype(fragment), found.dtype)
-    }
-
-    pub(super) fn tile_store(
-        &self,
-        fragment: FragmentTile,
-        target: BufferId,
-        at: TileAccess,
-    ) -> Result<(), VerifyError> {
-        self.whole_warps()?;
-        let shape = self.fragment(fragment)?;
-        let found = &self.kernel.buffers()[target];
-        let input = self
-            .kernel
-            .params()
-            .iter()
-            .any(|param| param.buffer == target && param.access == Access::Read);
-        if input {
-            return Err(VerifyError::StoreToInput(found.name.clone()));
-        }
-        self.tile(target, at, shape)?;
-        let place = format!("a fragment store to {}", found.name);
-        same_type(&place, found.dtype, self.dtype(fragment))
     }
 
     /// `accumulator += a · b`: each fragment of the shape and type

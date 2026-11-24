@@ -57,8 +57,31 @@ pub(crate) fn mma_kernel(instruction: MmaInstruction, b_order: TileOrder) -> Low
     mma_kernel_storing(instruction, b_order, |kernel, accumulator, c| {
         let origin = kernel.exprs.constant(0);
         let at = TileAccess { origin, stride: instruction.shape.n, order: row_major };
-        Stmt::FragmentStore { fragment: accumulator, target: c, at }
+        store_each(kernel, accumulator, (c, at))
     })
+}
+
+/// Stores each element of `fragment`'s tile to `target`, where `at`
+/// places the tile, through a `FragmentEach`.
+pub(crate) fn store_each(
+    kernel: &mut LoweredKernel,
+    fragment: FragmentTile,
+    (target, at): (BufferId, TileAccess),
+) -> Stmt {
+    let row = kernel.vars.push(KernelVar::Loop(VarName::new("row")));
+    let column = kernel.vars.push(KernelVar::Loop(VarName::new("column")));
+    let exprs = &mut kernel.exprs;
+    let (row_expr, column_expr) = (exprs.var(row), exprs.var(column));
+    let (outer, inner) = match at.order {
+        TileOrder::RowMajor => (row_expr, column_expr),
+        TileOrder::Transposed => (column_expr, row_expr),
+    };
+    let stride = exprs.constant(i64::try_from(at.stride.get()).unwrap());
+    let scaled = exprs.mul(outer, stride);
+    let within = exprs.add(scaled, inner);
+    let index = exprs.add(at.origin, within);
+    let store = Stmt::Store { buffer: target, index, value: ValueExpr::Element(fragment.buffer) };
+    Stmt::FragmentEach { fragment, row, column, body: Box::new(store) }
 }
 
 /// As `mma_kernel`, with `store` making the statement that stores the

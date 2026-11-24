@@ -81,9 +81,6 @@ impl Selector<'_> {
             Stmt::Mma { instruction, a, b, accumulator } => {
                 self.mma(*instruction, [*a, *b, *accumulator])
             }
-            Stmt::FragmentStore { fragment, target, at } => {
-                self.store_fragment(*fragment, (*target, *at))
-            }
             Stmt::FragmentEach { fragment, row, column, body } => {
                 self.each_element(*fragment, [*row, *column], body)
             }

@@ -126,9 +126,6 @@ impl KernelPrinter<'_> {
             Stmt::Mma { instruction, a, b, accumulator } => {
                 self.mma(out, &pad, *instruction, [*a, *b, *accumulator]);
             }
-            Stmt::FragmentStore { fragment, target, at } => {
-                self.store_tile(out, &pad, *fragment, (*target, *at));
-            }
             Stmt::FragmentEach { fragment, row, column, body } => {
                 self.each(out, depth, (*fragment, [*row, *column]), body);
             }

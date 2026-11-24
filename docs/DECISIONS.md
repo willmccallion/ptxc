@@ -1074,3 +1074,20 @@ the old one.
   document how tensor cores round a sum, so GPU and interpreter are
   compared bit for bit on inputs whose sums are exact in any order, and
   within the type's tolerance otherwise.
+
+## D59. Fragments leave a warp only through `FragmentEach`
+
+- **Context:** D58 gave fragments a store statement, writing a tile to
+  memory at a `TileAccess`. Tensorizing then added `FragmentEach`, which
+  runs a body for each element of a tile with its row and column bound, so
+  the output's own store, guards and epilogue apply to an accumulator. No
+  schedule emits the tile store, and on `sm_89` it would select to the
+  same per-element stores a `FragmentEach` does: `stmatrix` needs `sm_90`.
+- **Options:** keep both, or keep only `FragmentEach`.
+- **Choice:** only `FragmentEach`. A tile store is a `FragmentEach` whose
+  body stores the element at the tile's position.
+- **Reason:** one way out of a fragment, which every executor, the
+  verifier and codegen implement and every schedule exercises, rather than
+  two, one of them untested. A target with `stmatrix` can select it for a
+  `FragmentEach` whose body is a plain store into shared memory.
+- **Supersedes:** the tile store among D58's fragment statements.

@@ -26,20 +26,6 @@ impl KernelPrinter<'_> {
         out.push('\n');
     }
 
-    /// `tile %target[origin] stride s = %f[t]`.
-    pub(super) fn store_tile(
-        &self,
-        out: &mut String,
-        pad: &str,
-        fragment: FragmentTile,
-        (target, at): (BufferId, TileAccess),
-    ) {
-        out.push_str(pad);
-        out.push_str("tile ");
-        self.tile(out, target, at);
-        let _infallible = writeln!(out, " = {}", self.fragment(fragment));
-    }
-
     /// `%c[t] = mma.m16n8k16.f16.f32(%a[t], %b[t], %c[t])`.
     pub(super) fn mma(
         &self,

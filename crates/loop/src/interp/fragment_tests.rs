@@ -13,7 +13,7 @@ use crate::stmt::{
     Access, Buffer, BufferId, FragmentShape, FragmentTile, KernelParam, KernelVar, LoweredKernel,
     MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
-use crate::test_kernels::{mma_kernel, mma_kernel_storing, warp_kernel};
+use crate::test_kernels::{mma_kernel, mma_kernel_storing, store_each, warp_kernel};
 use crate::verify::VerifyError;
 use ptxc_core::convert::int_to_f64;
 use ptxc_core::{DType, Dim, ElementCount, HostTensor, Idx, Shape};
@@ -201,7 +201,7 @@ fn two_warps() -> LoweredKernel {
     let whole = FragmentTile { buffer: fragment, tile: kernel.exprs.constant(0) };
     let per_warp = Stmt::Seq(vec![
         Stmt::FragmentLoad { fragment: whole, source: tile, at },
-        Stmt::FragmentStore { fragment: whole, target: y, at },
+        store_each(&mut kernel, whole, (y, at)),
     ]);
     let body = Stmt::Seq(vec![
         copy,
@@ -282,10 +282,11 @@ fn a_fragment_buffer_holds_one_tile_per_index() {
     let tile = |index| FragmentTile { buffer: pair, tile: index };
     let at = TileAccess { origin: first, stride: Dim::new(8), order: TileOrder::RowMajor };
     let fill = |value| Scalar::float(DType::F32, value).unwrap();
+    let store = store_each(&mut kernel, tile(second), (out, at));
     let body = Stmt::Seq(vec![
         Stmt::FragmentFill { fragment: tile(first), value: fill(1.0) },
         Stmt::FragmentFill { fragment: tile(second), value: fill(2.0) },
-        Stmt::FragmentStore { fragment: tile(second), target: out, at },
+        store,
     ]);
     kernel.body = Stmt::Alloc { buffer: pair, body: Box::new(body) };
 
