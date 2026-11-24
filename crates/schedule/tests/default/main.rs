@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
 mod matmul;
+mod matmul_mma;
 
 /// Property tests run `default` cases, or `PROPTEST_CASES` when set, so a
 /// longer run needs no code change (`ProptestConfig::with_cases` alone

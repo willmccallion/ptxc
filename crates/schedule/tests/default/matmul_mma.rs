@@ -1,0 +1,110 @@
+//! Matrix products tiled on tensor cores where the target has an `mma`
+//! for their types: the kernel the rule builds, and that it computes
+//! exactly what the serial schedule does on inputs whose sums are exact.
+
+use crate::matmul::{Layout, PLAIN, product, tiled_and_serial};
+use crate::{launch_dims, scheduled, shape};
+use proptest::prelude::*;
+use proptest::sample::select;
+use ptxc_core::float::Overflow;
+use ptxc_core::{DType, Dim};
+use ptxc_loop::{
+    BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ReduceOp, TensorExpr, TensorName, TileOrder,
+    VarName,
+};
+use ptxc_schedule::default_schedule;
+use ptxc_target::{MmaShape, SmVersion, Target, preset};
+use ptxc_testkit::golden;
+use ptxc_testkit::tensorized::{self, Operands, exact_inputs};
+use std::sync::Arc;
+
+fn target() -> Target {
+    preset(SmVersion::SM_89).unwrap()
+}
+
+fn on_tensor_cores(compute: Arc<ComputeDef>) -> bool {
+    default_schedule(compute, &target()).unwrap().lower().multiplies_on_tensor_cores()
+}
+
+#[test]
+fn an_f16_product_gives_blocks_of_four_warps_a_64_by_64_tile_each() {
+    let compute = product(DType::F16, [2, 70, 45, 20], Layout { a_transposed: true, ..PLAIN });
+    let kernel = default_schedule(Arc::clone(&compute), &target()).unwrap().lower();
+
+    let (text, launch) = scheduled(compute);
+
+    assert_eq!(launch_dims(launch), ([4, 1, 1], [32, 2, 2]));
+    assert_eq!(kernel.smem().get(), 2 * 64 * 32 * 2);
+    golden::check("matmul_mma.txt", &text).unwrap();
+}
+
+/// An 8-bit integer product summed in `i32`, which the `mma` table takes.
+fn integer_product(multiplicands: DType) -> Arc<ComputeDef> {
+    let shape = MmaShape { m: Dim::new(16), n: Dim::new(8), k: Dim::new(32) };
+    let instruction = target().mma_instruction(shape, multiplicands, DType::I32).unwrap();
+    let extents = [20, 12, 40];
+    tensorized::product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor))
+}
+
+/// `out[i, j] = sum over k of a[i, k] * b[k, j]` with `a` f16 and `b`
+/// bf16, both widened to f32, which no `mma` multiplies.
+fn mixed_product() -> Arc<ComputeDef> {
+    let mut compute = ComputeBuilder::new(ComputeName::new("mixed"));
+    let lhs = compute.input(TensorName::new("a"), DType::F16, shape(&[16, 16]));
+    let rhs = compute.input(TensorName::new("b"), DType::Bf16, shape(&[16, 8]));
+    let (_, row) = compute.spatial(VarName::new("i"), Dim::new(16));
+    let (_, column) = compute.spatial(VarName::new("j"), Dim::new(8));
+    let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(16));
+    let widened = |tensor, index| {
+        let value = Box::new(TensorExpr::Load { tensor, index });
+        Box::new(TensorExpr::Cast { to: DType::F32, overflow: Overflow::Saturate, value })
+    };
+    let body = TensorExpr::Binary(
+        BinaryOp::Mul,
+        widened(lhs, vec![row, k]),
+        widened(rhs, vec![k, column]),
+    );
+    let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![k_axis], body: Box::new(body) };
+    compute.output(TensorName::new("out"), sum);
+    Arc::new(compute.finish().unwrap())
+}
+
+#[test]
+fn a_product_goes_to_tensor_cores_only_where_an_mma_takes_its_types() {
+    let extents = [1, 20, 12, 40];
+    let floats = [DType::F16, DType::Bf16, DType::F8E4M3Fn, DType::F8E5M2, DType::F32]
+        .map(|dtype| on_tensor_cores(product(dtype, extents, PLAIN)));
+    let integers = [DType::I8, DType::U8].map(|dtype| on_tensor_cores(integer_product(dtype)));
+
+    assert_eq!(floats, [true, true, true, true, false]);
+    assert_eq!(integers, [true, true]);
+    assert!(!on_tensor_cores(mixed_product()));
+}
+
+#[test]
+fn an_eight_bit_product_on_tensor_cores_matches_the_serial_schedule_exactly() {
+    for compute in [integer_product(DType::I8), integer_product(DType::U8)] {
+        let [tiled, serial] = tiled_and_serial(&compute, &exact_inputs(&compute));
+
+        assert_eq!(tiled, serial);
+    }
+}
+
+proptest! {
+    #![proptest_config(crate::cases(32))]
+
+    /// Every layout and overhang of an f16, bf16 or FP8 product gives the
+    /// serial schedule's result on inputs whose sums are exact.
+    #[test]
+    fn a_product_on_tensor_cores_matches_the_serial_schedule_exactly(
+        dtype in select(vec![DType::F16, DType::Bf16, DType::F8E4M3Fn]),
+        extents in [1_u64..=2, 1_u64..=40, 1_u64..=40, 1_u64..=40],
+        (a_transposed, b_transposed, a_broadcast) in any::<(bool, bool, bool)>(),
+    ) {
+        let compute = product(dtype, extents, Layout { a_transposed, b_transposed, a_broadcast });
+
+        let [tiled, serial] = tiled_and_serial(&compute, &exact_inputs(&compute));
+
+        prop_assert_eq!(tiled, serial);
+    }
+}
