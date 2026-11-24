@@ -1091,3 +1091,32 @@ the old one.
   two, one of them untested. A target with `stmatrix` can select it for a
   `FragmentEach` whose body is a plain store into shared memory.
 - **Supersedes:** the tile store among D58's fragment statements.
+
+## D60. Tensor-core stages match the interpreter within tolerance
+
+- **Context:** every check of the GPU against the loop interpreter was
+  exact. Tensor cores round a sum their own way, which NVIDIA does not
+  document, so under D58 a kernel with `mma` matches bit for bit only on
+  inputs whose sums are exact in any order. Once the default schedule
+  multiplies f16 and bf16 matrices on tensor cores (#106), random inputs
+  in the family tests, fuzzing and the ONNX suite would differ in the last
+  bits of those sums.
+- **Options:**
+  - model a GPU's tensor-core rounding in the interpreter, which ties the
+    interpreter to one architecture's undocumented behaviour;
+  - keep tensor cores off by default, which leaves every f16 model on CUDA
+    cores;
+  - hold only tensor-core stages to a tolerance.
+- **Choice:** a GPU run whose lowered stages include one that multiplies
+  on tensor cores is compared with the loop interpreter within each
+  output type's tolerance from TESTING.md, widened for the longest axis
+  of those stages' arguments, which bounds their reductions. Integer
+  sums stay exact. Everything else is still compared exactly. Fuzzing
+  compares such a case only where it is continuous with moderate inputs,
+  as it already does with the reference, since a last-bit difference can
+  flip a later floor or comparison. Tests of tensor-core codegen keep
+  exact-sum inputs and compare exactly.
+- **Reason:** the interpreter stays the target-independent meaning of a
+  kernel, and every kernel without `mma` keeps the bit-for-bit check. A
+  wrong fragment layout, tile or step is far outside the tolerance, and
+  the exact-sum tests still pin tensor-core codegen bit for bit.

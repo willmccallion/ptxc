@@ -1,7 +1,7 @@
 //! One fuzz case checked across executors: the lowered graph on the loop
 //! interpreter against an independent result within tolerance, where there
 //! is one, and a backend, such as the GPU, against the loop interpreter
-//! exactly.
+//! exactly, or within tolerance where it multiplies on tensor cores (D60).
 
 use crate::commands::agreement::agree;
 use ptxc_core::{ElementCount, Evaluate, HostTensor};
@@ -10,7 +10,8 @@ use ptxc_interp::Interpreter;
 use ptxc_loop::RunError;
 use ptxc_testkit::compare::Tolerance;
 use ptxc_testkit::generate::{Case, Recipe};
-use ptxc_testkit::lowered::{LoweredError, run_lowered};
+use ptxc_testkit::lowered::LoweredError;
+use ptxc_testkit::sums::{SumRounding, interpreted};
 
 /// An executor checked beyond the interpreters.
 pub(super) type Backend<'a> = dyn Fn(&Graph, &[HostTensor]) -> Result<Vec<HostTensor>, String> + 'a;
@@ -54,7 +55,8 @@ pub(super) fn check_graph(
     expected: Expected,
     backend: Option<&Backend<'_>>,
 ) -> Result<(), Failure> {
-    let lowered = run_lowered(graph.clone(), inputs, ptxc_loop::run).map_err(lowering_failure)?;
+    let (lowered, rounding) = interpreted(graph.clone(), inputs).map_err(lowering_failure)?;
+    let continuous = !matches!(expected, Expected::Nothing);
     if let Some((source, expected)) = independent(graph, inputs, expected)? {
         let length = longest(inputs);
         agree(&lowered, &expected, |dtype| Tolerance::for_dtype(dtype).for_reduction(length))
@@ -63,7 +65,10 @@ pub(super) fn check_graph(
     let Some(backend) = backend else { return Ok(()) };
     let outputs =
         backend(graph, inputs).map_err(|error| mismatch(format!("the backend failed: {error}")))?;
-    agree(&outputs, &lowered, |_| Tolerance::Exact)
+    if !compares_backend(rounding, continuous) {
+        return Ok(());
+    }
+    agree(&outputs, &lowered, |dtype| rounding.tolerance(dtype))
         .map_err(|message| mismatch(format!("the backend against the loop interpreter: {message}")))
 }
 
@@ -83,6 +88,13 @@ fn independent(
         }
         Expected::OnnxRuntime(outputs) => Some(("ONNX Runtime", outputs)),
     })
+}
+
+/// Whether a backend's outputs are compared with the loop interpreter's:
+/// unless the case is discontinuous and a tensor core's last-bit difference
+/// in a sum could flip a later op.
+pub(super) const fn compares_backend(rounding: SumRounding, continuous: bool) -> bool {
+    continuous || matches!(rounding, SumRounding::Interpreted)
 }
 
 const fn mismatch(message: String) -> Failure {

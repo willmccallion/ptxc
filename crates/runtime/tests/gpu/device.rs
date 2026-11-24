@@ -5,7 +5,8 @@ use ptxc_core::{ByteSize, HostTensor, TensorData};
 use ptxc_cuda::{BlockDim, Context, Device, DeviceBuffer, DeviceOrdinal, Driver, GridDim};
 use ptxc_loop::{Access, ComputeDef, LoweredKernel, RunError};
 use ptxc_target::{BlockCount, SmVersion, Target, ThreadsPerBlock, preset};
-use ptxc_testkit::compare::{Tolerance, compare};
+use ptxc_testkit::compare::compare;
+use ptxc_testkit::sums::SumRounding;
 use std::sync::{Arc, OnceLock};
 
 pub(crate) fn target() -> Target {
@@ -89,19 +90,40 @@ pub(crate) fn check_against_interpreter(compute: ComputeDef, inputs: &[HostTenso
 }
 
 /// `kernel`'s outputs from the loop interpreter, after checking the GPU's
-/// match them exactly; `context` describes the case if they do not. An
-/// input the interpreter rejects leaves the GPU's result undefined, so it
-/// is returned as the interpreter's error, unchecked.
+/// match them: exactly, or within tolerance if it multiplies on tensor
+/// cores (D60). `context` describes the case if they do not. An input the
+/// interpreter rejects leaves the GPU's result undefined, so it is returned
+/// as the interpreter's error, unchecked.
 pub(crate) fn match_interpreter(
     kernel: &LoweredKernel,
     inputs: &[HostTensor],
     context: &str,
 ) -> Result<Vec<HostTensor>, RunError> {
+    let rounding = SumRounding::Interpreted.after(kernel, inputs);
+    match_interpreter_within(kernel, inputs, context, rounding)
+}
+
+/// As `match_interpreter`, but exactly even on tensor cores, for inputs
+/// whose sums are exact in any order.
+pub(crate) fn match_interpreter_exactly(
+    kernel: &LoweredKernel,
+    inputs: &[HostTensor],
+    context: &str,
+) -> Result<Vec<HostTensor>, RunError> {
+    match_interpreter_within(kernel, inputs, context, SumRounding::Interpreted)
+}
+
+fn match_interpreter_within(
+    kernel: &LoweredKernel,
+    inputs: &[HostTensor],
+    context: &str,
+    rounding: SumRounding,
+) -> Result<Vec<HostTensor>, RunError> {
     let expected = ptxc_loop::run(kernel, inputs)?;
     let actual = run_on_device(kernel, inputs);
     assert_eq!(actual.len(), expected.len());
     for (index, (actual, expected)) in actual.iter().zip(&expected).enumerate() {
-        if let Err(mismatch) = compare(actual, expected, Tolerance::Exact) {
+        if let Err(mismatch) = compare(actual, expected, rounding.tolerance(expected.dtype())) {
             panic!(
                 "{}: output {index} differs from the interpreter:\n{mismatch}\n{context}",
                 kernel.name()

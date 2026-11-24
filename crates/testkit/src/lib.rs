@@ -10,4 +10,5 @@ pub mod onnx_tests;
 pub mod ptxas;
 pub mod reference;
 pub mod shrink;
+pub mod sums;
 pub mod tensorized;

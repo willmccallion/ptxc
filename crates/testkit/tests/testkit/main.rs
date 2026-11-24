@@ -10,3 +10,4 @@ mod onnx_tests;
 mod ptxas;
 mod reference;
 mod shrink;
+mod sums;

@@ -6,8 +6,8 @@ use crate::report::{Failure, Outcome, Reason, Worst};
 use ptxc_core::HostTensor;
 use ptxc_onnx::{ImportError, ImportErrorKind, ImportOptions, Unsupported, import_model};
 use ptxc_testkit::compare::{self, Mismatch, Tolerance};
-use ptxc_testkit::lowered::run_lowered;
 use ptxc_testkit::onnx_tests::{DataSet, LoadError, Runnable, TestCase};
+use ptxc_testkit::sums::interpreted;
 
 /// The node tests' own tolerance.
 pub(super) const TOLERANCE: Tolerance = Tolerance::ONNX_SUITE;
@@ -57,11 +57,12 @@ fn of_data_set(case: &TestCase, data_set: &DataSet, index: usize, runner: &Runne
 }
 
 /// Whether the loop interpreter, running the lowered stages one by one,
-/// gives exactly `actual`, the GPU's outputs.
+/// gives `actual`, the GPU's outputs: exactly, or within tolerance where a
+/// stage multiplies on tensor cores (D60).
 fn agrees_with_loop_interpreter(runnable: &Runnable, actual: &[HostTensor]) -> Result<(), String> {
-    let lowered = run_lowered(runnable.graph.clone(), &runnable.inputs, ptxc_loop::run)
+    let (lowered, rounding) = interpreted(runnable.graph.clone(), &runnable.inputs)
         .map_err(|error| format!("the loop interpreter failed: {error}"))?;
-    agree(actual, &lowered, |_| Tolerance::Exact)
+    agree(actual, &lowered, |dtype| rounding.tolerance(dtype))
 }
 
 /// Why the model alone is unsupported, if it is: a test of sequences or

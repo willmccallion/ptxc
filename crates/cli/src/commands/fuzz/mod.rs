@@ -107,12 +107,14 @@ fn report(
 
 #[cfg(test)]
 mod tests {
-    use super::check::{Failure, check};
+    use super::check::{Failure, check, compares_backend};
     use super::fuzz;
+    use ptxc_core::ElementCount;
     use ptxc_core::HostTensor;
     use ptxc_graph::{BinaryOp, Graph, Op};
     use ptxc_testkit::generate::{Generator, Input, Node, Operand, Recipe, Seed, Source};
     use ptxc_testkit::lowered::run_lowered;
+    use ptxc_testkit::sums::SumRounding;
 
     fn on_loop_interpreter(
         graph: &Graph,
@@ -165,6 +167,18 @@ mod tests {
 
         let Err(Failure::Mismatch(message)) = verdict else { panic!("{verdict:?}") };
         assert!(message.starts_with("the backend against the loop interpreter: 0 outputs"));
+    }
+
+    #[test]
+    fn a_backend_on_tensor_cores_is_compared_only_on_a_continuous_case() {
+        let tensor_cores = SumRounding::TensorCores { longest: ElementCount::new(16) };
+
+        let compared = [true, false].map(|continuous| {
+            [SumRounding::Interpreted, tensor_cores]
+                .map(|rounding| compares_backend(rounding, continuous))
+        });
+
+        assert_eq!(compared, [[true, true], [true, false]]);
     }
 
     #[test]

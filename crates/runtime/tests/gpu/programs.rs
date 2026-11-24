@@ -1,6 +1,7 @@
 //! Whole programs: every op family's random cases compiled, saved and
-//! reloaded, loaded and run by the eager executor, matching the loop interpreter run stage by stage
-//! exactly.
+//! reloaded, loaded and run by the eager executor, matching the loop
+//! interpreter run stage by stage exactly, or within tolerance where a
+//! stage multiplies on tensor cores (D60).
 
 use crate::device::device;
 use proptest::strategy::{Strategy, ValueTree};
@@ -12,6 +13,7 @@ use ptxc_target::{SmVersion, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
 use ptxc_testkit::families;
 use ptxc_testkit::lowered::run_lowered;
+use ptxc_testkit::sums::interpreted;
 
 /// Cases drawn per family.
 const CASES_PER_FAMILY: usize = 8;
@@ -33,14 +35,16 @@ fn every_family_compiles_to_a_program_that_matches_the_interpreter() {
         let mut compared = 0;
         for _ in 0..CASES_PER_FAMILY {
             let (graph, inputs) = family.graphs.new_tree(&mut runner).unwrap().current();
-            let Ok(expected) = run_lowered(graph.clone(), &inputs, ptxc_loop::run) else {
+            let Ok((expected, rounding)) = interpreted(graph.clone(), &inputs) else {
                 continue;
             };
             let context = format!("family {}\n{}", family.name, ptxc_graph::text::print(&graph));
             let actual = run_program(graph, &inputs);
             assert_eq!(actual.len(), expected.len(), "{context}");
             for (index, (actual, expected)) in actual.iter().zip(&expected).enumerate() {
-                if let Err(mismatch) = compare(actual, expected, Tolerance::Exact) {
+                if let Err(mismatch) =
+                    compare(actual, expected, rounding.tolerance(expected.dtype()))
+                {
                     panic!("output {index} differs from the interpreter:\n{mismatch}\n{context}");
                 }
             }
