@@ -2,7 +2,6 @@
 
 use crate::compute::{TensorName, VarName, types};
 use crate::expr::{ExprId, Interval, VarId};
-use crate::schedule::ThreadAxis;
 use crate::stmt::{Access, BufferId, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
 use facts::Facts;
 use ptxc_core::DType;
@@ -68,25 +67,12 @@ pub fn verify(kernel: &LoweredKernel) -> Result<(), VerifyError> {
     for (var, definition) in kernel.vars().iter_enumerated() {
         if let KernelVar::Thread { axis, .. } = definition {
             let _new = scope.bound.insert(var);
-            if let Some(range) = launch_range(kernel, *axis) {
+            if let Some(range) = kernel.launch().range(*axis) {
                 scope.facts.insert_range(var, range);
             }
         }
     }
     scope.stmt(kernel.body())
-}
-
-fn launch_range(kernel: &LoweredKernel, axis: ThreadAxis) -> Option<Interval> {
-    let launch = kernel.launch();
-    let extent = match axis {
-        ThreadAxis::BlockX => launch.grid[0].get(),
-        ThreadAxis::BlockY => launch.grid[1].get(),
-        ThreadAxis::BlockZ => launch.grid[2].get(),
-        ThreadAxis::ThreadX => launch.block[0].get(),
-        ThreadAxis::ThreadY => launch.block[1].get(),
-        ThreadAxis::ThreadZ => launch.block[2].get(),
-    };
-    Interval::new(0, i64::from(extent) - 1)
 }
 
 /// What holds at a point of the kernel.

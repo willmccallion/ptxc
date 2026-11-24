@@ -3,9 +3,9 @@
 use super::Stmt;
 use super::buffer::{Access, Buffer, BufferId};
 use crate::compute::VarName;
-use crate::expr::{ExprArena, VarId};
+use crate::expr::{ExprArena, Interval, VarId};
 use crate::schedule::ThreadAxis;
-use ptxc_core::{IndexVec, KernelName};
+use ptxc_core::{Dim, IndexVec, KernelName};
 use ptxc_target::{BlockCount, SmemBytes, ThreadsPerBlock};
 
 /// What a variable of a lowered kernel stands for.
@@ -49,6 +49,21 @@ pub struct LaunchShape {
     pub grid: [BlockCount; 3],
     /// Threads along x, y and z.
     pub block: [ThreadsPerBlock; 3],
+}
+
+impl LaunchShape {
+    /// The values the index of `axis` takes, or `None` if it takes none.
+    pub(crate) fn range(self, axis: ThreadAxis) -> Option<Interval> {
+        let extent = match axis {
+            ThreadAxis::BlockX => self.grid[0].get(),
+            ThreadAxis::BlockY => self.grid[1].get(),
+            ThreadAxis::BlockZ => self.grid[2].get(),
+            ThreadAxis::ThreadX => self.block[0].get(),
+            ThreadAxis::ThreadY => self.block[1].get(),
+            ThreadAxis::ThreadZ => self.block[2].get(),
+        };
+        Interval::of_loop(Dim::new(u64::from(extent)))
+    }
 }
 
 /// A kernel as an explicit loop nest, ready for code generation.
