@@ -10,7 +10,7 @@ use ptxc_core::float::Overflow;
 use ptxc_core::{DType, Dim};
 use ptxc_loop::{
     BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ReduceOp, TensorExpr, TensorName, TileOrder,
-    VarName,
+    VarName, print_kernel,
 };
 use ptxc_schedule::default_schedule;
 use ptxc_target::{MmaShape, SmVersion, Target, preset};
@@ -54,6 +54,13 @@ fn a_product_with_a_grid_of_32_large_tiles_takes_them_and_a_smaller_one_does_not
     assert_eq!(launch_dims(square_launch), ([32, 1, 1], [32, 2, 2]));
     // The large tile is not pipelined; the small one has four stages.
     assert_eq!(kernels[0].smem().get(), 2 * 128 * 32 * 2);
+    // The large tile's are plain; the small one's swizzled, `a`'s rows of
+    // 32 halves and `b`'s of 64 each moving 16-byte units by their row's
+    // place among 8.
+    let [large_text, small_text] = kernels.each_ref().map(print_kernel);
+    assert!(!large_text.contains("swizzle"), "{large_text}");
+    assert!(small_text.contains("%a_tile: f16[8192] shared swizzle<3,4,3>"), "{small_text}");
+    assert!(small_text.contains("%b_tile: f16[8192] shared swizzle<3,4,3>"), "{small_text}");
     assert_eq!(launch_dims(small_launch), ([96, 1, 1], [32, 2, 2]));
     assert_eq!(kernels[1].smem().get(), 4 * 2 * 64 * 32 * 2);
     let [tiled, serial] = tiled_and_serial(&large, &exact_inputs(&large));

@@ -297,6 +297,7 @@ pub enum Primitive {                                    // compute-at and layout
     CacheRead { tensor: TensorParamId, at: LoopId },   // the input's tile in shared memory, filled at `at`
     Tensorize { m: LoopId, n: LoopId, k: LoopId, instruction: MmaInstruction }, // one mma per warp
     Pipeline { loop_: LoopId, stages: StageCount },     // the tiles staged at `loop_` filled `stages - 1` ahead
+    Swizzle { tensor: TensorParamId, swizzle: Swizzle }, // the staged tile's bytes XOR-permuted
 }
 ```
 
@@ -324,7 +325,7 @@ accident (gathers go through an explicit `LoadIndex` into an index).
 ```rust
 pub struct LoweredKernel {
     name: KernelName, params: Vec<KernelParam>,                 // global buffers, each Read or Write
-    buffers: IndexVec<BufferId, Buffer>,                        // name, dtype, MemScope::{Global, Shared, Local, Fragment}, size
+    buffers: IndexVec<BufferId, Buffer>,                        // name, dtype, MemScope::{Global, Shared { swizzle }, Local, Fragment}, size
     vars: IndexVec<VarId, KernelVar>,                           // Loop, Thread { axis }, Loaded
     launch: LaunchShape, smem: SmemBytes, body: Stmt, exprs: ExprArena,
 }
@@ -376,6 +377,17 @@ copies have landed, passes a barrier, starts the copies of iteration
 computes. Validation requires an input staged at the loop and counts each
 tile `S` times against shared memory.
 
+A swizzled tile's bytes are permuted as CUTLASS's `Swizzle<B, M, S>`
+permutes them (D66): byte `o` is held at `o ^ (((o >> (M + S)) & (2^B -
+1)) << M)`, so each `2^M`-byte unit moves within its `2^(M + B)`-byte block
+by the bits `S` above it. The swizzle belongs to the shared buffer's scope,
+`MemScope::Shared { swizzle }`, so indices stay affine and every analysis
+on them is unchanged; units are at least 16 bytes, so no copy or
+`ldmatrix` row straddles two. Validation and the verifier require the tile
+to hold whole blocks, so bytes never leave it. `Swizzle::for_tile` picks
+CUTLASS's swizzle for a row-major tile: 16-byte units permuted by the row's
+place among 8, so the 8 rows an `ldmatrix` reads fall in 8 bank groups.
+
 `Tensorize` makes the innermost three loops of a product one `mma` tile per
 warp, the block's `threadIdx.x` its 32 lanes (D58). Validation checks the
 loops are innermost inside a reduction step, the definition multiplies two
@@ -420,7 +432,9 @@ element between barriers (one of them writing) and two threads writing one
 global element. An asynchronous copy reads its source when it starts and
 lands only at the wait that completes its group, as `cp.async` guarantees
 no sooner; touching its elements before, or freeing its tile with it in
-flight, is an error, so a missing wait fails on the CPU. Fragment
+flight, is an error, so a missing wait fails on the CPU. A swizzled
+buffer holds each element where its swizzle puts the element's bytes, so a
+swizzle that does not permute the buffer loses elements. Fragment
 statements run once per warp on logical tiles,
 `Mma` adding exact products in `k` order and rounding once (D58). A
 schedule is therefore checked with no GPU: most scheduling bugs (wrong
@@ -462,7 +476,8 @@ and the GPU tests check them.
   64 one where fewer than 32 large tiles cover the output, both operands
   staged two `mma` steps deep and the innermost tile tensorized (D58). The
   SIMT tile and the 64 by 64 one pipeline their steps over four stages, or
-  as many as fit shared memory; the 128 by 128 one is not pipelined (D65).
+  as many as fit shared memory, and the 64 by 64 one swizzles its tiles;
+  the 128 by 128 one is neither pipelined (D65) nor swizzled (D66).
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's
@@ -508,6 +523,9 @@ and the GPU tests check them.
   copies are, and `.ca` for 4 and 8, with a `src-size` operand selecting 0
   bytes where a bound fails. A wait forgets every value numbered before it,
   as a barrier does.
+- A swizzled shared buffer's byte offset is swizzled before it is added to
+  the buffer's address: a constant's at compile time, a computed one's
+  with a shift, a mask, a shift and an exclusive-or.
 - A vectorized loop that copies or clears a run of 8 or 16 bytes, both
   indices stepping by one and starting aligned to the run, is one
   `ld.v2`/`ld.v4.b32` and `st.v2`/`st.v4.b32`; every buffer starts 256-byte
