@@ -27,7 +27,8 @@ pub use schedule::{
 };
 pub use stmt::{
     Access, Buffer, BufferId, Condition, ForKind, FragmentShape, FragmentTile, KernelParam,
-    KernelVar, LaunchShape, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
+    KernelVar, LaunchShape, LoweredKernel, MemScope, Stmt, Swizzle, TileAccess, TileOrder,
+    ValueExpr,
 };
 pub use text::{print_compute, print_kernel, print_schedule};
 pub use unroll::unrolled;

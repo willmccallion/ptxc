@@ -61,7 +61,7 @@ impl Selector<'_> {
         let found = &self.kernel.buffers()[buffer];
         let bytes = found.size.in_bytes(found.dtype).map_err(|_| CodegenError::TooLarge)?.get();
         let (space, bytes) = match found.scope {
-            MemScope::Shared => (Space::Shared, bytes),
+            MemScope::Shared { .. } => (Space::Shared, bytes),
             MemScope::Local | MemScope::Global => (Space::Local, bytes),
             MemScope::Fragment(_) => (Space::Local, bytes / WARP_LANES),
         };
@@ -106,12 +106,14 @@ impl Selector<'_> {
     }
 
     /// Where element `index` of `buffer` is. A constant index becomes the
-    /// address's immediate offset, or picks the register holding it.
+    /// address's immediate offset, swizzled where the buffer is, or picks
+    /// the register holding it.
     fn computed_element(&mut self, buffer: BufferId, index: ExprId) -> Result<Place, CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
         if let Expr::Const(position) = self.kernel.exprs().get(index) {
             let offset = position.checked_mul(size).ok_or(CodegenError::TooLarge)?;
+            let offset = self.swizzled_constant(buffer, offset)?;
             return place_in(self.storage.get(&buffer).ok_or(CodegenError::Unbound)?, offset);
         }
         let position = self.index(index)?;
@@ -119,7 +121,8 @@ impl Selector<'_> {
         Ok(Place::Memory(space, addr))
     }
 
-    /// The address of the element of `buffer` at `position`, and its space.
+    /// The address of the element of `buffer` at `position`, swizzled where
+    /// the buffer is, and its space.
     pub(super) fn address_at(
         &mut self,
         buffer: BufferId,
@@ -141,7 +144,8 @@ impl Selector<'_> {
                 return Err(CodegenError::Unsupported { op: "a computed index into registers" });
             }
         };
-        let at = self.builder.int(BinaryOp::Add, Signedness::Signed, base.into(), scaled.into());
+        let offset = self.swizzled_offset(buffer, scaled);
+        let at = self.builder.int(BinaryOp::Add, Signedness::Signed, base.into(), offset.into());
         Ok((space, Address::Reg { base: at.id(), offset: 0 }))
     }
 

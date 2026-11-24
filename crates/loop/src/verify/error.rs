@@ -81,6 +81,10 @@ pub enum VerifyError {
     /// length, so not aligned to the copy's size.
     #[error("an asynchronous copy into {0} may start a run unaligned to its length")]
     AsyncUnaligned(TensorName),
+    /// A swizzled buffer that does not hold whole blocks of its swizzle, so
+    /// the swizzle could move bytes out of it.
+    #[error("{0} does not hold whole blocks of its swizzle")]
+    SwizzleLayout(TensorName),
     /// A fragment loaded from a buffer outside shared memory.
     #[error("a fragment is loaded from {0}, which is not in shared memory")]
     TileNotShared(TensorName),

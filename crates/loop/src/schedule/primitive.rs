@@ -2,6 +2,7 @@
 
 use super::loop_tree::LoopId;
 use crate::compute::TensorParamId;
+use crate::stmt::Swizzle;
 use ptxc_target::MmaInstruction;
 
 /// A split's factor for one of the inner loops it makes; never zero.
@@ -133,6 +134,15 @@ pub enum Primitive {
         tensor: TensorParamId,
         /// The loop whose every iteration fills the tile.
         at: LoopId,
+    },
+    /// Places the bytes of an input's staged tile by an XOR swizzle, as
+    /// CUTLASS's shared-memory layouts do, so the rows an `ldmatrix` or a
+    /// copy touches at once fall in different banks.
+    Swizzle {
+        /// The staged input.
+        tensor: TensorParamId,
+        /// The swizzle.
+        swizzle: Swizzle,
     },
     /// Fills the tiles staged at a serial loop `stages - 1` iterations
     /// ahead, as CUTLASS's multistage mainloop does: shared memory holds

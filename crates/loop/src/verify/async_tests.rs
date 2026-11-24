@@ -52,7 +52,7 @@ fn copying(
 #[test]
 fn a_copy_goes_from_a_global_input_to_shared_memory() {
     let mut base = kernel();
-    let tile = buffer(&mut base, MemScope::Shared, DType::F32, 8);
+    let tile = buffer(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 8);
     let local = buffer(&mut base, MemScope::Local, DType::F32, 8);
     let pair = per_thread(&mut base, 2, 0);
     let input = (BufferId::new(X), pair);
@@ -73,8 +73,8 @@ fn a_copy_goes_from_a_global_input_to_shared_memory() {
 #[test]
 fn a_copy_is_4_8_or_16_bytes_of_its_targets_type() {
     let mut base = kernel();
-    let tile = buffer(&mut base, MemScope::Shared, DType::F32, 64);
-    let halves = buffer(&mut base, MemScope::Shared, DType::F16, 64);
+    let tile = buffer(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 64);
+    let halves = buffer(&mut base, MemScope::Shared { swizzle: None }, DType::F16, 64);
     let start = per_thread(&mut base, 16, 0);
     let copy = |target, run| {
         verify(&copying(&base, [(target, start), (BufferId::new(X), start)], run, Vec::new()))
@@ -93,7 +93,7 @@ fn a_copy_is_4_8_or_16_bytes_of_its_targets_type() {
 #[test]
 fn both_runs_of_a_copy_start_at_a_multiple_of_its_length() {
     let mut base = kernel();
-    let tile = buffer(&mut base, MemScope::Shared, DType::F32, 32);
+    let tile = buffer(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 32);
     let aligned = per_thread(&mut base, 4, 0);
     let shifted = per_thread(&mut base, 4, 2);
     let lane = per_thread(&mut base, 4, 0);
@@ -114,8 +114,8 @@ fn both_runs_of_a_copy_start_at_a_multiple_of_its_length() {
 #[test]
 fn a_copys_run_stays_inside_its_tile_and_reads_only_bound_variables() {
     let mut base = kernel();
-    let fits = buffer(&mut base, MemScope::Shared, DType::F32, 8);
-    let short = buffer(&mut base, MemScope::Shared, DType::F32, 7);
+    let fits = buffer(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 8);
+    let short = buffer(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 7);
     let pair = per_thread(&mut base, 2, 0);
     let unbound = base.vars.push(KernelVar::Loop(crate::compute::VarName::new("free")));
     let free = base.exprs.var(unbound);

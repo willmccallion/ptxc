@@ -128,6 +128,15 @@ pub enum ScheduleError {
     /// lowering does not combine with one yet.
     #[error("input {0} cannot be staged in a reduction shared between threads")]
     CacheCrossThread(TensorName),
+    /// A swizzle of an input that is not staged.
+    #[error("input {0} is not staged in shared memory, so it has no tile to swizzle")]
+    SwizzleUnstaged(TensorName),
+    /// A second swizzle of one input's tile.
+    #[error("input {0}'s tile is already swizzled")]
+    AlreadySwizzled(TensorName),
+    /// A swizzle whose blocks do not divide the tile.
+    #[error("input {0}'s tile does not hold whole blocks of its swizzle")]
+    SwizzleLayout(TensorName),
     /// A pipelined loop at which no input is staged, so there is nothing to
     /// fill ahead.
     #[error("loop {0} is pipelined, but no input is staged at it")]

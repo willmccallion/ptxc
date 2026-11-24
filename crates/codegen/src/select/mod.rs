@@ -15,6 +15,7 @@ mod memory;
 mod mma;
 mod ops;
 mod registers;
+mod swizzle;
 mod values;
 mod vector;
 

@@ -1,6 +1,7 @@
 //! Checks the inputs staged in shared memory against the final nest and
 //! the target: where each stage sits, that each pipelined loop has tiles to
-//! fill ahead, and that the tiles fit.
+//! fill ahead, that each swizzle permutes bytes only within its tile, and
+//! that the tiles fit.
 
 use super::apply::cache::{LoadSite, loads_of};
 use super::error::ScheduleError;
@@ -22,6 +23,7 @@ pub(super) fn check_caches(
     }
     check_pipelines(tree)?;
     let tiles = tile_extents(compute, tree)?;
+    check_swizzles(compute, tree, &tiles)?;
     check_shared_memory(compute, tree, &tiles, target)?;
     Ok(tiles)
 }
@@ -68,6 +70,24 @@ fn check_pipelines(tree: &LoopTree) -> Result<(), ScheduleError> {
     Ok(())
 }
 
+/// Each swizzled tile holds whole blocks of its swizzle, so the swizzle
+/// moves bytes only within the tile. A unit, at least 16 bytes, always
+/// holds whole elements.
+fn check_swizzles(
+    compute: &ComputeDef,
+    tree: &LoopTree,
+    tiles: &[Vec<Dim>],
+) -> Result<(), ScheduleError> {
+    for (cache, extents) in tree.caches().iter().zip(tiles) {
+        let Some(swizzle) = cache.swizzle else { continue };
+        let bytes = tile_bytes(compute, cache, extents);
+        if !bytes.is_some_and(|bytes| bytes.is_multiple_of(swizzle.block_bytes())) {
+            return Err(ScheduleError::SwizzleLayout(compute.inputs()[cache.tensor].name.clone()));
+        }
+    }
+    Ok(())
+}
+
 /// The tiles together, each as many times as its loop's pipeline has
 /// stages, fit the shared memory a block has.
 fn check_shared_memory(
@@ -78,10 +98,8 @@ fn check_shared_memory(
 ) -> Result<(), ScheduleError> {
     let mut bytes: u64 = 0;
     for (cache, extents) in tree.caches().iter().zip(tiles) {
-        let element = compute.inputs()[cache.tensor].dtype.element_size().get();
         let slots = slots_at(tree, cache.at).get();
-        let tile =
-            extents.iter().try_fold(element * slots, |size, dim| size.checked_mul(dim.get()));
+        let tile = tile_bytes(compute, cache, extents).and_then(|tile| tile.checked_mul(slots));
         bytes =
             tile.and_then(|tile| bytes.checked_add(tile)).ok_or(ScheduleError::ExtentOverflow)?;
     }
@@ -90,4 +108,10 @@ fn check_shared_memory(
         return Err(ScheduleError::SharedTooLarge { bytes: ByteSize::new(bytes), limit });
     }
     Ok(())
+}
+
+/// The bytes of one copy of `cache`'s tile of `extents`, if they fit `u64`.
+fn tile_bytes(compute: &ComputeDef, cache: &CacheRead, extents: &[Dim]) -> Option<u64> {
+    let element = compute.inputs()[cache.tensor].dtype.element_size().get();
+    extents.iter().try_fold(element, |size, dim| size.checked_mul(dim.get()))
 }

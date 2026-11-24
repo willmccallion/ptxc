@@ -58,7 +58,7 @@ fn shared_bytes(lowerer: &Lowerer<'_>) -> SmemBytes {
     let bytes: u64 = lowerer
         .buffers
         .iter()
-        .filter(|buffer| buffer.scope == MemScope::Shared)
+        .filter(|buffer| matches!(buffer.scope, MemScope::Shared { .. }))
         .map(|buffer| buffer.size.get().saturating_mul(buffer.dtype.element_size().get()))
         .sum();
     SmemBytes::new(bound_extent(bytes))

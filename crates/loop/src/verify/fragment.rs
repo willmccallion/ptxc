@@ -62,7 +62,7 @@ impl Scope<'_> {
         self.whole_warps()?;
         let shape = self.fragment(fragment)?;
         let found = &self.kernel.buffers()[source];
-        if found.scope != MemScope::Shared {
+        if !matches!(found.scope, MemScope::Shared { .. }) {
             return Err(VerifyError::TileNotShared(found.name.clone()));
         }
         self.tile(source, at, shape)?;
@@ -150,7 +150,7 @@ impl Scope<'_> {
         match found.scope {
             MemScope::Global => return Ok(()),
             MemScope::Fragment(_) => return Err(VerifyError::FragmentAccess(found.name.clone())),
-            MemScope::Shared | MemScope::Local => {}
+            MemScope::Shared { .. } | MemScope::Local => {}
         }
         if !self.allocated.contains(&buffer) {
             return Err(VerifyError::NotAllocated(found.name.clone()));

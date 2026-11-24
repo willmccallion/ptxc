@@ -184,8 +184,12 @@ impl Block<'_, '_> {
         let found = &self.grid.kernel.buffers()[buffer];
         let size = usize::try_from(found.size.get()).unwrap_or(usize::MAX);
         let fresh = Memory::unset(found.name.clone(), size);
-        if found.scope == MemScope::Shared {
-            let _previous = self.shared.insert(buffer, fresh);
+        if let MemScope::Shared { swizzle } = found.scope {
+            let laid_out = match swizzle {
+                Some(swizzle) => fresh.swizzled(swizzle, found.dtype.element_size().get()),
+                None => fresh,
+            };
+            let _previous = self.shared.insert(buffer, laid_out);
             let result = self.exec(body, active).and_then(|()| self.all_landed(buffer));
             let _freed = self.shared.remove(&buffer);
             return result;
@@ -224,7 +228,7 @@ impl Block<'_, '_> {
         let found = &self.grid.kernel.buffers()[buffer];
         let memory = match found.scope {
             MemScope::Global => self.grid.globals.get_mut(&buffer),
-            MemScope::Shared => self.shared.get_mut(&buffer),
+            MemScope::Shared { .. } => self.shared.get_mut(&buffer),
             MemScope::Local => self.threads[thread].locals.get_mut(&buffer),
             MemScope::Fragment(_) => self.fragments.get_mut(&(warp_of(thread), buffer)),
         };
@@ -239,7 +243,7 @@ impl Block<'_, '_> {
     ) -> Result<Value, RunError> {
         self.settled(buffer, index)?;
         let value = self.memory(buffer, thread)?.read(index)?;
-        if self.grid.kernel.buffers()[buffer].scope == MemScope::Shared {
+        if matches!(self.grid.kernel.buffers()[buffer].scope, MemScope::Shared { .. }) {
             let name = self.grid.kernel.buffers()[buffer].name.clone();
             self.phase.read(buffer, &name, index, thread)?;
         }
@@ -258,7 +262,7 @@ impl Block<'_, '_> {
         let found = &self.grid.kernel.buffers()[buffer];
         let name = found.name.clone();
         match found.scope {
-            MemScope::Shared => self.phase.write(buffer, &name, index, thread),
+            MemScope::Shared { .. } => self.phase.write(buffer, &name, index, thread),
             MemScope::Global => {
                 self.grid.writers.write(buffer, &name, index, self.first_thread + thread)
             }

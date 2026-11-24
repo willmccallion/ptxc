@@ -126,6 +126,12 @@ impl Scope<'_> {
         {
             return Err(VerifyError::FragmentSize(found.name.clone()));
         }
+        if let MemScope::Shared { swizzle: Some(swizzle) } = found.scope {
+            let bytes = found.size.get().saturating_mul(found.dtype.element_size().get());
+            if !bytes.is_multiple_of(swizzle.block_bytes()) {
+                return Err(VerifyError::SwizzleLayout(found.name.clone()));
+            }
+        }
         let mut inner = self.clone();
         let _new = inner.allocated.insert(buffer);
         inner.stmt(body)

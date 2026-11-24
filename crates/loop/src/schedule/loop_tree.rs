@@ -4,6 +4,7 @@ use super::error::ScheduleError;
 use super::primitive::{StageCount, ThreadAxis};
 use crate::compute::{ComputeDef, IterKind, IterVarId, TensorParamId, VarName};
 use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
+use crate::stmt::Swizzle;
 use ptxc_core::{Dim, Idx, IndexVec};
 use ptxc_target::MmaInstruction;
 
@@ -81,6 +82,8 @@ pub struct CacheRead {
     pub at: LoopId,
     /// The compute-level index every load of the input reads.
     pub index: Vec<ExprId>,
+    /// The swizzle the tile's bytes are placed by, if any.
+    pub swizzle: Option<Swizzle>,
 }
 
 ptxc_core::define_index!(

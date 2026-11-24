@@ -20,7 +20,8 @@ pub use validate::Validated;
 pub(crate) use validate::WARP_LANES;
 pub(crate) use validate_tensorize::{Operand, TensorizedProduct};
 
-use crate::compute::ComputeDef;
+use crate::compute::{ComputeDef, TensorParamId};
+use ptxc_core::Dim;
 use std::sync::Arc;
 
 /// A schedule being built: primitives can still be applied.
@@ -72,6 +73,10 @@ impl Schedule<Open> {
                 let compute = Arc::clone(&self.compute);
                 self.record(step, |tree| tree.cache_read(&compute, tensor, at))
             }
+            Primitive::Swizzle { tensor, swizzle } => {
+                let compute = Arc::clone(&self.compute);
+                self.record(step, |tree| tree.swizzle(&compute, tensor, swizzle))
+            }
             Primitive::Pipeline { loop_, stages } => {
                 self.record(step, |tree| tree.pipeline(loop_, stages))
             }
@@ -109,6 +114,15 @@ impl Schedule<Open> {
 }
 
 impl<S> Schedule<S> {
+    /// The extents of `tensor`'s staged tile, per axis of the input, if it
+    /// is staged and its index grows affinely over the loops the tile
+    /// spans.
+    pub fn staged_extents(&self, tensor: TensorParamId) -> Result<Option<Vec<Dim>>, ScheduleError> {
+        let extents = crate::lower::tile_extents(&self.compute, &self.loops)?;
+        let mut staged = self.loops.caches().iter().zip(extents);
+        Ok(staged.find(|(cache, _)| cache.tensor == tensor).map(|(_, tile)| tile))
+    }
+
     /// The compute definition scheduled.
     pub fn compute(&self) -> &ComputeDef {
         &self.compute

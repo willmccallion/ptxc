@@ -90,8 +90,9 @@ impl Lowerer<'_> {
         let threads = u64::from(bound_extent(self.tree.block_threads().unwrap_or(1)));
         let dtype = self.reduced_dtype(reduction);
         let index = self.constant(0);
-        let value = self.scratch("partials", dtype, MemScope::Shared, threads);
-        let position = self.arg_position(reduction, "partial_positions", MemScope::Shared, threads);
+        let value = self.scratch("partials", dtype, MemScope::Shared { swizzle: None }, threads);
+        let shared = MemScope::Shared { swizzle: None };
+        let position = self.arg_position(reduction, "partial_positions", shared, threads);
         Accumulator { value, position, flag, index }
     }
 

@@ -104,7 +104,7 @@ fn scratch_buffers_are_used_inside_their_allocation_and_in_bounds() {
 #[test]
 fn a_condition_on_a_variable_tightens_its_range() {
     let mut base = kernel();
-    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 4);
+    let shared = scratch(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 4);
     let thread = thread_var(&base);
     let (two, four) = (base.exprs.constant(2), base.exprs.constant(4));
     let partner = base.exprs.add(thread, two);
@@ -126,7 +126,7 @@ fn a_condition_on_a_variable_tightens_its_range() {
 #[test]
 fn a_condition_on_an_expression_bounds_larger_indices_built_on_it() {
     let mut base = kernel();
-    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 8);
+    let shared = scratch(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 8);
     let thread = thread_var(&base);
     let run = base.vars.push(KernelVar::Loop(crate::compute::VarName::new("run")));
     let (two, three) = (base.exprs.constant(2), base.exprs.constant(3));
@@ -233,7 +233,7 @@ fn a_barrier_under_a_condition_on_a_loop_is_allowed() {
 #[test]
 fn a_condition_on_a_bare_variable_tightens_its_range() {
     let mut base = kernel();
-    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 3);
+    let shared = scratch(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 3);
     let thread = thread_var(&base);
     let (one, two) = (base.exprs.constant(1), base.exprs.constant(2));
     let next = base.exprs.add(thread, one);
@@ -251,7 +251,7 @@ fn a_condition_on_a_bare_variable_tightens_its_range() {
 #[test]
 fn a_condition_on_a_whole_index_caps_an_access_at_that_same_index() {
     let mut base = kernel();
-    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 3);
+    let shared = scratch(&mut base, MemScope::Shared { swizzle: None }, DType::F32, 3);
     let thread = thread_var(&base);
     let looped = base.vars.push(KernelVar::Loop(VarName::new("l")));
     let (var, eight, three) =
@@ -296,4 +296,20 @@ fn a_multiply_add_takes_f32_operands() {
         verify(&with_body(&base, fused(int))),
         Err(VerifyError::WrongType { expected: DType::F32, actual: DType::I32, .. })
     ));
+}
+
+#[test]
+fn a_swizzled_buffer_holds_whole_blocks_of_its_swizzle() {
+    let swizzle = crate::stmt::Swizzle::for_rows(64).unwrap();
+    let mut base = kernel();
+    let shared = MemScope::Shared { swizzle: Some(swizzle) };
+    let blocks = scratch(&mut base, shared, DType::F32, 64);
+    let partial = scratch(&mut base, shared, DType::F32, 40);
+    let allocated = |buffer| Stmt::Alloc { buffer, body: Box::new(Stmt::Seq(Vec::new())) };
+
+    let whole = verify(&with_body(&base, allocated(blocks)));
+    let short = verify(&with_body(&base, allocated(partial)));
+
+    assert_eq!(whole, Ok(()));
+    assert_eq!(short, Err(VerifyError::SwizzleLayout(TensorName::new("scratch"))));
 }

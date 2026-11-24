@@ -194,7 +194,7 @@ mod tests {
             let (name, size) = (TensorName::new(name), ElementCount::new(512));
             kernel.buffers.push(Buffer { name, dtype: DType::F16, scope, size })
         };
-        let tile = buffer("tile", MemScope::Shared);
+        let tile = buffer("tile", MemScope::Shared { swizzle: None });
         let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
         let fragment = buffer("fragment", MemScope::Fragment(shape));
         let step = kernel.vars.push(KernelVar::Loop(crate::compute::VarName::new("step")));

@@ -142,11 +142,16 @@ impl KernelPrinter<'_> {
         }
     }
 
-    /// Where `buffer` lives, with a fragment's tile shape.
+    /// Where `buffer` lives, with a shared buffer's swizzle and a
+    /// fragment's tile shape.
     fn scope(&self, buffer: BufferId) -> String {
         match self.kernel.buffers()[buffer].scope {
             MemScope::Global => "global".to_owned(),
-            MemScope::Shared => "shared".to_owned(),
+            MemScope::Shared { swizzle: None } => "shared".to_owned(),
+            MemScope::Shared { swizzle: Some(swizzle) } => {
+                let (bits, unit, shift) = (swizzle.bits(), swizzle.unit(), swizzle.shift());
+                format!("shared swizzle<{bits},{unit},{shift}>")
+            }
             MemScope::Local => "local".to_owned(),
             MemScope::Fragment(shape) => {
                 format!("fragment<{}x{}>", shape.rows.get(), shape.columns.get())

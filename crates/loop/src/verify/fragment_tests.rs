@@ -37,7 +37,7 @@ fn product() -> Product {
     };
     let input = buffer("input", DType::F16, MemScope::Global, 256);
     let output = buffer("output", DType::F32, MemScope::Global, 128);
-    let tile = buffer("tile", DType::F16, MemScope::Shared, 256);
+    let tile = buffer("tile", DType::F16, MemScope::Shared { swizzle: None }, 256);
     let a = buffer("a", DType::F16, fragment(16, 16), 256);
     let b = buffer("b", DType::F16, fragment(16, 8), 128);
     let c = buffer("c", DType::F32, fragment(16, 8), 128);
