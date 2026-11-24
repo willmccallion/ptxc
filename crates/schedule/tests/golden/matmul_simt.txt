@@ -1,5 +1,5 @@
 kernel product(%a: f32[2800] read, %b: f32[1800] read, %out: f32[6300] write)
-  grid(4, 1, 1) block(16, 16, 1) smem 4096
+  grid(4, 1, 1) block(16, 16, 1) smem 16384
   %i.1 = threadIdx.y
   %j.1 = threadIdx.x
   %batch_i.0_j.0 = blockIdx.x
@@ -9,24 +9,35 @@ kernel product(%a: f32[2800] read, %b: f32[1800] read, %out: f32[6300] write)
         %acc[%i.2 * 4 + %j.2] = 0.0:f32
       }
     }
-    alloc %a_tile: f32[512] shared {
-      alloc %b_tile: f32[512] shared {
+    alloc %a_tile: f32[2048] shared {
+      alloc %b_tile: f32[2048] shared {
+        barrier
+        %a_tile[(%i.1 * 16 + %j.1) * 2] <- async %a[floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + floordiv(%i.1 * 32 + %j.1 * 2, 64) * 70 + floormod(%i.1 * 32 + %j.1 * 2, 64)] run 2 if floormod(%batch_i.0_j.0, 2) * 64 + floormod(%i.1 * 32 + %j.1 * 2, 64) < 70
+        for %b_fill in 2 {
+          %b_tile[%i.1 * 16 + %j.1 + %b_fill * 256] <- async %b[floordiv(%batch_i.0_j.0, 2) * 900 + %b_fill * 180 + floordiv(%i.1 * 16 + %j.1, 64) * 45 + floormod(%i.1 * 16 + %j.1, 64)] run 1 if floormod(%i.1 * 16 + %j.1, 64) < 45
+        }
+        async commit
+        %a_tile[512 + (%i.1 * 16 + %j.1) * 2] <- async %a[floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + floordiv(%i.1 * 32 + %j.1 * 2, 64) * 70 + floormod(%i.1 * 32 + %j.1 * 2, 64) + 560] run 2 if floormod(%batch_i.0_j.0, 2) * 64 + floormod(%i.1 * 32 + %j.1 * 2, 64) < 70
+        for %b_fill in 2 {
+          %b_tile[512 + %i.1 * 16 + %j.1 + %b_fill * 256] <- async %b[floordiv(%batch_i.0_j.0, 2) * 900 + floordiv(%i.1 * 16 + %j.1, 64) * 45 + floormod(%i.1 * 16 + %j.1, 64) + %b_fill * 180 + 360] run 1 if floormod(%i.1 * 16 + %j.1, 64) < 45
+        }
+        async commit
+        %a_tile[1024 + (%i.1 * 16 + %j.1) * 2] <- async %a[floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + floordiv(%i.1 * 32 + %j.1 * 2, 64) * 70 + floormod(%i.1 * 32 + %j.1 * 2, 64) + 1120] run 2 if floormod(%batch_i.0_j.0, 2) * 64 + floormod(%i.1 * 32 + %j.1 * 2, 64) < 70, floordiv(%i.1 * 32 + %j.1 * 2, 64) + 16 < 20
+        for %b_fill in 2 {
+          %b_tile[1024 + %i.1 * 16 + %j.1 + %b_fill * 256] <- async %b[floordiv(%batch_i.0_j.0, 2) * 900 + floordiv(%i.1 * 16 + %j.1, 64) * 45 + floormod(%i.1 * 16 + %j.1, 64) + %b_fill * 180 + 720] run 1 if floormod(%i.1 * 16 + %j.1, 64) < 45, floordiv(%i.1 * 16 + %j.1, 64) + %b_fill * 4 + 16 < 20
+        }
+        async commit
         for %k.0 in 3 {
+          async wait 2
           barrier
-          %a_tile[(%i.1 * 16 + %j.1) * 2] <- async %a[%k.0 * 560 + floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + floordiv(%i.1 * 32 + %j.1 * 2, 64) * 70 + floormod(%i.1 * 32 + %j.1 * 2, 64)] run 2 if floormod(%batch_i.0_j.0, 2) * 64 + floormod(%i.1 * 32 + %j.1 * 2, 64) < 70, %k.0 * 8 + floordiv(%i.1 * 32 + %j.1 * 2, 64) < 20
-          for %b_fill in 2 {
-            %b_tile[%i.1 * 16 + %j.1 + %b_fill * 256] <- async %b[%k.0 * 360 + floordiv(%batch_i.0_j.0, 2) * 900 + %b_fill * 180 + floordiv(%i.1 * 16 + %j.1, 64) * 45 + floormod(%i.1 * 16 + %j.1, 64)] run 1 if floormod(%i.1 * 16 + %j.1, 64) < 45, %k.0 * 8 + %b_fill * 4 + floordiv(%i.1 * 16 + %j.1, 64) < 20
-          }
           async commit
-          async wait 0
-          barrier
           for %k.1 in 8 unroll {
             for %i.2 in 4 unroll {
               for %j.2 in 4 unroll {
                 if %i.2 + %i.1 * 4 + floormod(%batch_i.0_j.0, 2) * 64 < 70 {
                   if %j.2 + %j.1 * 4 < 45 {
                     if %k.1 + %k.0 * 8 < 20 {
-                      %acc[%i.2 * 4 + %j.2] = fma(cast<f32>(%a_tile[%i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%j.2 + %j.1 * 4 + %k.1 * 64]), %acc[%i.2 * 4 + %j.2])
+                      %acc[%i.2 * 4 + %j.2] = fma(cast<f32>(%a_tile[%k.0 * 512 + %i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%k.0 * 512 + %j.2 + %j.1 * 4 + %k.1 * 64]), %acc[%i.2 * 4 + %j.2])
                     }
                   }
                 }

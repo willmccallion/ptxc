@@ -34,7 +34,8 @@ fn an_f16_product_gives_blocks_of_four_warps_a_64_by_64_tile_each() {
     let (text, launch) = scheduled(compute);
 
     assert_eq!(launch_dims(launch), ([4, 1, 1], [32, 2, 2]));
-    assert_eq!(kernel.smem().get(), 2 * 64 * 32 * 2);
+    // Four stages of both 64 by 32 f16 slices.
+    assert_eq!(kernel.smem().get(), 4 * 2 * 64 * 32 * 2);
     golden::check("matmul_mma.txt", &text).unwrap();
 }
 
@@ -51,9 +52,10 @@ fn a_product_with_a_grid_of_32_large_tiles_takes_them_and_a_smaller_one_does_not
 
     assert_eq!(launch_dims(large_launch), ([32, 1, 1], [32, 2, 2]));
     assert_eq!(launch_dims(square_launch), ([32, 1, 1], [32, 2, 2]));
+    // The large tile is not pipelined; the small one has four stages.
     assert_eq!(kernels[0].smem().get(), 2 * 128 * 32 * 2);
     assert_eq!(launch_dims(small_launch), ([96, 1, 1], [32, 2, 2]));
-    assert_eq!(kernels[1].smem().get(), 2 * 64 * 32 * 2);
+    assert_eq!(kernels[1].smem().get(), 4 * 2 * 64 * 32 * 2);
     let [tiled, serial] = tiled_and_serial(&large, &exact_inputs(&large));
     assert_eq!(tiled, serial);
 }

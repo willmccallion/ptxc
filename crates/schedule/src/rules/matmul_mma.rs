@@ -5,30 +5,36 @@
 //! the warps load their fragments (D58).
 
 use super::bind;
-use super::matmul_loops::{batch_loops, bind_blocks, parts, stage_operands};
+use super::matmul_loops::{batch_loops, bind_blocks, parts, pipeline_step, stage_operands};
 use super::matmul_shape::Product;
 use crate::tiling::{TensorCoreTile, TileShape};
 use ptxc_core::Dim;
 use ptxc_loop::{
-    ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, TensorExpr, ThreadAxis,
+    ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, StageCount, TensorExpr,
+    ThreadAxis,
 };
 use ptxc_target::{MmaInstruction, MmaShape, Target};
 
 /// Hand-picked until the search tunes them: four warps, each holding 4 by
 /// 8 `mma` tiles, over a block tile of 128 by 128 at f16's m16n8, staged
-/// two `mma` steps deep, so an f16 step stages 16 KiB...
+/// two `mma` steps deep, so an f16 step stages 16 KiB. It is not
+/// pipelined: its grid keeps the GPU busy, and recomputing its `ldmatrix`
+/// addresses for a rotating slot costs more than the overlap gains...
 const LARGE: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 4, columns: 8 },
     steps: 2,
+    stages: None,
 };
 
 /// ...and, for an output too small for enough large tiles, four warps
-/// holding 2 by 4 tiles each, over a block tile of 64 by 64.
+/// holding 2 by 4 tiles each, over a block tile of 64 by 64, its steps
+/// pipelined over four stages, which its few blocks cannot hide otherwise.
 const SMALL: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 2, columns: 4 },
     steps: 2,
+    stages: StageCount::new(4),
 };
 
 /// The blocks a grid of large tiles needs to keep a GPU busy: about one per
@@ -56,16 +62,16 @@ pub(crate) fn instruction(
     target.mma().iter().find(matches).copied().filter(|_| same_operands)
 }
 
-/// Tiles `product`'s nest for `instruction`: the batch axes and the block
-/// rows and columns fused onto `blockIdx.x`; the block's warps on
-/// `threadIdx.y` and `threadIdx.z`, their lanes on `threadIdx.x`; and the
-/// reduction split into staged steps, inside which each warp multiplies
-/// its tiles with the steps and tiles unrolled and the innermost `mma`
-/// tile tensorized.
+/// Tiles `product`'s nest for `instruction` of `target`: the batch axes
+/// and the block rows and columns fused onto `blockIdx.x`; the block's
+/// warps on `threadIdx.y` and `threadIdx.z`, their lanes on
+/// `threadIdx.x`; and the reduction split into staged, pipelined steps,
+/// inside which each warp multiplies its tiles with the steps and tiles
+/// unrolled and the innermost `mma` tile tensorized.
 pub(crate) fn tiled_on_tensor_cores(
     schedule: &mut Schedule<Open>,
     product: Product,
-    instruction: MmaInstruction,
+    (instruction, target): (MmaInstruction, &Target),
 ) -> Result<(), ScheduleError> {
     let shape = instruction.shape;
     let tile = tile_for(schedule, product, shape);
@@ -84,6 +90,7 @@ pub(crate) fn tiled_on_tensor_cores(
     bind(schedule, row_warp, ThreadAxis::ThreadY)?;
     bind(schedule, column_warp, ThreadAxis::ThreadZ)?;
     stage_operands(schedule, product, step)?;
+    pipeline_step(schedule, product, (step, tile.step(shape)), target)?;
     for loop_ in [step_depth, row_tile, column_tile] {
         schedule.apply(Primitive::Unroll { loop_ })?;
     }

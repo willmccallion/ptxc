@@ -107,7 +107,8 @@ fn a_product_gives_blocks_of_16_by_16_threads_a_64_by_64_tile_each() {
     let (text, launch) = scheduled(compute);
 
     assert_eq!(launch_dims(launch), ([4, 1, 1], [16, 16, 1]));
-    assert_eq!(kernel.smem().get(), 2 * 64 * 8 * 4);
+    // Four stages of both 64 by 8 f32 slices.
+    assert_eq!(kernel.smem().get(), 4 * 2 * 64 * 8 * 4);
     golden::check("matmul_simt.txt", &text).unwrap();
 }
 

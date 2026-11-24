@@ -1,12 +1,16 @@
 //! The loops a matrix product's tilings share, on CUDA cores and tensor
 //! cores alike: its batch loops, an axis's loop split into parts, the block
-//! loops fused onto the grid, and both operands staged at a reduction step.
+//! loops fused onto the grid, and both operands staged at a reduction step
+//! that is pipelined.
 
 use super::matmul_shape::Product;
 use super::{bind, fused};
+use crate::pipeline::stages_for;
+use crate::tiling::StepTile;
 use ptxc_loop::{
     IterVarId, LoopId, LoopKind, Open, Primitive, Schedule, ScheduleError, SplitFactor, ThreadAxis,
 };
+use ptxc_target::Target;
 
 /// The spatial loops other than the row's and the column's, in nest order.
 pub(super) fn batch_loops(schedule: &Schedule<Open>, product: Product) -> Vec<LoopId> {
@@ -52,6 +56,24 @@ pub(super) fn bind_blocks(
     blocks.extend([row_block, column_block]);
     if let Some(grid) = fused(schedule, &blocks)? {
         bind(schedule, grid, ThreadAxis::BlockX)?;
+    }
+    Ok(())
+}
+
+/// `step`, at which both of `product`'s operands are staged in `slices`,
+/// pipelined over the slices' stages where they have them, or as many as
+/// fit shared memory if fewer.
+pub(super) fn pipeline_step(
+    schedule: &mut Schedule<Open>,
+    product: Product,
+    (step, slices): (LoopId, StepTile),
+    target: &Target,
+) -> Result<(), ScheduleError> {
+    let Some(wanted) = slices.stages else { return Ok(()) };
+    let size = |tensor| schedule.compute().inputs()[tensor].dtype.element_size();
+    let bytes = slices.bytes([size(product.lhs), size(product.rhs)]);
+    if let Some(stages) = stages_for(bytes, wanted, target) {
+        schedule.apply(Primitive::Pipeline { loop_: step, stages })?;
     }
     Ok(())
 }
