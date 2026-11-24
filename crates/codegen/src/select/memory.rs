@@ -116,27 +116,44 @@ impl Selector<'_> {
             let offset = self.swizzled_constant(buffer, offset)?;
             return place_in(self.storage.get(&buffer).ok_or(CodegenError::Unbound)?, offset);
         }
-        let position = self.index(index)?;
-        let (space, addr) = self.address_at(buffer, position)?;
+        let (rest, constant) = self.swizzle_split(buffer, index);
+        let position = self.index(rest)?;
+        let (space, addr) = self.address_at(buffer, (position, constant))?;
         Ok(Place::Memory(space, addr))
     }
 
-    /// The address of the element of `buffer` at `position`, swizzled where
-    /// the buffer is, and its space.
+    /// `index` as an index and a constant: where `buffer` is swizzled, a
+    /// sum's constant addend split off for its address to fold in apart
+    /// from the rest (D67); elsewhere the whole of `index` and 0.
+    pub(super) fn swizzle_split(&self, buffer: BufferId, index: ExprId) -> (ExprId, i64) {
+        let exprs = self.kernel.exprs();
+        let Expr::Add(rest, last) = exprs.get(index) else { return (index, 0) };
+        if self.swizzle_of(buffer).is_none() {
+            return (index, 0);
+        }
+        match (exprs.get(rest), exprs.get(last)) {
+            (_, Expr::Const(constant)) => (rest, constant),
+            (Expr::Const(constant), _) => (last, constant),
+            _ => (index, 0),
+        }
+    }
+
+    /// The address of element `position + constant` of `buffer`, and its
+    /// space, the constant an immediate offset where the buffer's layout
+    /// allows.
     pub(super) fn address_at(
         &mut self,
         buffer: BufferId,
-        position: Reg<B64>,
+        (position, constant): (Reg<B64>, i64),
     ) -> Result<(Space, Address), CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
         let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
         let storage = self.storage.get(&buffer).ok_or(CodegenError::Unbound)?.clone();
-        let scaled = self.builder.int(
-            BinaryOp::Mul,
-            Signedness::Signed,
-            position.into(),
-            Value::<B64>::int(size),
-        );
+        let signed = Signedness::Signed;
+        let bytes =
+            self.builder.int(BinaryOp::Mul, signed, position.into(), Value::<B64>::int(size));
+        let constant = constant.checked_mul(size).ok_or(CodegenError::TooLarge)?;
+        let (offset, immediate) = self.placed_offset(buffer, bytes, constant)?;
         let (space, base) = match storage {
             Storage::Global(base) => (Space::Global, base),
             Storage::Array { space, name } => (space, self.builder.address_of(&name)),
@@ -144,9 +161,8 @@ impl Selector<'_> {
                 return Err(CodegenError::Unsupported { op: "a computed index into registers" });
             }
         };
-        let offset = self.swizzled_offset(buffer, scaled);
-        let at = self.builder.int(BinaryOp::Add, Signedness::Signed, base.into(), offset.into());
-        Ok((space, Address::Reg { base: at.id(), offset: 0 }))
+        let at = self.builder.int(BinaryOp::Add, signed, base.into(), offset.into());
+        Ok((space, Address::Reg { base: at.id(), offset: immediate }))
     }
 
     /// Element `index` of `buffer`, as a held value.

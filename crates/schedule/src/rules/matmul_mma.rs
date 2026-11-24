@@ -19,8 +19,9 @@ use ptxc_target::{MmaInstruction, MmaShape, Target};
 /// 8 `mma` tiles, over a block tile of 128 by 128 at f16's m16n8, staged
 /// two `mma` steps deep, so an f16 step stages 16 KiB. It is neither
 /// pipelined nor swizzled: computing its `ldmatrix` addresses for a
-/// rotating slot or a swizzle costs it more than either gains until those
-/// addresses are cheap (#157)...
+/// rotating slot costs it more than pipelining gains until those addresses
+/// are cheap (#155), and unpipelined, a swizzle loses on grids of one wave,
+/// whose blocks wait on their loads in step (D67)...
 const LARGE: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 4, columns: 8 },

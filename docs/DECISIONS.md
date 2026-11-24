@@ -1287,3 +1287,59 @@ the old one.
 - **Reason:** indices stay affine, so every analysis on them stands; a
   swizzle that loses elements fails on the CPU; and a unit of 16 bytes
   keeps every copy and `ldmatrix` row whole.
+
+## D67. Swizzled addresses fold their constants in apart
+
+- **Context:**
+  - Under D66 every swizzled address costs a 64-bit shift, mask, shift and
+    exclusive-or. Yet the `ldmatrix` reads and `cp.async` writes of an
+    unrolled step differ only by constants: tile origins and steps along
+    the reduction.
+  - Computing shared addresses in 32 bits first made the plain 128 by 128
+    tile 10% slower at 4096³. Truncating before scaling hides each tile's
+    constant from ptxas, which then keeps a register per copy instead of
+    one base and immediates (236 registers, from 228).
+- **Options:**
+  - Per-thread base pointers in the loop IR, which needs exclusive-or in
+    index expressions (rejected in D66).
+  - In codegen, the per-thread part of an address swizzled once and each
+    constant folded in after, as CUTLASS's iterators do. This needs to know
+    which bits the per-thread part can have.
+- **Choice:**
+  - A swizzled buffer's index is split into its constant addend and the
+    rest. With the swizzle's period `T` (`2^(M+S+B)` bytes) and the
+    constant `kT + r`:
+    - where the rest's possible bits miss `r`'s, the address is
+      `(swz(rest) ^ swz(r)) + kT`, with `kT` the immediate offset;
+    - otherwise the whole sum is swizzled, as before.
+  - `possible_bits` is a known-bits analysis over the emitted PTX, as
+    LLVM's `computeKnownBits`, following each register to the one
+    instruction that defines it. The launch bounds lane, thread and block
+    indices.
+  - A register set more than once is a `Var`: only
+    `FunctionBuilder::variable` makes one, and only `assign` and
+    `increment` write one. It is known to have several definitions from its
+    creation, so the analysis never takes a loop counter's first value for
+    all of its values.
+  - Plain buffers' addresses are unchanged: ptxas folds their constants
+    itself.
+  - The 64 by 64 tile, swizzled and pipelined, becomes 9 to 20% faster on
+    every f16 NN shape that uses it, measured at a locked 2700 MHz.
+  - The 128 by 128 tile stays plain:
+    - Its swizzled loop is now the same 151 instructions as the plain one.
+      Nsight Compute on 1024³ shows its shared-load bank conflicts gone
+      (2.6M before) and shared wavefronts down from 3.1M to 0.5M.
+    - But with no pipeline, the two blocks an SM holds start together and
+      stay in step: they wait on their loads and contend for the tensor
+      cores at the same times (`math_pipe_throttle` up from 11.5 to 13.8
+      cycles an instruction).
+    - An SM with one block finishes 13% sooner, one with two 3% later, so
+      one-wave grids lose 5 to 10%. Grids of many waves, whose blocks fall
+      out of step, gain 5 to 8%.
+    - Pipelining the tile comes first.
+- **Supersedes:** D66's reason for leaving the 128 by 128 tile plain.
+- **Reason:** a swizzle is linear over exclusive-or (`swz(x ^ y) =
+  swz(x) ^ swz(y)`) and commutes with adding a multiple of its period, and
+  a sum of values with disjoint bits is their exclusive-or. The analysis
+  runs on what codegen emits, so it sees the lane arithmetic that the loop
+  IR does not express.

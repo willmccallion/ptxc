@@ -79,8 +79,7 @@ impl Selector<'_> {
             TileAxis::Rows => [along_group, along_run],
             TileAxis::Columns => [along_run, along_group],
         };
-        let position = self.tile_position(at, place)?;
-        let (_, addr) = self.address_at(source, position)?;
+        let (_, addr) = self.tile_address(source, at, place)?;
         let registers = self.builder.ld_matrix(order, layout.blocks(), addr);
         for (block, register) in (0..).zip(registers) {
             let slot = self.slot(fragment, block * layout.run)?;
