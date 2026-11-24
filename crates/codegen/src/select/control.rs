@@ -116,8 +116,9 @@ impl Selector<'_> {
             self.ranges.insert(var, range);
         }
         let extent = i64::try_from(extent.get()).map_err(|_| CodegenError::TooLarge)?;
-        let counter = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
-        let _previous = self.vars.insert(var, counter);
+        let counter = self.builder.variable();
+        self.builder.assign(counter, PtxType::S64, Value::<B64>::int(0));
+        let _previous = self.vars.insert(var, counter.reg());
         let outer = self.known.clone();
         self.known.forget_values();
         let (top, exit) = (self.builder.label(), self.builder.label());
@@ -125,7 +126,7 @@ impl Selector<'_> {
         let done = self.builder.compare_int(
             Compare::Ge,
             Signedness::Signed,
-            counter.into(),
+            counter.reg().into(),
             Value::<B64>::int(extent),
         );
         self.builder.branch(exit, Some((done, true)));

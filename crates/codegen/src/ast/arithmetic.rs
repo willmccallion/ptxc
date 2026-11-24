@@ -1,6 +1,7 @@
 //! `FunctionBuilder`'s arithmetic, comparison and conversion instructions,
 //! and the integer register classes they take.
 
+use super::definitions::Var;
 use super::function::FunctionBuilder;
 use super::instr::{BinaryOp, Compare, CvtMode, Instr, PtxType, UnaryOp};
 use super::operand::Value;
@@ -58,15 +59,15 @@ impl FunctionBuilder {
         dst
     }
 
-    /// Sets `dst`, a register already holding a value, to `value`, of the
-    /// same width, its bits as the type `ty` names.
+    /// Sets `dst` to `value`, of the same width, its bits as the type `ty`
+    /// names.
     pub(crate) fn assign<From: Class, To: Class>(
         &mut self,
-        dst: Reg<To>,
+        dst: Var<To>,
         ty: PtxType,
         value: Value<From>,
     ) {
-        self.push(Instr::Mov { ty, dst: dst.id(), src: value.operand() });
+        self.push(Instr::Mov { ty, dst: dst.reg().id(), src: value.operand() });
     }
 
     pub(crate) fn float(&mut self, op: BinaryOp, a: Value<F32>, b: Value<F32>) -> Reg<F32> {

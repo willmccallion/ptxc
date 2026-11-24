@@ -5,7 +5,7 @@ use super::registers::{WORD_BYTES, WordByte, register_place};
 use super::values::{Held, Narrow, Stored, memory_type, stored};
 use super::{CodegenError, Selector};
 use crate::ast::{
-    Address, B16, B32, B64, BinaryOp, Compare, F32, PtxType, Reg, Signedness, Space, Value,
+    Address, B16, B32, B64, BinaryOp, Compare, F32, PtxType, Reg, Signedness, Space, Value, Var,
 };
 use ptxc_core::DType;
 use ptxc_loop::{BufferId, Expr, ExprId, MemScope};
@@ -18,7 +18,7 @@ pub(super) enum Storage {
     /// A declared shared or local array.
     Array { space: Space, name: String },
     /// A local or fragment array held in registers, 4 bytes a register.
-    Registers(Vec<Reg<B32>>),
+    Registers(Vec<Var<B32>>),
 }
 
 /// Where an element is.
@@ -27,7 +27,7 @@ pub(super) enum Place {
     /// Memory, in a space at an address.
     Memory(Space, Address),
     /// Bytes of a register holding 4 bytes of an array, from `byte`.
-    Register { word: Reg<B32>, byte: WordByte },
+    Register { word: Var<B32>, byte: WordByte },
 }
 
 /// The place of the element `offset` bytes into `storage`.
@@ -67,7 +67,7 @@ impl Selector<'_> {
         };
         let storage = if self.registers.contains(&buffer) {
             Storage::Registers(
-                (0..bytes.div_ceil(WORD_BYTES)).map(|_| self.builder.reg()).collect(),
+                (0..bytes.div_ceil(WORD_BYTES)).map(|_| self.builder.variable()).collect(),
             )
         } else {
             let stem = if space == Space::Shared { "shared" } else { "local" };

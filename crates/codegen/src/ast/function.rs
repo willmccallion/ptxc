@@ -2,6 +2,7 @@
 //! builder that makes instructions through typed methods only: control flow
 //! and memory here, arithmetic in `arithmetic.rs`.
 
+use super::definitions::Var;
 use super::instr::{Instr, Label, PtxType, Space};
 use super::operand::{Address, Special, Value};
 use super::reg::{B32, B64, Class, Pred, Reg, RegClass};
@@ -140,8 +141,8 @@ impl FunctionBuilder {
     }
 
     /// Adds 1 to `counter` in place.
-    pub(crate) fn increment(&mut self, counter: Reg<B64>) {
-        self.push(Instr::Increment { dst: counter.id() });
+    pub(crate) fn increment(&mut self, counter: Var<B64>) {
+        self.push(Instr::Increment { dst: counter.reg().id() });
     }
 
     pub(crate) fn barrier(&mut self) {
