@@ -341,7 +341,8 @@ pub enum Stmt {
 `Schedule<Validated>::lower` turns loops bound to grid and block axes into
 those indices and guards into `If`s. A reduction keeps an accumulator per
 spatial point inside its first reduction loop, as TVM's
-`decompose_reduction` does. A reduction bound to a thread axis combines the
+`decompose_reduction` does, and an f32 sum of a product accumulates
+through a fused multiply-add (D57). A reduction bound to a thread axis combines the
 threads' partials in shared memory with a halving tree, with barriers only
 where every thread reaches them, as TVM's cross-thread allreduce does.
 Arg-reductions combine (value, position) pairs by a rule that depends only

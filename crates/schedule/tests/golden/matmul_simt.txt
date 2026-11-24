@@ -34,7 +34,7 @@ kernel product(%a: f16[2800] read, %b: f16[1800] read, %out: f32[6300] write)
                 if %i.2 + %i.1 * 4 + floormod(%batch_i.0_j.0, 2) * 64 < 70 {
                   if %j.2 + %j.1 * 4 < 45 {
                     if %k.1 + %k.0 * 8 < 20 {
-                      %acc[%i.2 * 4 + %j.2] = add(%acc[%i.2 * 4 + %j.2], mul(cast<f32>(%a_tile[%i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%j.2 + %j.1 * 4 + %k.1 * 64])))
+                      %acc[%i.2 * 4 + %j.2] = fma(cast<f32>(%a_tile[%i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%j.2 + %j.1 * 4 + %k.1 * 64]), %acc[%i.2 * 4 + %j.2])
                     }
                   }
                 }

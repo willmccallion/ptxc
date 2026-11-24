@@ -39,21 +39,26 @@ pub(super) const fn position_start(tie: TieBreak, extent: Dim) -> Scalar {
 }
 
 /// `accumulated op value`, with `Max` and `Min` as `Or` and `And` on
-/// booleans.
+/// booleans, and an f32 sum of a product fused into one multiply-add, as
+/// nvcc contracts `acc + a * b` by default (D57).
 pub(super) fn combine(
     op: ReduceOp,
     dtype: DType,
     accumulated: ValueExpr,
     value: ValueExpr,
 ) -> ValueExpr {
-    let binary = match (op, dtype) {
-        (ReduceOp::Sum, _) => BinaryOp::Add,
-        (ReduceOp::Prod, _) => BinaryOp::Mul,
-        (ReduceOp::Max, DType::Bool) => BinaryOp::Or,
-        (ReduceOp::Min, DType::Bool) => BinaryOp::And,
-        (ReduceOp::Max, _) => BinaryOp::Max,
-        (ReduceOp::Min, _) => BinaryOp::Min,
+    let binary = match (op, dtype, value) {
+        (ReduceOp::Sum, DType::F32, ValueExpr::Binary(BinaryOp::Mul, lhs, rhs)) => {
+            return ValueExpr::MulAdd { lhs, rhs, addend: Box::new(accumulated) };
+        }
+        (ReduceOp::Sum, _, value) => (BinaryOp::Add, value),
+        (ReduceOp::Prod, _, value) => (BinaryOp::Mul, value),
+        (ReduceOp::Max, DType::Bool, value) => (BinaryOp::Or, value),
+        (ReduceOp::Min, DType::Bool, value) => (BinaryOp::And, value),
+        (ReduceOp::Max, _, value) => (BinaryOp::Max, value),
+        (ReduceOp::Min, _, value) => (BinaryOp::Min, value),
     };
+    let (binary, value) = binary;
     ValueExpr::Binary(binary, Box::new(accumulated), Box::new(value))
 }
 

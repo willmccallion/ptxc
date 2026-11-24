@@ -8,6 +8,7 @@ mod compute_build;
 mod compute_errors;
 mod compute_types;
 mod expressions;
+mod fused;
 mod interp;
 mod lower;
 mod schedule_properties;
