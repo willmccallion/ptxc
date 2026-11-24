@@ -56,7 +56,7 @@ pub fn generate(kernel: &LoweredKernel, target: &Target) -> Result<PtxModule, Co
     if !selector.fragments.is_empty() {
         selector.lane_indices()?;
     }
-    for invariant in hoist::invariant_indices(&kernel) {
+    for invariant in hoist::invariant_indices(&kernel, kernel.body()) {
         let _held = selector.index(invariant)?;
     }
     selector.statement(kernel.body())?;

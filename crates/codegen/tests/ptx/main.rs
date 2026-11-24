@@ -7,6 +7,7 @@ mod async_copy;
 mod fragments;
 mod fused;
 mod kernels;
+mod pipelined;
 mod ptxas;
 mod unrolled;
 mod vector;
