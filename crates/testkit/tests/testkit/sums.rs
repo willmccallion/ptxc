@@ -1,8 +1,10 @@
-use ptxc_core::{DType, Dim, ElementCount, HostTensor, Shape};
+use ptxc_core::{DType, Dim, ElementCount, HostTensor, Shape, TensorData};
+use ptxc_graph::{Op, UnaryOp};
 use ptxc_loop::{LoweredKernel, Schedule, TileOrder};
 use ptxc_target::{MmaShape, SmVersion, Target, preset};
 use ptxc_testkit::compare::Tolerance;
-use ptxc_testkit::sums::SumRounding;
+use ptxc_testkit::families::cases::single_node;
+use ptxc_testkit::sums::{SumRounding, interpreted};
 use ptxc_testkit::tensorized::{ONE_TILE, Operands, exact_inputs, product, tensorized};
 use std::sync::Arc;
 
@@ -68,4 +70,18 @@ fn an_argument_with_no_elements_still_counts_one() {
     let rounding = SumRounding::Interpreted.after(&tiled, &[empty.unwrap()]);
 
     assert_eq!(rounding, SumRounding::TensorCores { longest: ElementCount::new(1) });
+}
+
+#[test]
+fn a_graph_interpreted_stage_by_stage_gives_its_outputs_and_their_rounding() {
+    let x = HostTensor::vector(vec![1.0_f32, -2.0, 0.5].into());
+    let inputs = std::slice::from_ref(&x);
+    let graph = single_node(Op::Unary(UnaryOp::Neg), inputs);
+
+    let (outputs, rounding) = interpreted(graph, inputs).unwrap();
+
+    assert_eq!(outputs.len(), 1);
+    let TensorData::F32(negated) = outputs[0].data() else { panic!("{:?}", outputs[0]) };
+    assert_eq!(negated, &[-1.0, 2.0, -0.5]);
+    assert_eq!(rounding, SumRounding::Interpreted);
 }
