@@ -467,6 +467,15 @@ and the GPU tests check them.
   to their type after every operation, D42), 8- and 32-bit integers in
   32-bit registers, wrapped after every operation, `i64` in 64-bit, and
   booleans as predicates. Index arithmetic is `s64`.
+- Index arithmetic is numbered once a block, a loop body's entries
+  dropped when it ends. Index expressions that divide and read only grid
+  and block indices, such as a block's place in a grid fused onto
+  `blockIdx.x`, are computed once at the kernel's start. A floored
+  division or modulo by a power of two is a shift or a mask; by another
+  constant, where the dividend's range (from the launch, loops and
+  fragment shapes) is known to lie in `0..2^32`, it is 32-bit unsigned
+  division, which ptxas multiplies out; otherwise it is `div.s64` with a
+  floored fix-up.
 - FP8 converts in hardware, which needs PTX ISA 8.1 on `sm_89`; the
   `sm_89` preset declares 8.4 (D50), which FP8 `mma` also needs.
 - Fragments follow the PTX ISA's lane layouts, which only codegen knows

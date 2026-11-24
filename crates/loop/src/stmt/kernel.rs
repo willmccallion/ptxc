@@ -3,7 +3,7 @@
 use super::Stmt;
 use super::buffer::{Access, Buffer, BufferId};
 use crate::compute::VarName;
-use crate::expr::{ExprArena, Interval, VarId};
+use crate::expr::{ExprArena, Interval, VarId, VarRanges};
 use crate::schedule::ThreadAxis;
 use ptxc_core::{Dim, IndexVec, KernelName};
 use ptxc_target::{BlockCount, SmemBytes, ThreadsPerBlock};
@@ -108,6 +108,19 @@ impl LoweredKernel {
     /// The shared memory its blocks use.
     pub const fn smem(&self) -> SmemBytes {
         self.smem
+    }
+
+    /// The range of each grid and block index, from the launch.
+    pub fn thread_ranges(&self) -> VarRanges {
+        let mut ranges = VarRanges::new();
+        for (var, definition) in self.vars.iter_enumerated() {
+            if let KernelVar::Thread { axis, .. } = definition
+                && let Some(range) = self.launch.range(*axis)
+            {
+                ranges.insert(var, range);
+            }
+        }
+        ranges
     }
 
     /// The body every thread runs.

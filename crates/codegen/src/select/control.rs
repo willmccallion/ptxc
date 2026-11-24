@@ -3,7 +3,7 @@
 use super::{CodegenError, Selector};
 use crate::ast::{B64, Compare, CvtMode, PtxType, Reg, Signedness, Special, Value};
 use ptxc_core::Dim;
-use ptxc_loop::{KernelVar, Stmt, ThreadAxis, VarId};
+use ptxc_loop::{Interval, KernelVar, Stmt, ThreadAxis, VarId};
 
 const fn special(axis: ThreadAxis) -> Special {
     match axis {
@@ -92,6 +92,9 @@ impl Selector<'_> {
         // NOTE: a vectorized loop runs as a serial one until vector loads
         // and stores come (#111). Unrolled loops never reach here:
         // `generate` expands them first.
+        if let Some(range) = Interval::of_loop(extent) {
+            self.ranges.insert(var, range);
+        }
         let extent = i64::try_from(extent.get()).map_err(|_| CodegenError::TooLarge)?;
         let counter = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
         let _previous = self.vars.insert(var, counter);

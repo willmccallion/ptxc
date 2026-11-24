@@ -4,31 +4,19 @@
 //! sees constant offsets where only the loop made them vary.
 
 use crate::expr::{ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
-use crate::stmt::{
-    Condition, ForKind, FragmentTile, KernelVar, LoweredKernel, Stmt, TileAccess, ValueExpr,
-};
+use crate::stmt::{Condition, ForKind, FragmentTile, LoweredKernel, Stmt, TileAccess, ValueExpr};
 use ptxc_core::Dim;
 
 /// `kernel` with every unrolled loop expanded, and every guard that the
 /// loops' and launch's ranges then decide resolved.
 pub fn unrolled(kernel: &LoweredKernel) -> LoweredKernel {
-    let mut unroller =
-        Unroller { exprs: kernel.exprs.clone(), ranges: thread_ranges(kernel), values: Vec::new() };
+    let mut unroller = Unroller {
+        exprs: kernel.exprs.clone(),
+        ranges: kernel.thread_ranges(),
+        values: Vec::new(),
+    };
     let body = unroller.stmt(&kernel.body);
     LoweredKernel { body, exprs: unroller.exprs, ..kernel.clone() }
-}
-
-/// The range of each thread index, from the launch.
-fn thread_ranges(kernel: &LoweredKernel) -> VarRanges {
-    let mut ranges = VarRanges::new();
-    for (var, definition) in kernel.vars.iter_enumerated() {
-        if let KernelVar::Thread { axis, .. } = definition
-            && let Some(range) = kernel.launch.range(*axis)
-        {
-            ranges.insert(var, range);
-        }
-    }
-    ranges
 }
 
 struct Unroller {

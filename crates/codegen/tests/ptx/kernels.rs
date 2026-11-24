@@ -5,7 +5,7 @@
 
 use crate::ptxas::assemble;
 use crate::{emitted, target};
-use ptxc_codegen::generate;
+use ptxc_codegen::{PtxModule, generate};
 use ptxc_core::float::Overflow;
 use ptxc_core::{DType, Dim, Shape};
 use ptxc_loop::{
@@ -226,34 +226,56 @@ fn selects_and_constants_select_per_type() {
     golden::check("select_constant.txt", &table).unwrap();
 }
 
-/// `y[i, j] = x[floordiv(i * 5 + j - 3, 4), floormod(i * 5 + j - 3, 4)]`,
-/// clamped, which exercises floored division of negative indices.
-#[test]
-fn floored_index_arithmetic_assembles() {
+/// `y[i, j] = x[floordiv(n, d), floormod(n, d)]` for `divisor` `d` and
+/// `n = i * 5 + c * j + offset`, the row clamped into `x`.
+fn floored(divisor: i64, [c, offset]: [i64; 2]) -> PtxModule {
     let mut compute = ComputeBuilder::new(ComputeName::new("floored"));
     let x = compute.input(TensorName::new("x"), DType::F16, shape(&[8, 4]));
     let (_, i) = compute.spatial(VarName::new("i"), Dim::new(5));
     let (_, j) = compute.spatial(VarName::new("j"), Dim::new(5));
     let exprs = compute.exprs();
-    let five = exprs.constant(5);
+    let (five, c) = (exprs.constant(5), exprs.constant(c));
     let row = exprs.mul(i, five);
-    let flat = exprs.add(row, j);
-    let minus_three = exprs.constant(-3);
-    let shifted = exprs.add(flat, minus_three);
-    let four = exprs.constant(4);
-    let quotient = exprs.floor_div(shifted, four);
+    let column = exprs.mul(j, c);
+    let flat = exprs.add(row, column);
+    let offset = exprs.constant(offset);
+    let shifted = exprs.add(flat, offset);
+    let divisor = exprs.constant(divisor);
+    let quotient = exprs.floor_div(shifted, divisor);
     let zero = exprs.constant(0);
     let seven = exprs.constant(7);
     let raised = exprs.max(quotient, zero);
     let clamped = exprs.min(raised, seven);
-    let column = exprs.floor_mod(shifted, four);
+    let column = exprs.floor_mod(shifted, divisor);
     let load = TensorExpr::Load { tensor: x, index: vec![clamped, column] };
     compute.output(TensorName::new("y"), load);
+    emitted(Arc::new(compute.finish().unwrap()))
+}
 
-    let module = emitted(Arc::new(compute.finish().unwrap()));
+/// Floored division of indices that may be negative, by a power of two.
+#[test]
+fn floored_index_arithmetic_assembles() {
+    let module = floored(4, [1, -3]);
 
     assemble(&module);
     golden::check("floored.ptx", &module.to_string()).unwrap();
+}
+
+/// Whether `module` has an `op` instruction dividing by 3.
+fn divides_by_three(module: &str, op: &str) -> bool {
+    module.lines().any(|line| line.contains(op) && line.ends_with(", 3;"))
+}
+
+#[test]
+fn an_index_known_to_fit_divides_in_32_bits_and_one_that_may_be_negative_floors() {
+    // A constant offset simplifies into the quotient, so only `i * 5 - j`
+    // can be negative.
+    let [negative, natural] = [[-1, 0], [1, -4]].map(|n| floored(3, n).to_string());
+
+    assert!(divides_by_three(&negative, "div.s64") && divides_by_three(&negative, "rem.s64"));
+    assert!(!divides_by_three(&negative, "div.u32") && !divides_by_three(&negative, "rem.u32"));
+    assert!(divides_by_three(&natural, "div.u32") && divides_by_three(&natural, "rem.u32"));
+    assert!(!natural.contains("div.s64") && !natural.contains("rem.s64"));
 }
 
 /// `y[i] = x[idx[i]]`: a gather reads its index, then the data.
