@@ -12,8 +12,8 @@ kernel product(%a: f16[2800] read, %b: f16[1800] read, %out: f32[6300] write)
             %acc[%i.2 * 4 + %j.2] = fill(0.0:f32)
           }
         }
-        alloc %a_tile: f16[8192] shared {
-          alloc %b_tile: f16[8192] shared {
+        alloc %a_tile: f16[8192] shared swizzle<3,4,3> {
+          alloc %b_tile: f16[8192] shared swizzle<3,4,3> {
             barrier
             for %a_fill in 8 {
               %a_tile[(%i.1 * 32 + %j.1 * 64 + %a_fill * 128 + %lane) * 2] <- async %a[%i.1 * 70 + %j.1 * 140 + floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + %a_fill * 280 + %lane * 2] run 2 if floormod(%batch_i.0_j.0, 2) * 64 + %lane * 2 < 70, %i.1 + %j.1 * 2 + %a_fill * 4 < 20

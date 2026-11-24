@@ -1254,3 +1254,36 @@ the old one.
   the large tile's speed. Pipelining the large tile profitably needs
   `ldmatrix` addresses that advance with the slot by an immediate or one
   add, as CUTLASS's iterators do, which is codegen work of its own (#155).
+
+## D66. A swizzle is a shared buffer's layout
+
+- **Context:**
+  - The 128 by 128 tensor-core tile is bound by shared memory. Nsight
+    Compute on 3000³ shows 5.2M `ldmatrix` taking 83.2M wavefronts, 69.3M
+    of them bank-conflict replays.
+  - The tiles are row-major. The 8 rows an `ldmatrix` reads lie 64 or 256
+    bytes apart and share 2 or 1 of the 8 groups of 16-byte banks a
+    128-byte line spans.
+- **Options:**
+  - An XOR in the index expressions, which would make them non-affine for
+    the simplifier, bounds, alignment and run analyses.
+  - Padding the rows, which wastes shared memory and still leaves `cp.async`
+    runs to place.
+  - A permutation of the buffer's bytes that indices never see, as
+    CUTLASS's swizzled layouts are.
+- **Choice:**
+  - `MemScope::Shared { swizzle: Option<Swizzle> }`: a swizzle is part of
+    a shared buffer's scope and nothing else's.
+  - `Primitive::Swizzle` gives a staged tile one, and `Swizzle::for_tile`
+    picks CUTLASS's: 16-byte units permuted by the row's place among 8.
+  - The interpreter stores through the permutation and codegen applies it
+    to every byte offset into the buffer.
+  - The default schedule swizzles the 64 by 64 tensor-core tile: shapes
+    using it gain up to 19%, and none is slower beyond noise.
+  - It does not swizzle the 128 by 128 tile yet: its swizzled addresses
+    cost a 64-bit shift, mask, shift and exclusive-or each. At 215
+    registers ptxas recomputes them every iteration, and 3000³ becomes 10%
+    slower though 4096³ becomes 6% faster. Cheap addresses are #157.
+- **Reason:** indices stay affine, so every analysis on them stands; a
+  swizzle that loses elements fails on the CPU; and a unit of 16 bytes
+  keeps every copy and `ldmatrix` row whole.

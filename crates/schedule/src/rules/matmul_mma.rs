@@ -7,34 +7,38 @@
 use super::bind;
 use super::matmul_loops::{batch_loops, bind_blocks, parts, pipeline_step, stage_operands};
 use super::matmul_shape::Product;
-use crate::tiling::{TensorCoreTile, TileShape};
+use crate::tiling::{TensorCoreTile, TileLayout, TileShape};
 use ptxc_core::Dim;
 use ptxc_loop::{
-    ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, StageCount, TensorExpr,
-    ThreadAxis,
+    ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, StageCount, Swizzle,
+    TensorExpr, ThreadAxis,
 };
 use ptxc_target::{MmaInstruction, MmaShape, Target};
 
 /// Hand-picked until the search tunes them: four warps, each holding 4 by
 /// 8 `mma` tiles, over a block tile of 128 by 128 at f16's m16n8, staged
-/// two `mma` steps deep, so an f16 step stages 16 KiB. It is not
-/// pipelined: its grid keeps the GPU busy, and recomputing its `ldmatrix`
-/// addresses for a rotating slot costs more than the overlap gains...
+/// two `mma` steps deep, so an f16 step stages 16 KiB. It is neither
+/// pipelined nor swizzled: computing its `ldmatrix` addresses for a
+/// rotating slot or a swizzle costs it more than either gains until those
+/// addresses are cheap (#157)...
 const LARGE: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 4, columns: 8 },
     steps: 2,
     stages: None,
+    layout: TileLayout::Plain,
 };
 
 /// ...and, for an output too small for enough large tiles, four warps
 /// holding 2 by 4 tiles each, over a block tile of 64 by 64, its steps
-/// pipelined over four stages, which its few blocks cannot hide otherwise.
+/// pipelined over four stages, which its few blocks cannot hide otherwise,
+/// and its tiles swizzled.
 const SMALL: TensorCoreTile = TensorCoreTile {
     warps: TileShape { rows: 2, columns: 2 },
     per_warp: TileShape { rows: 2, columns: 4 },
     steps: 2,
     stages: StageCount::new(4),
+    layout: TileLayout::Swizzled,
 };
 
 /// The blocks a grid of large tiles needs to keep a GPU busy: about one per
@@ -90,6 +94,9 @@ pub(crate) fn tiled_on_tensor_cores(
     bind(schedule, row_warp, ThreadAxis::ThreadY)?;
     bind(schedule, column_warp, ThreadAxis::ThreadZ)?;
     stage_operands(schedule, product, step)?;
+    if tile.layout == TileLayout::Swizzled {
+        swizzle_tiles(schedule, product)?;
+    }
     pipeline_step(schedule, product, (step, tile.step(shape)), target)?;
     for loop_ in [step_depth, row_tile, column_tile] {
         schedule.apply(Primitive::Unroll { loop_ })?;
@@ -112,4 +119,18 @@ fn tile_for(schedule: &Schedule<Open>, product: Product, shape: MmaShape) -> Ten
     let columns =
         blocks(extent(product.column), LARGE.warps.columns, LARGE.per_warp.columns, shape.n);
     if batch * rows * columns >= FULL_GRID { LARGE } else { SMALL }
+}
+
+/// Both of `product`'s staged tiles swizzled as CUTLASS's layouts are, so
+/// the rows an `ldmatrix` reads fall in different banks: each whose rows
+/// have a swizzle and that holds whole blocks of it.
+fn swizzle_tiles(schedule: &mut Schedule<Open>, product: Product) -> Result<(), ScheduleError> {
+    for tensor in [product.lhs, product.rhs] {
+        let Some(extents) = schedule.staged_extents(tensor)? else { continue };
+        let element = schedule.compute().inputs()[tensor].dtype.element_size().get();
+        if let Some(swizzle) = Swizzle::for_tile(&extents, element) {
+            schedule.apply(Primitive::Swizzle { tensor, swizzle })?;
+        }
+    }
+    Ok(())
 }

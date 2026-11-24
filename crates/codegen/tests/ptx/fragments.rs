@@ -120,6 +120,49 @@ fn fragments_a_rolled_loop_indexes_stay_in_local_memory() {
 }
 
 #[test]
+fn a_default_product_swizzles_its_tiles_addresses_and_assembles() {
+    let instruction = f16_mma();
+    let extents = [64, 64, 32];
+    let compute = product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor));
+    let kernel = ptxc_schedule::default_schedule(compute, &target()).unwrap().lower();
+
+    let module = generate(&kernel, &target()).unwrap();
+
+    assemble(&module);
+    let text = module.to_string();
+    let swizzles = swizzled_offsets(&text);
+    assert!(swizzles > 0 && swizzles == count(&module, "xor.b64"), "{text}");
+}
+
+/// How many byte offsets `module` swizzles as `<3,4,3>` does: shifted
+/// right 7 bits, masked to 3, shifted left 4 and exclusive-ored back in.
+fn swizzled_offsets(module: &str) -> usize {
+    let instructions: Vec<Vec<&str>> = module
+        .lines()
+        .map(|line| {
+            let parts = line.trim().trim_end_matches(';').split([' ', ',']);
+            parts.filter(|part| !part.is_empty()).collect()
+        })
+        .collect();
+    instructions.windows(4).filter(|window| is_swizzle(window)).count()
+}
+
+/// Whether `window`'s four instructions swizzle one byte offset as
+/// `<3,4,3>` does.
+fn is_swizzle(window: &[Vec<&str>]) -> bool {
+    let [shr, and, shl, xor] = window else { return false };
+    matches!(
+        (shr.as_slice(), and.as_slice(), shl.as_slice(), xor.as_slice()),
+        (
+            ["shr.b64", read, offset, "7"],
+            ["and.b64", bits, read_again, "7"],
+            ["shl.b64", moved, bits_again, "4"],
+            ["xor.b64", _, offset_again, moved_again],
+        ) if read == read_again && bits == bits_again && offset == offset_again && moved == moved_again
+    )
+}
+
+#[test]
 fn a_grid_of_uneven_block_counts_divides_once_in_32_bits() {
     let instruction = f16_mma();
     let extents = [128, 768, 768];
