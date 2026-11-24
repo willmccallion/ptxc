@@ -1,5 +1,6 @@
-//! Matrix products tiled on CUDA cores: the kernel the rule builds, and
-//! that it computes exactly what the serial schedule does.
+//! Matrix products tiled on CUDA cores, f32 having no `mma`: the kernel
+//! the rule builds, and that it computes exactly what the serial schedule
+//! does.
 
 use crate::{launch_dims, scheduled, shape};
 use proptest::prelude::*;
@@ -16,19 +17,19 @@ use std::sync::Arc;
 
 /// How a product's operands are stored and broadcast.
 #[derive(Clone, Copy, Debug)]
-struct Layout {
+pub(crate) struct Layout {
     /// `a` is stored `[k, m]` rather than `[m, k]`.
-    a_transposed: bool,
+    pub(crate) a_transposed: bool,
     /// `b` is stored `[n, k]` rather than `[k, n]`.
-    b_transposed: bool,
+    pub(crate) b_transposed: bool,
     /// `a` has no batch axis, and is read at the same matrix for every
     /// batch.
-    a_broadcast: bool,
+    pub(crate) a_broadcast: bool,
 }
 
 /// `out[batch, i, j] = sum over k of a[.., i, k] * b[batch, k, j]` on
 /// `dtype` operands widened to f32, laid out as `layout` says.
-fn product(
+pub(crate) fn product(
     dtype: DType,
     [batch, rows, columns, depth]: [u64; 4],
     layout: Layout,
@@ -65,7 +66,8 @@ fn product(
     Arc::new(compute.finish().unwrap())
 }
 
-const PLAIN: Layout = Layout { a_transposed: false, b_transposed: false, a_broadcast: false };
+pub(crate) const PLAIN: Layout =
+    Layout { a_transposed: false, b_transposed: false, a_broadcast: false };
 
 /// The inputs of `compute`, an f32 product, from `values` in turn.
 fn inputs(compute: &ComputeDef, values: &[f32]) -> Vec<HostTensor> {
@@ -83,7 +85,10 @@ fn inputs(compute: &ComputeDef, values: &[f32]) -> Vec<HostTensor> {
 
 /// The bits of `compute`'s outputs under the default schedule and the
 /// serial one.
-fn tiled_and_serial(compute: &Arc<ComputeDef>, inputs: &[HostTensor]) -> [Vec<Vec<u8>>; 2] {
+pub(crate) fn tiled_and_serial(
+    compute: &Arc<ComputeDef>,
+    inputs: &[HostTensor],
+) -> [Vec<Vec<u8>>; 2] {
     let target = preset(SmVersion::SM_89).unwrap();
     let tiled = default_schedule(Arc::clone(compute), &target).unwrap().lower();
     let serial = Schedule::new(Arc::clone(compute)).validate(&target).unwrap().lower();
@@ -95,14 +100,14 @@ fn tiled_and_serial(compute: &Arc<ComputeDef>, inputs: &[HostTensor]) -> [Vec<Ve
 
 #[test]
 fn a_product_gives_blocks_of_16_by_16_threads_a_64_by_64_tile_each() {
-    let compute = product(DType::F16, [2, 70, 45, 20], Layout { a_transposed: true, ..PLAIN });
+    let compute = product(DType::F32, [2, 70, 45, 20], Layout { a_transposed: true, ..PLAIN });
     let target = preset(SmVersion::SM_89).unwrap();
     let kernel = default_schedule(Arc::clone(&compute), &target).unwrap().lower();
 
     let (text, launch) = scheduled(compute);
 
     assert_eq!(launch_dims(launch), ([4, 1, 1], [16, 16, 1]));
-    assert_eq!(kernel.smem().get(), 2 * 64 * 8 * 2);
+    assert_eq!(kernel.smem().get(), 2 * 64 * 8 * 4);
     golden::check("matmul_simt.txt", &text).unwrap();
 }
 

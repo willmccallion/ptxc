@@ -110,7 +110,8 @@ mod tests {
     use super::check::{Failure, check, compares_backend};
     use super::fuzz;
     use ptxc_core::ElementCount;
-    use ptxc_core::HostTensor;
+    use ptxc_core::float::F16;
+    use ptxc_core::{Dim, HostTensor, Shape};
     use ptxc_graph::{BinaryOp, Graph, Op};
     use ptxc_testkit::generate::{Generator, Input, Node, Operand, Recipe, Seed, Source};
     use ptxc_testkit::lowered::run_lowered;
@@ -179,6 +180,35 @@ mod tests {
         });
 
         assert_eq!(compared, [[true, true], [true, false]]);
+    }
+
+    /// An f16 product of two 16 by 16 inputs drawn from `source`, which
+    /// the default schedule multiplies on tensor cores.
+    fn f16_product(source: Source) -> Recipe {
+        let matrix = |salt: u16| {
+            let values: Vec<F16> =
+                (0..256_u16).map(|n| F16::from_f32(f32::from((n + salt) % 7) - 3.0)).collect();
+            let dims = Shape::new(vec![Dim::new(16), Dim::new(16)]).unwrap();
+            Input { tensor: HostTensor::new(dims, values.into()).unwrap(), source }
+        };
+        Recipe {
+            inputs: vec![matrix(0), matrix(3)],
+            nodes: vec![Node {
+                op: Op::MatMul,
+                operands: vec![Operand::Input(0), Operand::Input(1)],
+            }],
+        }
+    }
+
+    #[test]
+    fn a_tensor_core_case_is_compared_with_the_backend_only_where_it_is_continuous() {
+        let none = |_: &Graph, _: &[HostTensor]| Ok(Vec::new());
+
+        let moderate = check(&f16_product(Source::Moderate), Some(&none));
+        let drawn = check(&f16_product(Source::Family("matmul")), Some(&none));
+
+        assert!(matches!(moderate, Err(Failure::Mismatch(_))), "{moderate:?}");
+        assert_eq!(drawn, Ok(()));
     }
 
     #[test]

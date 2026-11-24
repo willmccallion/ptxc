@@ -426,7 +426,11 @@ and the GPU tests check them.
   In M2, `default_schedule` gives injective stages blocks of 256 threads and
   reductions a block per output row with a shared-memory tree (D49). In
   M3 it tiles a matrix product on CUDA cores, its operands staged in shared
-  memory and each thread's outputs in registers (D56).
+  memory and each thread's outputs in registers (D56). Where the target has
+  an `mma` for the product's operand and sum types (f16, bf16, FP8, 8-bit
+  integers), it tiles it on tensor cores instead: a block's four warps each
+  hold 2 by 4 `mma` tiles of a 64 by 64 block tile, both operands staged two
+  `mma` steps deep, and the innermost tile tensorized (D58).
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's
