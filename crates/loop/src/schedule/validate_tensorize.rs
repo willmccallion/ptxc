@@ -69,7 +69,8 @@ pub(super) fn check_tensorized(
 }
 
 /// The tile's loops are the innermost serial loops, rows, columns, depth,
-/// inside a serial reduction loop, with no reduction bound to threads.
+/// inside a serial reduction loop, with no reduction bound to threads, and
+/// every serial reduction loop is outside the loops over the warp's tiles.
 fn check_place(tree: &LoopTree, loops: [LoopId; 3]) -> Result<(), ScheduleError> {
     let bound = |id: LoopId| matches!(tree.loops()[id].annotation, LoopAnnotation::Bound(_));
     let serial: Vec<LoopId> = tree.nest().iter().copied().filter(|&id| !bound(id)).collect();
@@ -80,9 +81,14 @@ fn check_place(tree: &LoopTree, loops: [LoopId; 3]) -> Result<(), ScheduleError>
         return Err(ScheduleError::TensorizeNotInnermost);
     }
     let reduce = |id: &LoopId| tree.loops()[*id].kind == LoopKind::Reduce;
-    let stepped = serial[..serial.len() - 3].iter().any(reduce);
+    let outside = &serial[..serial.len() - 3];
     let shared = tree.nest().iter().any(|id| reduce(id) && bound(*id));
-    if stepped && !shared { Ok(()) } else { Err(ScheduleError::TensorizeNoStep) }
+    let Some(first) = outside.iter().position(reduce).filter(|_| !shared) else {
+        return Err(ScheduleError::TensorizeNoStep);
+    };
+    let step_after_tile =
+        outside[first..].windows(2).any(|pair| !reduce(&pair[0]) && reduce(&pair[1]));
+    if step_after_tile { Err(ScheduleError::TensorizeStepInsideTiles) } else { Ok(()) }
 }
 
 /// The two loads the product multiplies: its one output a sum over one

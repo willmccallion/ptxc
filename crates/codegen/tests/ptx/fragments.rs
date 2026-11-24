@@ -128,6 +128,11 @@ fn a_grid_of_uneven_block_counts_divides_once_in_32_bits() {
 
     assert_eq!(count(&module, "div.s64") + count(&module, "rem.s64"), 0);
     assert_eq!([count(&module, "div.u32"), count(&module, "rem.u32")], [1, 1]);
+    // Two `mma` steps a stage, each loading a warp's 2 tiles of `a` and 4 of
+    // `b` once.
+    assert_eq!(count(&module, "ldmatrix.sync.aligned.m8n8.x4.shared.b16"), 4);
+    assert_eq!(count(&module, "ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16"), 8);
+    assert_eq!(count(&module, "mma.sync.aligned"), 16);
     let text = module.to_string();
     let by_column_blocks =
         |op: &str| text.lines().any(|line| line.contains(op) && line.ends_with(", 12;"));

@@ -32,10 +32,14 @@ kernel product(%a: f16[512] read, %b: f16[256] read, %out: f32[128] write)
               }
               barrier
               for %i.2 in 1 {
+                %lhs[%i.2] = tile %a_tile[%i.2 * 256 + %i.1 * 256] stride 16
+              }
+              for %j.1 in 1 {
+                %rhs[%j.1] = tile %b_tile[%j.1 * 8] stride 8
+              }
+              for %i.2 in 1 {
                 for %j.1 in 1 {
-                  %lhs[0] = tile %a_tile[%i.2 * 256 + %i.1 * 256] stride 16
-                  %rhs[0] = tile %b_tile[%j.1 * 8] stride 8
-                  %acc[%i.2 + %j.1] = mma.m16n8k16.f16.f32(%lhs[0], %rhs[0], %acc[%i.2 + %j.1])
+                  %acc[%i.2 + %j.1] = mma.m16n8k16.f16.f32(%lhs[%i.2], %rhs[%j.1], %acc[%i.2 + %j.1])
                 }
               }
             }
