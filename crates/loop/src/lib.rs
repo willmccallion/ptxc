@@ -26,7 +26,7 @@ pub use schedule::{
     ScheduleError, SplitFactor, StageCount, Tensorized, ThreadAxis, Trace, Validated,
 };
 pub use stmt::{
-    Access, Buffer, BufferId, Condition, ForKind, FragmentShape, FragmentTile, KernelParam,
+    Access, Buffer, BufferId, Condition, Fold, ForKind, FragmentShape, FragmentTile, KernelParam,
     KernelVar, LaunchShape, LoweredKernel, MemScope, Stmt, Swizzle, TileAccess, TileOrder,
     ValueExpr,
 };

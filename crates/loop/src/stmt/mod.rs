@@ -9,7 +9,7 @@ mod value_expr;
 pub use buffer::{Access, Buffer, BufferId, FragmentShape, MemScope};
 pub use fragment::{FragmentTile, TileAccess, TileOrder};
 pub use kernel::{KernelParam, KernelVar, LaunchShape, LoweredKernel};
-pub use swizzle::Swizzle;
+pub use swizzle::{Fold, Swizzle};
 pub use value_expr::ValueExpr;
 pub(crate) use value_expr::is_predicate;
 
