@@ -77,7 +77,8 @@ impl Selector<'_> {
             Stmt::FragmentFill { .. }
             | Stmt::FragmentLoad { .. }
             | Stmt::Mma { .. }
-            | Stmt::FragmentStore { .. } => {
+            | Stmt::FragmentStore { .. }
+            | Stmt::FragmentEach { .. } => {
                 Err(CodegenError::Unsupported { op: "fragment statements, until #104" })
             }
         }

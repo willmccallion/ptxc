@@ -4,7 +4,8 @@
 
 use super::{Scope, VerifyError};
 use crate::compute::Scalar;
-use crate::stmt::{Access, BufferId, FragmentShape, MemScope, TileAccess};
+use crate::expr::{Interval, VarId};
+use crate::stmt::{Access, BufferId, FragmentShape, FragmentTile, MemScope, Stmt, TileAccess};
 use ptxc_core::{DType, Dim};
 use ptxc_target::{MmaInstruction, ThreadsPerBlock};
 
@@ -12,15 +13,49 @@ use ptxc_target::{MmaInstruction, ThreadsPerBlock};
 const WARP: u64 = 32;
 
 impl Scope<'_> {
-    pub(super) fn fill(&self, fragment: BufferId, value: Scalar) -> Result<(), VerifyError> {
+    pub(super) fn fill(&self, fragment: FragmentTile, value: Scalar) -> Result<(), VerifyError> {
         self.whole_warps()?;
         let _shape = self.fragment(fragment)?;
-        same_type("a fragment fill", self.kernel.buffers()[fragment].dtype, value.dtype())
+        same_type("a fragment fill", self.dtype(fragment), value.dtype())
+    }
+
+    /// `body` for each element of `fragment`'s tile: `row` and `column`
+    /// bound within the tile, the element readable, and no barrier or
+    /// fragment statement inside, as each element runs in one lane.
+    pub(super) fn each(
+        &self,
+        fragment: FragmentTile,
+        [row, column]: [VarId; 2],
+        body: &Stmt,
+    ) -> Result<(), VerifyError> {
+        self.whole_warps()?;
+        let shape = self.fragment(fragment)?;
+        let mut inner = self.clone();
+        for (var, extent) in [(row, shape.rows), (column, shape.columns)] {
+            let _new = inner.bound.insert(var);
+            if let Some(range) = Interval::of_loop(extent) {
+                inner.facts.insert_range(var, range);
+            }
+        }
+        inner.divergent = true;
+        inner.elements.push(fragment.buffer);
+        inner.stmt(body)
+    }
+
+    /// The type of `fragment`'s element, read inside a `FragmentEach` over
+    /// it.
+    pub(super) fn element(&self, fragment: BufferId) -> Result<DType, VerifyError> {
+        let found = &self.kernel.buffers()[fragment];
+        if self.elements.contains(&fragment) {
+            Ok(found.dtype)
+        } else {
+            Err(VerifyError::ElementOutsideEach(found.name.clone()))
+        }
     }
 
     pub(super) fn tile_load(
         &self,
-        fragment: BufferId,
+        fragment: FragmentTile,
         source: BufferId,
         at: TileAccess,
     ) -> Result<(), VerifyError> {
@@ -31,12 +66,12 @@ impl Scope<'_> {
             return Err(VerifyError::TileNotShared(found.name.clone()));
         }
         self.tile(source, at, shape)?;
-        same_type("a fragment load", self.kernel.buffers()[fragment].dtype, found.dtype)
+        same_type("a fragment load", self.dtype(fragment), found.dtype)
     }
 
     pub(super) fn tile_store(
         &self,
-        fragment: BufferId,
+        fragment: FragmentTile,
         target: BufferId,
         at: TileAccess,
     ) -> Result<(), VerifyError> {
@@ -53,7 +88,7 @@ impl Scope<'_> {
         }
         self.tile(target, at, shape)?;
         let place = format!("a fragment store to {}", found.name);
-        same_type(&place, found.dtype, self.kernel.buffers()[fragment].dtype)
+        same_type(&place, found.dtype, self.dtype(fragment))
     }
 
     /// `accumulator += a · b`: each fragment of the shape and type
@@ -61,7 +96,7 @@ impl Scope<'_> {
     pub(super) fn mma(
         &self,
         instruction: MmaInstruction,
-        [a, b, accumulator]: [BufferId; 3],
+        [a, b, accumulator]: [FragmentTile; 3],
     ) -> Result<(), VerifyError> {
         self.whole_warps()?;
         let shape = instruction.shape;
@@ -74,10 +109,10 @@ impl Scope<'_> {
         for (fragment, expected, dtype, place) in operands {
             let actual = self.fragment(fragment)?;
             if actual != expected {
-                let name = self.kernel.buffers()[fragment].name.clone();
+                let name = self.kernel.buffers()[fragment.buffer].name.clone();
                 return Err(VerifyError::FragmentShape { fragment: name, expected, actual });
             }
-            same_type(place, dtype, self.kernel.buffers()[fragment].dtype)?;
+            same_type(place, dtype, self.dtype(fragment))?;
         }
         Ok(())
     }
@@ -98,17 +133,30 @@ impl Scope<'_> {
         if threads.is_multiple_of(WARP) { Ok(()) } else { Err(VerifyError::PartialWarp) }
     }
 
-    /// The shape of `fragment`, a fragment allocated here.
-    fn fragment(&self, fragment: BufferId) -> Result<FragmentShape, VerifyError> {
-        let found = &self.kernel.buffers()[fragment];
+    /// The shape of `fragment`'s tiles, of a fragment allocated here, the
+    /// tile one of those it holds.
+    fn fragment(&self, fragment: FragmentTile) -> Result<FragmentShape, VerifyError> {
+        let found = &self.kernel.buffers()[fragment.buffer];
         let MemScope::Fragment(shape) = found.scope else {
             return Err(VerifyError::NotFragment(found.name.clone()));
         };
-        if self.allocated.contains(&fragment) {
-            Ok(shape)
-        } else {
-            Err(VerifyError::NotAllocated(found.name.clone()))
+        if !self.allocated.contains(&fragment.buffer) {
+            return Err(VerifyError::NotAllocated(found.name.clone()));
         }
+        self.index(fragment.tile)?;
+        let elements = shape.rows.get().saturating_mul(shape.columns.get());
+        let tiles =
+            found.size.get().checked_div(elements).and_then(|tiles| i64::try_from(tiles).ok());
+        let tile = self.facts.bounds(self.kernel.exprs(), fragment.tile);
+        match tile.zip(tiles) {
+            Some((tile, tiles)) if tile.min() >= 0 && tile.max() < tiles => Ok(shape),
+            _ => Err(VerifyError::OutOfBounds(found.name.clone())),
+        }
+    }
+
+    /// The element type of `fragment`'s buffer.
+    fn dtype(&self, fragment: FragmentTile) -> DType {
+        self.kernel.buffers()[fragment.buffer].dtype
     }
 
     /// A tile of `shape` at `at` in `buffer`, which is not a fragment: its

@@ -62,6 +62,9 @@ pub enum VerifyError {
     /// A fragment buffer with too few elements for its tile.
     #[error("{0} has fewer elements than its tile")]
     FragmentSize(TensorName),
+    /// A fragment's element read outside a `FragmentEach` over it.
+    #[error("an element of {0} is read outside a loop over its elements")]
+    ElementOutsideEach(TensorName),
     /// A fragment loaded from a buffer outside shared memory.
     #[error("a fragment is loaded from {0}, which is not in shared memory")]
     TileNotShared(TensorName),

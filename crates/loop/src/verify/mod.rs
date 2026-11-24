@@ -27,6 +27,7 @@ pub fn verify(kernel: &LoweredKernel) -> Result<(), VerifyError> {
         facts: Facts::default(),
         allocated: HashSet::new(),
         divergent: false,
+        elements: Vec::new(),
     };
     for (var, definition) in kernel.vars().iter_enumerated() {
         if let KernelVar::Thread { axis, .. } = definition {
@@ -47,6 +48,8 @@ struct Scope<'k> {
     facts: Facts,
     allocated: HashSet<BufferId>,
     divergent: bool,
+    /// The fragments the enclosing `FragmentEach`es iterate.
+    elements: Vec<BufferId>,
 }
 
 impl Scope<'_> {
@@ -101,6 +104,9 @@ impl Scope<'_> {
             }
             Stmt::FragmentStore { fragment, target, at } => {
                 self.tile_store(*fragment, *target, *at)
+            }
+            Stmt::FragmentEach { fragment, row, column, body } => {
+                self.each(*fragment, [*row, *column], body)
             }
         }
     }
@@ -211,6 +217,7 @@ impl Scope<'_> {
                 Ok(self.kernel.buffers()[*buffer].dtype)
             }
             ValueExpr::Const(scalar) => Ok(scalar.dtype()),
+            ValueExpr::Element(fragment) => self.element(*fragment),
             ValueExpr::Index { index, dtype } => self.index(*index).map(|()| *dtype),
             ValueExpr::Unary(op, operand) => Ok(types::unary(*op, self.value(operand)?)?),
             ValueExpr::Binary(op, lhs, rhs) => {

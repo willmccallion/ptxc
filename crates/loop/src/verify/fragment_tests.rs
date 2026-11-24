@@ -3,10 +3,11 @@
 #![allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 
 use super::{VerifyError, verify};
-use crate::compute::{Scalar, TensorName};
+use crate::compute::{Scalar, TensorName, VarName};
+use crate::expr::ExprId;
 use crate::stmt::{
-    Access, Buffer, BufferId, Condition, FragmentShape, KernelParam, LoweredKernel, MemScope, Stmt,
-    TileAccess, TileOrder, ValueExpr,
+    Access, Buffer, BufferId, Condition, FragmentShape, FragmentTile, KernelParam, KernelVar,
+    LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
 use crate::test_kernels::warp_kernel;
 use ptxc_core::{DType, Dim, ElementCount, Idx};
@@ -20,9 +21,9 @@ struct Product {
     input: BufferId,
     output: BufferId,
     tile: BufferId,
-    a: BufferId,
-    b: BufferId,
-    c: BufferId,
+    a: FragmentTile,
+    b: FragmentTile,
+    c: FragmentTile,
 }
 
 fn product() -> Product {
@@ -44,6 +45,8 @@ fn product() -> Product {
         KernelParam { buffer: input, access: Access::Read },
         KernelParam { buffer: output, access: Access::Write },
     ];
+    let zero = kernel.exprs.constant(0);
+    let [a, b, c] = [a, b, c].map(|buffer| FragmentTile { buffer, tile: zero });
     Product { kernel, input, output, tile, a, b, c }
 }
 
@@ -51,7 +54,7 @@ impl Product {
     /// The kernel with `body` inside the tile's and fragments'
     /// allocations.
     fn with(mut self, body: Stmt) -> LoweredKernel {
-        self.kernel.body = [self.c, self.b, self.a, self.tile]
+        self.kernel.body = [self.c.buffer, self.b.buffer, self.a.buffer, self.tile]
             .into_iter()
             .fold(body, |body, buffer| Stmt::Alloc { buffer, body: Box::new(body) });
         self.kernel
@@ -71,7 +74,7 @@ fn verified(build: impl FnOnce(&mut Product) -> Stmt) -> Result<(), VerifyError>
 }
 
 /// `c += a · b` at m16n8k16 on f16, accumulating in f32.
-fn mma([a, b, accumulator]: [BufferId; 3]) -> Stmt {
+fn mma([a, b, accumulator]: [FragmentTile; 3]) -> Stmt {
     let shape = MmaShape { m: Dim::new(16), n: Dim::new(8), k: Dim::new(16) };
     let target = preset(SmVersion::SM_89).unwrap();
     let instruction = target.mma_instruction(shape, DType::F16, DType::F32).unwrap();
@@ -99,7 +102,10 @@ fn an_mma_takes_fragments_of_its_shapes_and_types() {
     let shape = |rows, columns| FragmentShape { rows: Dim::new(rows), columns: Dim::new(columns) };
 
     let swapped = verified(|product| mma([product.b, product.a, product.c]));
-    let shared = verified(|product| mma([product.tile, product.b, product.c]));
+    let shared = verified(|product| {
+        let tile = FragmentTile { buffer: product.tile, tile: product.a.tile };
+        mma([tile, product.b, product.c])
+    });
     let narrow_accumulator = verified(|product| mma([product.a, product.b, product.b]));
 
     let expected = shape(16, 16);
@@ -127,7 +133,7 @@ fn fragments_move_only_between_shared_tiles_and_memory_in_bounds() {
     });
     let read_directly = verified(|product| {
         let index = product.kernel.exprs.constant(0);
-        let value = ValueExpr::Load { buffer: product.a, index };
+        let value = ValueExpr::Load { buffer: product.a.buffer, index };
         Stmt::Store { buffer: product.output, index, value }
     });
     let into_input = verified(|product| {
@@ -163,9 +169,65 @@ fn a_fragment_is_used_inside_its_allocation_with_room_for_its_tile() {
     outside.kernel.body =
         Stmt::FragmentFill { fragment: outside.c, value: Scalar::zero(DType::F32) };
     let mut small = product();
-    small.kernel.buffers[small.c].size = ElementCount::new(64);
+    small.kernel.buffers[small.c.buffer].size = ElementCount::new(64);
     let fill = Stmt::FragmentFill { fragment: small.c, value: Scalar::zero(DType::F32) };
 
     assert_eq!(verify(&outside.kernel), Err(VerifyError::NotAllocated(TensorName::new("c"))));
     assert_eq!(verify(&small.with(fill)), Err(VerifyError::FragmentSize(TensorName::new("c"))));
+}
+
+/// A loop over the elements of `product`'s accumulator running `body`,
+/// which `make` builds given the element's flat position in the output.
+fn each_element(product: &mut Product, make: impl FnOnce(&mut Product, ExprId) -> Stmt) -> Stmt {
+    let row = product.kernel.vars.push(KernelVar::Loop(VarName::new("row")));
+    let column = product.kernel.vars.push(KernelVar::Loop(VarName::new("column")));
+    let exprs = &mut product.kernel.exprs;
+    let (row_expr, column_expr, columns) = (exprs.var(row), exprs.var(column), exprs.constant(8));
+    let scaled = exprs.mul(row_expr, columns);
+    let position = exprs.add(scaled, column_expr);
+    let body = make(product, position);
+    Stmt::FragmentEach { fragment: product.c, row, column, body: Box::new(body) }
+}
+
+#[test]
+fn an_element_is_read_only_inside_a_loop_over_its_fragment() {
+    let store_element = |product: &mut Product, index| Stmt::Store {
+        buffer: product.output,
+        index,
+        value: ValueExpr::Element(product.c.buffer),
+    };
+
+    let inside = verified(|product| each_element(product, store_element));
+    let outside = verified(|product| {
+        let index = product.kernel.exprs.constant(0);
+        store_element(product, index)
+    });
+
+    assert_eq!(inside, Ok(()));
+    assert_eq!(outside, Err(VerifyError::ElementOutsideEach(TensorName::new("c"))));
+}
+
+#[test]
+fn a_loop_over_elements_runs_each_in_one_lane() {
+    let with_barrier = verified(|product| each_element(product, |_, _| Stmt::Barrier));
+    let with_fill = verified(|product| {
+        each_element(product, |product, _| Stmt::FragmentFill {
+            fragment: product.a,
+            value: Scalar::zero(DType::F16),
+        })
+    });
+
+    assert_eq!(with_barrier, Err(VerifyError::DivergentBarrier));
+    assert_eq!(with_fill, Err(VerifyError::DivergentWarp));
+}
+
+#[test]
+fn a_tile_index_stays_within_its_fragment_buffer() {
+    let past_the_last = verified(|product| {
+        let tile = product.kernel.exprs.constant(1);
+        let fragment = FragmentTile { tile, ..product.c };
+        Stmt::FragmentFill { fragment, value: Scalar::zero(DType::F32) }
+    });
+
+    assert_eq!(past_the_last, Err(VerifyError::OutOfBounds(TensorName::new("c"))));
 }

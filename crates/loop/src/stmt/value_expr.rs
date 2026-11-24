@@ -20,6 +20,9 @@ pub enum ValueExpr {
     },
     /// A constant.
     Const(Scalar),
+    /// The element of the fragment that the innermost `FragmentEach` over
+    /// it is at.
+    Element(BufferId),
     /// An index's value as data, such as an arg-reduction's position.
     Index {
         /// The index.
@@ -66,7 +69,7 @@ impl ValueExpr {
     /// The element type, for a well-typed expression over `buffers`.
     pub fn dtype(&self, buffers: &IndexVec<BufferId, Buffer>) -> DType {
         match self {
-            Self::Load { buffer, .. } => buffers[*buffer].dtype,
+            Self::Load { buffer, .. } | Self::Element(buffer) => buffers[*buffer].dtype,
             Self::Const(scalar) => scalar.dtype(),
             Self::Index { dtype, .. } | Self::Cast { to: dtype, .. } => *dtype,
             Self::Unary(UnaryOp::Not | UnaryOp::IsNaN | UnaryOp::IsInf(_), _) => DType::Bool,
@@ -86,7 +89,7 @@ impl ValueExpr {
     /// Whether the expression loads from `buffer` anywhere in it.
     pub fn reads(&self, buffer: BufferId) -> bool {
         match self {
-            Self::Load { buffer: read, .. } => *read == buffer,
+            Self::Load { buffer: read, .. } | Self::Element(read) => *read == buffer,
             Self::Const(_) | Self::Index { .. } => false,
             Self::Unary(_, value) | Self::Cast { value, .. } => value.reads(buffer),
             Self::Binary(_, lhs, rhs) => lhs.reads(buffer) || rhs.reads(buffer),

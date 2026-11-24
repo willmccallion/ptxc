@@ -5,7 +5,8 @@ use super::RunError;
 use super::grid::Block;
 use super::value::{Value, round, wrap};
 use crate::compute::Scalar;
-use crate::stmt::{BufferId, FragmentShape, MemScope, TileAccess};
+use crate::expr::{ExprId, VarId};
+use crate::stmt::{BufferId, FragmentShape, FragmentTile, MemScope, Stmt, TileAccess};
 use crate::verify::VerifyError;
 use ptxc_core::DType;
 use ptxc_core::float::Overflow;
@@ -20,13 +21,39 @@ pub(super) const fn warp_of(thread: usize) -> usize {
     thread / WARP
 }
 
-/// A copy between a fragment and another buffer.
+/// A copy between a fragment's tile and another buffer.
 #[derive(Clone, Copy)]
 pub(super) enum Tile {
     /// From `other` into `fragment`.
-    Load { fragment: BufferId, other: BufferId, at: TileAccess },
+    Load { fragment: FragmentTile, other: BufferId, at: TileAccess },
     /// From `fragment` into `other`.
-    Store { fragment: BufferId, other: BufferId, at: TileAccess },
+    Store { fragment: FragmentTile, other: BufferId, at: TileAccess },
+}
+
+/// One warp's tile of a fragment buffer: its shape and where it starts.
+#[derive(Clone, Copy)]
+struct Placed {
+    buffer: BufferId,
+    shape: FragmentShape,
+    start: i64,
+}
+
+impl Placed {
+    /// The position of row `row`, column `column` in the buffer.
+    fn position(self, row: u64, column: u64) -> Result<i64, RunError> {
+        row.checked_mul(self.shape.columns.get())
+            .and_then(|offset| offset.checked_add(column))
+            .and_then(|offset| i64::try_from(offset).ok())
+            .and_then(|offset| self.start.checked_add(offset))
+            .ok_or(RunError::Index)
+    }
+
+    /// Every position of the tile with its row and column, row by row.
+    fn elements(self) -> impl Iterator<Item = (u64, u64)> {
+        let columns = self.shape.columns.get();
+        (0..self.shape.rows.get())
+            .flat_map(move |row| (0..columns).map(move |column| (row, column)))
+    }
 }
 
 impl Block<'_, '_> {
@@ -49,29 +76,25 @@ impl Block<'_, '_> {
         Ok(())
     }
 
-    /// Sets every element of each warp's `fragment` to `value`.
+    /// Sets every element of each warp's tile of `fragment` to `value`.
     pub(super) fn fill(
         &mut self,
-        fragment: BufferId,
+        fragment: FragmentTile,
         value: Scalar,
         active: &[usize],
     ) -> Result<(), RunError> {
-        self.each_warp(active, |block, lead| block.fill_warp(fragment, value, lead))
-    }
-
-    fn fill_warp(
-        &mut self,
-        fragment: BufferId,
-        value: Scalar,
-        lead: usize,
-    ) -> Result<(), RunError> {
-        let shape = self.shape(fragment)?;
-        for row in 0..shape.rows.get() {
-            for column in 0..shape.columns.get() {
-                self.store(fragment, position(shape, row, column)?, Value::of_scalar(value), lead)?;
+        self.each_warp(active, |block, lead| {
+            let placed = block.placed(fragment, lead)?;
+            for (row, column) in placed.elements() {
+                block.store(
+                    placed.buffer,
+                    placed.position(row, column)?,
+                    Value::of_scalar(value),
+                    lead,
+                )?;
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Copies `tile` element by element for each warp.
@@ -81,21 +104,19 @@ impl Block<'_, '_> {
 
     fn copy_warp_tile(&mut self, tile: Tile, lead: usize) -> Result<(), RunError> {
         let (Tile::Load { fragment, other, at } | Tile::Store { fragment, other, at }) = tile;
-        let shape = self.shape(fragment)?;
-        let origin = self.warp_origin(at, lead)?;
-        for row in 0..shape.rows.get() {
-            for column in 0..shape.columns.get() {
-                let elsewhere = at.position(origin, row, column).ok_or(RunError::Index)?;
-                let own = position(shape, row, column)?;
-                match tile {
-                    Tile::Load { .. } => {
-                        let value = self.load(other, elsewhere, lead)?;
-                        self.store(fragment, own, value, lead)?;
-                    }
-                    Tile::Store { .. } => {
-                        let value = self.load(fragment, own, lead)?;
-                        self.store(other, elsewhere, value, lead)?;
-                    }
+        let placed = self.placed(fragment, lead)?;
+        let origin = self.uniform(at.origin, lead)?;
+        for (row, column) in placed.elements() {
+            let elsewhere = at.position(origin, row, column).ok_or(RunError::Index)?;
+            let own = placed.position(row, column)?;
+            match tile {
+                Tile::Load { .. } => {
+                    let value = self.load(other, elsewhere, lead)?;
+                    self.store(placed.buffer, own, value, lead)?;
+                }
+                Tile::Store { .. } => {
+                    let value = self.load(placed.buffer, own, lead)?;
+                    self.store(other, elsewhere, value, lead)?;
                 }
             }
         }
@@ -108,7 +129,7 @@ impl Block<'_, '_> {
     pub(super) fn mma(
         &mut self,
         instruction: MmaInstruction,
-        operands: [BufferId; 3],
+        operands: [FragmentTile; 3],
         active: &[usize],
     ) -> Result<(), RunError> {
         self.each_warp(active, |block, lead| block.mma_warp(instruction, operands, lead))
@@ -117,49 +138,80 @@ impl Block<'_, '_> {
     fn mma_warp(
         &mut self,
         instruction: MmaInstruction,
-        [lhs, rhs, accumulator]: [BufferId; 3],
+        operands: [FragmentTile; 3],
         lead: usize,
     ) -> Result<(), RunError> {
-        let shape = instruction.shape;
-        let [rows, columns, depth] = [shape.m, shape.n, shape.k].map(ptxc_core::Dim::get);
-        let read = |block: &mut Self, buffer, row: u64, column: u64, columns: u64| {
-            let position = i64::try_from(row * columns + column).map_err(|_| RunError::Index)?;
-            block.load(buffer, position, lead)
-        };
-        for row in 0..rows {
-            for column in 0..columns {
-                let start = read(self, accumulator, row, column, columns)?;
-                let mut sum = Sum::of(start, instruction.accumulator);
-                for step in 0..depth {
-                    let factor = read(self, lhs, row, step, depth)?;
-                    sum.add(factor, read(self, rhs, step, column, columns)?);
-                }
-                let position =
-                    i64::try_from(row * columns + column).map_err(|_| RunError::Index)?;
-                self.store(accumulator, position, sum.result(instruction.accumulator), lead)?;
+        let [lhs, rhs, accumulator] = operands.map(|operand| self.placed(operand, lead));
+        let (lhs, rhs, accumulator) = (lhs?, rhs?, accumulator?);
+        for (row, column) in accumulator.elements() {
+            let own = accumulator.position(row, column)?;
+            let start = self.load(accumulator.buffer, own, lead)?;
+            let mut sum = Sum::of(start, instruction.accumulator);
+            for step in 0..instruction.shape.k.get() {
+                let factor = self.load(lhs.buffer, lhs.position(row, step)?, lead)?;
+                sum.add(factor, self.load(rhs.buffer, rhs.position(step, column)?, lead)?);
             }
+            self.store(accumulator.buffer, own, sum.result(instruction.accumulator), lead)?;
         }
         Ok(())
     }
 
-    /// Where the warp led by `lead` puts the tile, which every lane agrees on.
-    fn warp_origin(&self, at: TileAccess, lead: usize) -> Result<i64, RunError> {
-        let origin = self.index(at.origin, lead)?;
+    /// Runs `body` for each element of each warp's tile of `fragment`, in
+    /// the warp's first lane, with `row` and `column` bound and the element
+    /// what `ValueExpr::Element` reads.
+    pub(super) fn each_element(
+        &mut self,
+        fragment: FragmentTile,
+        [row_var, column_var]: [VarId; 2],
+        body: &Stmt,
+        active: &[usize],
+    ) -> Result<(), RunError> {
+        self.each_warp(active, |block, lead| {
+            let placed = block.placed(fragment, lead)?;
+            for (row, column) in placed.elements() {
+                let as_index = |value: u64| i64::try_from(value).map_err(|_| RunError::Index);
+                block.set_var(lead, row_var, as_index(row)?);
+                block.set_var(lead, column_var, as_index(column)?);
+                block.elements.push((placed.buffer, placed.position(row, column)?));
+                let ran = block.exec(body, &[lead]);
+                let _done = block.elements.pop();
+                ran?;
+            }
+            Ok(())
+        })
+    }
+
+    /// The element of `fragment` the innermost `FragmentEach` over it is at.
+    pub(super) fn element(&mut self, fragment: BufferId, thread: usize) -> Result<Value, RunError> {
+        let found = self.elements.iter().rev().find(|(buffer, _)| *buffer == fragment);
+        let Some(&(_, position)) = found else {
+            let name = self.grid.kernel.buffers()[fragment].name.clone();
+            return Err(RunError::Invalid(VerifyError::ElementOutsideEach(name)));
+        };
+        self.load(fragment, position, thread)
+    }
+
+    /// The warp led by `lead`'s tile of `fragment`.
+    fn placed(&self, fragment: FragmentTile, lead: usize) -> Result<Placed, RunError> {
+        let found = &self.grid.kernel.buffers()[fragment.buffer];
+        let MemScope::Fragment(shape) = found.scope else {
+            return Err(RunError::Invalid(VerifyError::NotFragment(found.name.clone())));
+        };
+        let tiles = shape.rows.get().saturating_mul(shape.columns.get());
+        let tile = self.uniform(fragment.tile, lead)?;
+        let start = i64::try_from(tiles).ok().and_then(|tiles| tiles.checked_mul(tile));
+        Ok(Placed { buffer: fragment.buffer, shape, start: start.ok_or(RunError::Index)? })
+    }
+
+    /// `index`'s value in the warp led by `lead`, which every lane agrees on.
+    fn uniform(&self, index: ExprId, lead: usize) -> Result<i64, RunError> {
+        let value = self.index(index, lead)?;
         for lane in lead..lead + WARP {
-            if self.index(at.origin, lane)? != origin {
+            if self.index(index, lane)? != value {
                 return Err(RunError::WarpDisagrees);
             }
         }
-        Ok(origin)
-    }
-
-    /// The shape of `fragment`'s tile.
-    fn shape(&self, fragment: BufferId) -> Result<FragmentShape, RunError> {
-        let found = &self.grid.kernel.buffers()[fragment];
-        match found.scope {
-            MemScope::Fragment(shape) => Ok(shape),
-            _ => Err(RunError::Invalid(VerifyError::NotFragment(found.name.clone()))),
-        }
+        Ok(value)
     }
 }
 
@@ -189,12 +241,4 @@ impl Sum {
             Self::Int(sum) => wrap(i128::from(sum), dtype),
         }
     }
-}
-
-/// The position of row `row`, column `column` of a fragment of `shape`.
-fn position(shape: FragmentShape, row: u64, column: u64) -> Result<i64, RunError> {
-    row.checked_mul(shape.columns.get())
-        .and_then(|offset| offset.checked_add(column))
-        .and_then(|offset| i64::try_from(offset).ok())
-        .ok_or(RunError::Index)
 }
