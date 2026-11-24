@@ -1,4 +1,4 @@
-//! Test infrastructure: tolerance comparison, golden files, ONNX test-case loading, ptxas checks, op-family case generators, running lowered graphs, random graph generation and shrinking.
+//! Test infrastructure: tolerance comparison, golden files, ONNX test-case loading, ptxas checks, op-family case generators, running lowered graphs, random graph generation and shrinking, and tensorized products.
 
 pub mod compare;
 pub mod data;
@@ -10,3 +10,4 @@ pub mod onnx_tests;
 pub mod ptxas;
 pub mod reference;
 pub mod shrink;
+pub mod tensorized;
