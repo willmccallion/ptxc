@@ -8,6 +8,7 @@ pub mod math;
 mod schedule;
 mod stmt;
 mod text;
+mod unroll;
 mod verify;
 
 #[cfg(test)]
@@ -29,4 +30,5 @@ pub use stmt::{
     LoweredKernel, MemScope, Stmt, ValueExpr,
 };
 pub use text::{print_compute, print_kernel, print_schedule};
+pub use unroll::unrolled;
 pub use verify::{VerifyError, verify};

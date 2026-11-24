@@ -1,0 +1,12 @@
+kernel row_sums(%x: i32[8] read, %out: i32[2] write)
+  grid(1, 1, 1) block(1, 1, 1) smem 0
+  for %i in 2 {
+    alloc %acc: i32[1] local {
+      %acc[0] = 0:i32
+      %acc[0] = add(%acc[0], %x[%i * 4])
+      %acc[0] = add(%acc[0], %x[%i * 4 + 1])
+      %acc[0] = add(%acc[0], %x[%i * 4 + 2])
+      %acc[0] = add(%acc[0], %x[%i * 4 + 3])
+      %out[%i] = %acc[0]
+    }
+  }

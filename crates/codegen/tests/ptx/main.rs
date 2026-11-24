@@ -5,6 +5,7 @@
 
 mod kernels;
 mod ptxas;
+mod unrolled;
 
 use ptxc_codegen::{PtxModule, generate};
 use ptxc_loop::ComputeDef;

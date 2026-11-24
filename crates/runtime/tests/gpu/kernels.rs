@@ -1,14 +1,16 @@
 //! Hand-built kernels covering what codegen selects: arithmetic and every
-//! math program on awkward values, casts, integer edge cases, and
-//! reductions through shared memory.
+//! math program on awkward values, casts, integer edge cases, reductions
+//! through shared memory, and unrolled loops.
 
-use crate::device::check_against_interpreter;
+use crate::device::{check_against_interpreter, match_interpreter};
 use ptxc_core::float::{F16, Overflow};
 use ptxc_core::{DType, Dim, HostTensor, Shape, TensorData};
 use ptxc_loop::{
-    ArgKind, BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ReduceOp, TensorExpr, TensorName,
-    TieBreak, UnaryOp, VarName,
+    ArgKind, BinaryOp, ComputeBuilder, ComputeDef, ComputeName, Primitive, ReduceOp, Schedule,
+    SplitFactor, TensorExpr, TensorName, ThreadAxis, TieBreak, UnaryOp, VarName,
 };
+use ptxc_target::{SmVersion, preset};
+use std::sync::Arc;
 
 fn shape(dims: &[u64]) -> Shape {
     Shape::new(dims.iter().copied().map(Dim::new).collect()).unwrap()
@@ -223,4 +225,47 @@ fn a_row_sum_and_argmax_reduce_through_shared_memory() {
         body: Box::new(body),
     });
     check_against_interpreter(argmax, &[HostTensor::new(shape(&[3, 300]), halves.into()).unwrap()]);
+}
+
+/// `out[i, j] = sum over k of a[i, k] * b[k, j]`, its rows and columns
+/// split by 2 and its reduction by 4, with a thread's 2 by 2 tile and each
+/// step's depth unrolled; the uneven extents leave guards in the copies.
+#[test]
+fn an_unrolled_tile_of_accumulators_matches_bit_for_bit() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("tile"));
+    let lhs = compute.input(TensorName::new("a"), DType::F32, shape(&[7, 11]));
+    let rhs = compute.input(TensorName::new("b"), DType::F32, shape(&[11, 5]));
+    let (_, row) = compute.spatial(VarName::new("i"), Dim::new(7));
+    let (_, column) = compute.spatial(VarName::new("j"), Dim::new(5));
+    let (axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(11));
+    let product = binary(
+        BinaryOp::Mul,
+        &TensorExpr::Load { tensor: lhs, index: vec![row, k] },
+        &TensorExpr::Load { tensor: rhs, index: vec![k, column] },
+    );
+    let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![axis], body: Box::new(product) };
+    compute.output(TensorName::new("out"), sum);
+    let mut schedule = Schedule::new(Arc::new(compute.finish().unwrap()));
+    let nest = schedule.loops().nest().to_vec();
+    let by = |factor| vec![SplitFactor::new(factor).unwrap()];
+    let rows = schedule.split(nest[0], by(2)).unwrap();
+    let columns = schedule.split(nest[1], by(2)).unwrap();
+    let steps = schedule.split(nest[2], by(4)).unwrap();
+    let order = vec![rows[0], columns[0], steps[0], steps[1], rows[1], columns[1]];
+    schedule.apply(Primitive::Reorder { order }).unwrap();
+    schedule.apply(Primitive::Bind { loop_: rows[0], axis: ThreadAxis::BlockX }).unwrap();
+    schedule.apply(Primitive::Bind { loop_: columns[0], axis: ThreadAxis::ThreadX }).unwrap();
+    for loop_ in [steps[1], rows[1], columns[1]] {
+        schedule.apply(Primitive::Unroll { loop_ }).unwrap();
+    }
+    let kernel = schedule.validate(&preset(SmVersion::SM_89).unwrap()).unwrap().lower();
+    let values = |count: u16, seed: f32| -> Vec<f32> {
+        (0..count).map(|n| f32::from(n).mul_add(0.731, seed).sin()).collect()
+    };
+    let inputs = [
+        HostTensor::new(shape(&[7, 11]), values(77, 1.0).into()).unwrap(),
+        HostTensor::new(shape(&[11, 5]), values(55, 2.0).into()).unwrap(),
+    ];
+
+    let _outputs = match_interpreter(&kernel, &inputs, "").unwrap();
 }

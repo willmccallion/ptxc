@@ -427,6 +427,10 @@ fragment layout) are caught by `cargo test`.
   the driver's JIT) allocates them. Codegen still keeps register pressure in
   mind (rematerialising index arithmetic, unrolling deliberately), since
   occupancy depends on it.
+- `generate` first expands the loops a schedule marks unrolled, as TVM's
+  `UnrollLoop` pass does: one copy of the body per value, indices
+  simplified and guards the ranges decide resolved. A thread's tile of
+  accumulators then takes constant offsets, which ptxas keeps in registers.
 - Instruction selection uses the target's `PtxIsaVersion` and `SmVersion`
   to choose instructions:
   - `cp.async` requires sm_80 or later;
