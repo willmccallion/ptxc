@@ -366,11 +366,13 @@ loops are innermost inside a reduction step, the definition multiplies two
 loads of the instruction's types, and both operands are staged outside the
 tile, each holding its tile as rows a fixed distance apart, with adjacent
 elements along its rows or its columns, and reading none of the third tile
-loop. Lowering keeps the accumulators in a fragment array over
-the tile loops left inside the reduction, loads both operands' fragments
-from their staged tiles at each step, and stores the result through a
-`FragmentEach` that binds the tile's row and column loops, so the output's
-guards and epilogue apply unchanged. Staged tiles are cleared before they
+loop, and every reduction loop inside the tile's first one must come before
+the loops over the warp's tiles. Lowering keeps the accumulators in a
+fragment array over those tile loops, and each operand's fragments in an
+array over the tile loops its tile reads. Each step loads every distinct
+fragment once, then multiplies every pair of tiles. The result is stored
+through a `FragmentEach` that binds the tile's row and column loops, so the
+output's guards and epilogue apply unchanged. Staged tiles are cleared before they
 are filled, so a tile overhanging its input multiplies zeros there.
 `verify` checks what code generation relies on: variables bound where read,
 buffers used as their scope and access allow, shared and local accesses

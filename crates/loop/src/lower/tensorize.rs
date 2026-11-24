@@ -13,8 +13,8 @@ use crate::schedule::{CacheId, LoopId, LoopKind, LoopTree, Operand, TensorizedPr
 use crate::stmt::{
     BufferId, FragmentShape, FragmentTile, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
-use ptxc_core::{Dim, Idx};
-use ptxc_target::ThreadsPerBlock;
+use ptxc_core::{DType, Dim, Idx};
+use ptxc_target::{MmaShape, ThreadsPerBlock};
 
 /// How the staged tile of `cache` holds an operand read at `index`, its
 /// rows stepping with `rows` and its columns with `columns`: the order and
@@ -52,36 +52,24 @@ pub(crate) fn operand_layout(
 impl Lowerer<'_> {
     /// The loops computing `product`, a tensorized reduction.
     pub(super) fn tensorized(&mut self, product: &TensorizedProduct) -> Stmt {
-        let [m, n, k] = product.tile.loops;
-        let serial = self.serial_loops();
-        let first = serial
-            .iter()
-            .position(|&id| self.tree.loops()[id].kind == LoopKind::Reduce)
-            .unwrap_or(serial.len());
-        let (outer, inner) = serial.split_at(first);
-        let steps: Vec<LoopId> =
-            inner.iter().copied().filter(|id| ![m, n, k].contains(id)).collect();
-        let tile_loops: Vec<LoopId> = steps
-            .iter()
-            .copied()
-            .filter(|&id| self.tree.loops()[id].kind == LoopKind::Spatial)
-            .collect();
-        let fragments = self.fragments(product, &tile_loops);
+        let (outer, nest) = self.tile_nest(product);
+        let fragments = self.fragments(product, &nest);
         let init = Stmt::FragmentFill {
             fragment: fragments.accumulator,
             value: Scalar::zero(product.tile.instruction.accumulator),
         };
-        let init = self.wrap_loops(&tile_loops, init);
-        let update = self.mma_step(product, &fragments, [m, n, k]);
-        let update = self.wrap_loops(&steps, update);
+        let init = self.wrap_loops(&nest.tiles, init);
+        let update = self.mma_step(product, &fragments, &nest);
+        let update = self.wrap_loops(&nest.steps, update);
         let store = self.store_output(&ValueExpr::Element(fragments.accumulator.buffer));
+        let [m, n, _] = product.tile.loops;
         let write_back = Stmt::FragmentEach {
             fragment: fragments.accumulator,
             row: VarId::new(m.index()),
             column: VarId::new(n.index()),
             body: Box::new(store),
         };
-        let write_back = self.wrap_loops(&tile_loops, write_back);
+        let write_back = self.wrap_loops(&nest.tiles, write_back);
         let body = [fragments.accumulator.buffer, fragments.lhs.buffer, fragments.rhs.buffer]
             .into_iter()
             .rev()
@@ -89,54 +77,90 @@ impl Lowerer<'_> {
                 buffer,
                 body: Box::new(body),
             });
-        self.wrap_loops(outer, body)
+        self.wrap_loops(&outer, body)
     }
 
-    /// One step: both operands' fragments loaded, then multiplied into the
-    /// accumulator's tile.
+    /// The serial loops outside `product`'s first reduction loop, and the
+    /// loops from it to the tile: its reduction steps, then the warp's
+    /// tiles, which validation puts inside every step.
+    fn tile_nest(&mut self, product: &TensorizedProduct) -> (Vec<LoopId>, TileNest) {
+        let serial = self.serial_loops();
+        let reduces = |id: &LoopId| self.tree.loops()[*id].kind == LoopKind::Reduce;
+        let first = serial.iter().position(reduces).unwrap_or(serial.len());
+        let (outer, inner) = serial.split_at(first);
+        let inside: Vec<LoopId> =
+            inner.iter().copied().filter(|id| !product.tile.loops.contains(id)).collect();
+        let (steps, tiles): (Vec<LoopId>, Vec<LoopId>) = inside.iter().partition(|id| reduces(id));
+        let lhs = self.operand_loops(&product.lhs, &tiles);
+        let rhs = self.operand_loops(&product.rhs, &tiles);
+        (outer.to_vec(), TileNest { steps, tiles, lhs, rhs })
+    }
+
+    /// The loops of `tiles` whose variables `operand`'s tile reads.
+    fn operand_loops(&mut self, operand: &Operand, tiles: &[LoopId]) -> Vec<LoopId> {
+        let position = self.tile_position(operand.cache, &operand.index);
+        let read = self.exprs.vars(position);
+        tiles.iter().copied().filter(|&id| read.contains(&VarId::new(id.index()))).collect()
+    }
+
+    /// One step: each operand's distinct fragments loaded, then every pair
+    /// of the warp's tiles multiplied into its accumulator.
     fn mma_step(
         &mut self,
         product: &TensorizedProduct,
         fragments: &Fragments,
-        [m, n, k]: [LoopId; 3],
+        nest: &TileNest,
     ) -> Stmt {
         let var = |id: LoopId| VarId::new(id.index());
+        let [m, n, k] = product.tile.loops;
         let (lhs_tile, lhs_at) = self.operand_access(&product.lhs, [var(m), var(k)]);
         let (rhs_tile, rhs_at) = self.operand_access(&product.rhs, [var(k), var(n)]);
+        let lhs = Stmt::FragmentLoad { fragment: fragments.lhs, source: lhs_tile, at: lhs_at };
+        let rhs = Stmt::FragmentLoad { fragment: fragments.rhs, source: rhs_tile, at: rhs_at };
+        let mma = Stmt::Mma {
+            instruction: product.tile.instruction,
+            a: fragments.lhs,
+            b: fragments.rhs,
+            accumulator: fragments.accumulator,
+        };
         Stmt::Seq(vec![
-            Stmt::FragmentLoad { fragment: fragments.lhs, source: lhs_tile, at: lhs_at },
-            Stmt::FragmentLoad { fragment: fragments.rhs, source: rhs_tile, at: rhs_at },
-            Stmt::Mma {
-                instruction: product.tile.instruction,
-                a: fragments.lhs,
-                b: fragments.rhs,
-                accumulator: fragments.accumulator,
-            },
+            self.wrap_loops(&nest.lhs, lhs),
+            self.wrap_loops(&nest.rhs, rhs),
+            self.wrap_loops(&nest.tiles, mma),
         ])
     }
 
-    /// The fragments of `product`: an accumulator tile for each point of
-    /// `tile_loops`, and one tile of each operand.
-    fn fragments(&mut self, product: &TensorizedProduct, tile_loops: &[LoopId]) -> Fragments {
+    /// The fragments of `product`: an accumulator tile for each of the
+    /// warp's tiles, and a tile of each operand for each point of the tile
+    /// loops it reads.
+    fn fragments(&mut self, product: &TensorizedProduct, nest: &TileNest) -> Fragments {
         let instruction = product.tile.instruction;
-        let shape = instruction.shape;
-        let extents: Vec<Dim> = tile_loops.iter().map(|&id| self.tree.loops()[id].extent).collect();
-        let count = extents.iter().map(|extent| extent.get()).product::<u64>();
-        let vars: Vec<ExprId> =
-            tile_loops.iter().map(|&id| self.exprs.var(VarId::new(id.index()))).collect();
-        let tile = self.linearize(&vars, &extents);
-        let only = self.constant(0);
-        let mut fragment = |name, dtype, [rows, columns]: [Dim; 2], count: u64, tile| {
-            let scope = MemScope::Fragment(FragmentShape { rows, columns });
-            let size = rows.get() * columns.get() * count;
-            FragmentTile { buffer: self.scratch(name, dtype, scope, size), tile }
-        };
+        let MmaShape { m, n, k } = instruction.shape;
         let multiplicands = instruction.multiplicands;
         Fragments {
-            accumulator: fragment("acc", instruction.accumulator, [shape.m, shape.n], count, tile),
-            lhs: fragment("lhs", multiplicands, [shape.m, shape.k], 1, only),
-            rhs: fragment("rhs", multiplicands, [shape.k, shape.n], 1, only),
+            accumulator: self.fragment_array(("acc", instruction.accumulator), [m, n], &nest.tiles),
+            lhs: self.fragment_array(("lhs", multiplicands), [m, k], &nest.lhs),
+            rhs: self.fragment_array(("rhs", multiplicands), [k, n], &nest.rhs),
         }
+    }
+
+    /// A fragment buffer named `name` of `dtype`, holding a `rows` by
+    /// `columns` tile for each point of `loops`, at the point their
+    /// variables give.
+    fn fragment_array(
+        &mut self,
+        (name, dtype): (&str, DType),
+        [rows, columns]: [Dim; 2],
+        loops: &[LoopId],
+    ) -> FragmentTile {
+        let extents: Vec<Dim> = loops.iter().map(|&id| self.tree.loops()[id].extent).collect();
+        let count = extents.iter().map(|extent| extent.get()).product::<u64>();
+        let vars: Vec<ExprId> =
+            loops.iter().map(|&id| self.exprs.var(VarId::new(id.index()))).collect();
+        let tile = self.linearize(&vars, &extents);
+        let scope = MemScope::Fragment(FragmentShape { rows, columns });
+        let size = rows.get() * columns.get() * count;
+        FragmentTile { buffer: self.scratch(name, dtype, scope, size), tile }
     }
 
     /// `operand`'s staged tile and where the fragment's tile starts in it,
@@ -169,6 +193,16 @@ impl Lowerer<'_> {
             _ => None,
         }
     }
+}
+
+/// The loops between a tensorized product's first reduction loop and its
+/// tile: the reduction steps, outermost; the loops over the warp's tiles;
+/// and those of them each operand's tile reads.
+struct TileNest {
+    steps: Vec<LoopId>,
+    tiles: Vec<LoopId>,
+    lhs: Vec<LoopId>,
+    rhs: Vec<LoopId>,
 }
 
 /// A tensorized product's fragments.

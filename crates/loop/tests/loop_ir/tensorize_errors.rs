@@ -89,6 +89,37 @@ fn a_tile_must_be_innermost_inside_a_reduction_step() {
 }
 
 #[test]
+fn every_reduction_step_is_outside_the_warps_tile_loops() {
+    let (mut schedule, nest) = open(&product([32, 8, 64], TileOrder::RowMajor));
+    let rows = schedule.split(nest[0], vec![SplitFactor::new(16).unwrap()]).unwrap();
+    let factors = [2, 16].map(|factor| SplitFactor::new(factor).unwrap()).to_vec();
+    let depth = schedule.split(nest[2], factors).unwrap();
+    let order = vec![depth[0], rows[0], depth[1], rows[1], nest[1], depth[2]];
+    schedule.apply(Primitive::Reorder { order }).unwrap();
+    schedule.apply(Primitive::CacheRead { tensor: TensorParamId::new(0), at: depth[0] }).unwrap();
+    schedule.apply(Primitive::CacheRead { tensor: TensorParamId::new(1), at: depth[0] }).unwrap();
+    tensorize(&mut schedule, [rows[1], nest[1], depth[2]]).unwrap();
+
+    assert_eq!(validation_error(schedule), ScheduleError::TensorizeStepInsideTiles);
+}
+
+#[test]
+fn several_reduction_steps_outside_the_warps_tile_loops_validate() {
+    let compute = product([32, 8, 64], TileOrder::RowMajor);
+    let (mut schedule, nest) = open(&compute);
+    let rows = schedule.split(nest[0], vec![SplitFactor::new(16).unwrap()]).unwrap();
+    let factors = [2, 16].map(|factor| SplitFactor::new(factor).unwrap()).to_vec();
+    let depth = schedule.split(nest[2], factors).unwrap();
+    let order = vec![depth[0], depth[1], rows[0], rows[1], nest[1], depth[2]];
+    schedule.apply(Primitive::Reorder { order }).unwrap();
+    schedule.apply(Primitive::CacheRead { tensor: TensorParamId::new(0), at: depth[0] }).unwrap();
+    schedule.apply(Primitive::CacheRead { tensor: TensorParamId::new(1), at: depth[0] }).unwrap();
+    tensorize(&mut schedule, [rows[1], nest[1], depth[2]]).unwrap();
+
+    assert!(schedule.validate(&target()).is_ok());
+}
+
+#[test]
 fn a_tile_computes_a_product_of_staged_operands_of_the_mmas_types() {
     let mut unstaged = open(&product([16, 8, 32], TileOrder::RowMajor)).0;
     stage_and_tensorize(&mut unstaged, [Some(Stage::Step), None]);

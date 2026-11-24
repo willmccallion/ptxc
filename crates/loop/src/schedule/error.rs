@@ -153,6 +153,10 @@ pub enum ScheduleError {
     /// accumulators persist across.
     #[error("no reduction loop encloses the tensorized tile")]
     TensorizeNoStep,
+    /// A reduction loop inside one of the loops over a warp's tiles, where
+    /// each step loads every tile's fragments before multiplying them.
+    #[error("a reduction loop lies inside a loop over the warp's tiles")]
+    TensorizeStepInsideTiles,
     /// A tensorized definition that is not a sum of products of two loads
     /// of the instruction's types.
     #[error("the definition is not a sum of products the mma computes")]
