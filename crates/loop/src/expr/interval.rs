@@ -4,6 +4,7 @@
 use super::eval::{floor_div, floor_mod};
 use super::linear::LinearSum;
 use super::{Expr, ExprArena, ExprId, VarId};
+use ptxc_core::Dim;
 use std::collections::HashMap;
 
 /// The integers from `min` to `max`, both included.
@@ -17,6 +18,13 @@ impl Interval {
     /// `[min, max]`, or `None` if `min > max`.
     pub const fn new(min: i64, max: i64) -> Option<Self> {
         if min <= max { Some(Self { min, max }) } else { None }
+    }
+
+    /// The values `0..extent` that a loop of `extent` iterations takes, or
+    /// `None` if it has none or they pass `i64`.
+    pub(crate) fn of_loop(extent: Dim) -> Option<Self> {
+        let last = extent.get().checked_sub(1)?;
+        Self::new(0, i64::try_from(last).ok()?)
     }
 
     /// The single value `value`.

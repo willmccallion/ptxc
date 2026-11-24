@@ -1,14 +1,15 @@
 //! Verifies lowered kernels: bounds, scopes and barrier placement.
 
 use crate::compute::{TensorName, VarName, types};
-use crate::expr::{Expr, ExprId, Interval, VarId, VarRanges};
+use crate::expr::{ExprId, Interval, VarId};
 use crate::schedule::ThreadAxis;
-use crate::stmt::{
-    Access, BufferId, Condition, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr,
-};
+use crate::stmt::{Access, BufferId, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
+use facts::Facts;
 use ptxc_core::DType;
 use std::collections::HashSet;
 use thiserror::Error;
+
+mod facts;
 
 /// A lowered kernel that breaks a rule codegen relies on.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -60,7 +61,7 @@ pub fn verify(kernel: &LoweredKernel) -> Result<(), VerifyError> {
     let mut scope = Scope {
         kernel,
         bound: HashSet::new(),
-        ranges: VarRanges::new(),
+        facts: Facts::default(),
         allocated: HashSet::new(),
         divergent: false,
     };
@@ -68,7 +69,7 @@ pub fn verify(kernel: &LoweredKernel) -> Result<(), VerifyError> {
         if let KernelVar::Thread { axis, .. } = definition {
             let _new = scope.bound.insert(var);
             if let Some(range) = launch_range(kernel, *axis) {
-                scope.ranges.insert(var, range);
+                scope.facts.insert_range(var, range);
             }
         }
     }
@@ -93,7 +94,7 @@ fn launch_range(kernel: &LoweredKernel, axis: ThreadAxis) -> Option<Interval> {
 struct Scope<'k> {
     kernel: &'k LoweredKernel,
     bound: HashSet<VarId>,
-    ranges: VarRanges,
+    facts: Facts,
     allocated: HashSet<BufferId>,
     divergent: bool,
 }
@@ -105,13 +106,8 @@ impl Scope<'_> {
             Stmt::For { var, extent, body, .. } => {
                 let mut inner = self.clone();
                 let _new = inner.bound.insert(*var);
-                if let Some(range) = extent
-                    .get()
-                    .checked_sub(1)
-                    .and_then(|last| i64::try_from(last).ok())
-                    .and_then(|last| Interval::new(0, last))
-                {
-                    inner.ranges.insert(*var, range);
+                if let Some(range) = Interval::of_loop(*extent) {
+                    inner.facts.insert_range(*var, range);
                 }
                 inner.stmt(body)
             }
@@ -121,7 +117,7 @@ impl Scope<'_> {
                 let mut inner = self.clone();
                 inner.divergent |= self.depends_on_thread(condition.index)
                     || self.depends_on_thread(condition.bound);
-                inner.refine(*condition);
+                inner.facts.refine(self.kernel.exprs(), *condition);
                 inner.stmt(then)
             }
             Stmt::Alloc { buffer, body } => {
@@ -205,7 +201,7 @@ impl Scope<'_> {
             return Err(VerifyError::NotAllocated(found.name.clone()));
         }
         let last = found.size.get().checked_sub(1).and_then(|last| i64::try_from(last).ok());
-        let bounds = self.kernel.exprs().bounds(index, &self.ranges);
+        let bounds = self.facts.bounds(self.kernel.exprs(), index);
         match bounds.zip(last) {
             Some((bounds, last)) if bounds.min() >= 0 && bounds.max() <= last => Ok(()),
             _ => Err(VerifyError::OutOfBounds(found.name.clone())),
@@ -234,27 +230,6 @@ impl Scope<'_> {
                 Some(KernelVar::Thread { .. } | KernelVar::Loaded(_))
             )
         })
-    }
-
-    /// Tightens a variable's range from `v + c < b` for constants `c`, `b`.
-    fn refine(&mut self, condition: Condition) {
-        let exprs = self.kernel.exprs();
-        let Expr::Const(bound) = exprs.get(condition.bound) else { return };
-        let (var, offset) = match exprs.get(condition.index) {
-            Expr::Var(var) => (var, 0),
-            Expr::Add(a, b) => match (exprs.get(a), exprs.get(b)) {
-                (Expr::Var(var), Expr::Const(offset)) | (Expr::Const(offset), Expr::Var(var)) => {
-                    (var, offset)
-                }
-                _ => return,
-            },
-            _ => return,
-        };
-        let Some(range) = self.ranges.get(var) else { return };
-        let below = bound.saturating_sub(offset);
-        if let Some(tighter) = Interval::new(range.min(), range.max().min(below - 1)) {
-            self.ranges.insert(var, tighter);
-        }
     }
 
     /// The type of `value`, after checking its loads, indices and operations.
