@@ -75,8 +75,17 @@ sudo nvidia-smi --persistence-mode=0
 ```
 
 The SM frequency is chosen once at M3: the highest clock this card holds
-through a 60 s tensor-core GEMM without power or thermal throttling. It is
-recorded here.
+through a 60 s tensor-core GEMM without power or thermal throttling.
+
+Recorded 2026-11-24: **2700 MHz**. Locked there, back-to-back f16
+8192³ GEMMs, ptxc's and cuBLAS's, ran for 80 s with `nvidia-smi` sampling
+every 0.5 s. Every busy sample read 2700 MHz with no throttle reason, at
+up to 147 W of the 160 W limit and 68 °C.
+
+The same load under a lock of 2775, 2850, 2925 or 3000 MHz ran below the
+lock in every busy sample. It never fell under 2715 MHz, and it never
+passed 152 W or 69 °C. With the SM clock locked, the memory clock reads
+8751 MHz.
 
 ## Suites
 
