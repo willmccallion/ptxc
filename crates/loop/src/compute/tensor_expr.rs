@@ -77,3 +77,18 @@ pub enum TensorExpr {
         body: Box<Self>,
     },
 }
+
+impl TensorExpr {
+    /// The one reduction node in `self`, if it holds one (D40).
+    pub fn reduction(&self) -> Option<&Self> {
+        match self {
+            Self::Reduce { .. } | Self::ArgReduce { .. } => Some(self),
+            Self::Load { .. } | Self::Const(_) | Self::Index { .. } => None,
+            Self::Unary(_, value) | Self::Cast { value, .. } => value.reduction(),
+            Self::Binary(_, lhs, rhs) => lhs.reduction().or_else(|| rhs.reduction()),
+            Self::Select { condition, then, otherwise } => {
+                condition.reduction().or_else(|| then.reduction()).or_else(|| otherwise.reduction())
+            }
+        }
+    }
+}
