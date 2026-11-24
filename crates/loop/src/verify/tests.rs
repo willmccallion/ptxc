@@ -202,10 +202,11 @@ fn a_barrier_under_a_condition_on_a_loop_is_allowed() {
 #[test]
 fn a_condition_on_a_bare_variable_tightens_its_range() {
     let mut base = kernel();
-    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 2);
+    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 3);
     let thread = thread_var(&base);
-    let two = base.exprs.constant(2);
-    let store = Stmt::Store { buffer: shared, index: thread, value: float(0.0) };
+    let (one, two) = (base.exprs.constant(1), base.exprs.constant(2));
+    let next = base.exprs.add(thread, one);
+    let store = Stmt::Store { buffer: shared, index: next, value: float(0.0) };
     let guarded = Stmt::If {
         condition: Condition { index: thread, bound: two },
         then: Box::new(store.clone()),
@@ -214,4 +215,32 @@ fn a_condition_on_a_bare_variable_tightens_its_range() {
 
     assert_eq!(verify(&alloc(guarded)), Ok(()));
     assert_eq!(verify(&alloc(store)), Err(VerifyError::OutOfBounds(TensorName::new("scratch"))));
+}
+
+#[test]
+fn a_condition_on_a_whole_index_caps_an_access_at_that_same_index() {
+    let mut base = kernel();
+    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 3);
+    let thread = thread_var(&base);
+    let looped = base.vars.push(KernelVar::Loop(VarName::new("l")));
+    let (var, eight, three) =
+        (base.exprs.var(looped), base.exprs.constant(8), base.exprs.constant(3));
+    let scaled = base.exprs.mul(var, eight);
+    let sum = base.exprs.add(scaled, thread);
+    let guarded_store = |index| Stmt::For {
+        var: looped,
+        extent: Dim::new(2),
+        kind: crate::stmt::ForKind::Serial,
+        body: Box::new(Stmt::If {
+            condition: Condition { index: sum, bound: three },
+            then: Box::new(Stmt::Store { buffer: shared, index, value: float(0.0) }),
+        }),
+    };
+    let alloc = |body| with_body(&base, Stmt::Alloc { buffer: shared, body: Box::new(body) });
+
+    assert_eq!(verify(&alloc(guarded_store(sum))), Ok(()));
+    assert_eq!(
+        verify(&alloc(guarded_store(scaled))),
+        Err(VerifyError::OutOfBounds(TensorName::new("scratch")))
+    );
 }
