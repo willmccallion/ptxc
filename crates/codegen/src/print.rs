@@ -65,6 +65,14 @@ fn registers(regs: &[RegId]) -> String {
     format!("{{{}}}", names.join(", "))
 }
 
+fn vector_load(at: Space, dst: &[RegId], addr: &Address) -> String {
+    format!("ld{}.v{}.b32 {}, {}", space(at), dst.len(), registers(dst), address(addr))
+}
+
+fn vector_store(at: Space, src: &[RegId], addr: &Address) -> String {
+    format!("st{}.v{}.b32 {}, {}", space(at), src.len(), address(addr), registers(src))
+}
+
 fn ld_matrix(order: MatrixOrder, dst: &[RegId], addr: &Address) -> String {
     let trans = match order {
         MatrixOrder::Rows => "",
@@ -220,6 +228,10 @@ fn write_instr(f: &mut fmt::Formatter<'_>, instr: &Instr) -> fmt::Result {
         Instr::AddressOf { dst, name } => write!(line, "mov.u64 {}, {name}", reg(*dst)),
         Instr::Increment { dst } => write!(line, "add.s64 {0}, {0}, 1", reg(*dst)),
         Instr::BarSync => write!(line, "bar.sync 0"),
+        Instr::LdVector { space: at, dst, addr } => write!(line, "{}", vector_load(*at, dst, addr)),
+        Instr::StVector { space: at, src, addr } => {
+            write!(line, "{}", vector_store(*at, src, addr))
+        }
         Instr::LdMatrix { order, dst, addr } => write!(line, "{}", ld_matrix(*order, dst, addr)),
         Instr::Mma { op, d, a, b, c } => write!(line, "{}", mma(*op, [d, a, b, c])),
         Instr::Ret => write!(line, "ret"),

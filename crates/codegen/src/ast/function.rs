@@ -94,6 +94,20 @@ impl FunctionBuilder {
         dst
     }
 
+    /// `count` adjacent 32-bit words at `addr` as one vector load.
+    pub(crate) fn load_vector(&mut self, space: Space, addr: Address, count: u64) -> Vec<Reg<B32>> {
+        let dst: Vec<Reg<B32>> = (0..count).map(|_| self.reg()).collect();
+        let ids = dst.iter().map(|reg| reg.id()).collect();
+        self.push(Instr::LdVector { space, dst: ids, addr });
+        dst
+    }
+
+    /// `words` to adjacent 32-bit words at `addr` as one vector store.
+    pub(crate) fn store_vector(&mut self, space: Space, addr: Address, words: &[Reg<B32>]) {
+        let src = words.iter().map(|reg| reg.id()).collect();
+        self.push(Instr::StVector { space, src, addr });
+    }
+
     pub(crate) fn store<C: Class>(
         &mut self,
         space: Space,

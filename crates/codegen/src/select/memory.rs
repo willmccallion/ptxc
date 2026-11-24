@@ -48,7 +48,7 @@ impl Selector<'_> {
 
     /// The address of element `index` of `buffer`, and its space, computed
     /// once a block.
-    fn element(
+    pub(super) fn element(
         &mut self,
         buffer: BufferId,
         index: ExprId,

@@ -3,7 +3,7 @@
 use super::{CodegenError, Selector};
 use crate::ast::{B64, Compare, CvtMode, PtxType, Reg, Signedness, Special, Value};
 use ptxc_core::Dim;
-use ptxc_loop::{Interval, KernelVar, Stmt, ThreadAxis, VarId};
+use ptxc_loop::{ForKind, Interval, KernelVar, Stmt, ThreadAxis, VarId};
 
 const fn special(axis: ThreadAxis) -> Special {
     match axis {
@@ -40,6 +40,11 @@ impl Selector<'_> {
     pub(super) fn statement(&mut self, stmt: &Stmt) -> Result<(), CodegenError> {
         match stmt {
             Stmt::Seq(stmts) => stmts.iter().try_for_each(|stmt| self.statement(stmt)),
+            Stmt::For { var, extent, kind: ForKind::Vectorized, body }
+                if self.vector_copy(*var, *extent, body)? =>
+            {
+                Ok(())
+            }
             Stmt::For { var, extent, body, .. } => self.for_loop(*var, *extent, body),
             Stmt::If { condition, then } => {
                 let index = self.index(condition.index)?;
@@ -89,9 +94,9 @@ impl Selector<'_> {
 
     /// A counted loop over `body`, `var` from 0 to `extent - 1`.
     fn for_loop(&mut self, var: VarId, extent: Dim, body: &Stmt) -> Result<(), CodegenError> {
-        // NOTE: a vectorized loop runs as a serial one until vector loads
-        // and stores come (#111). Unrolled loops never reach here:
-        // `generate` expands them first.
+        // NOTE: a vectorized loop that is not a run copy runs as a serial
+        // one; vector arithmetic is not selected yet. Unrolled loops never
+        // reach here: `generate` expands them first.
         if let Some(range) = Interval::of_loop(extent) {
             self.ranges.insert(var, range);
         }

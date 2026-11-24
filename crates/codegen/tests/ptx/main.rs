@@ -8,6 +8,7 @@ mod fused;
 mod kernels;
 mod ptxas;
 mod unrolled;
+mod vector;
 
 use ptxc_codegen::{PtxModule, generate};
 use ptxc_loop::ComputeDef;

@@ -51,13 +51,15 @@ fn every_mma_the_target_has_assembles_with_either_storage_of_b() {
 }
 
 #[test]
-fn an_f16_product_loads_both_tiles_with_ldmatrix_and_multiplies_once_a_step() {
+fn an_f16_product_stages_16_byte_runs_and_loads_both_tiles_with_ldmatrix() {
     let compute = matmul(f16_mma(), TileOrder::RowMajor);
 
     let module = emitted(&compute, UNROLLED, f16_mma());
 
     assert_eq!(count(&module, "ldmatrix.sync.aligned.m8n8.x4.shared.b16"), 1);
     assert_eq!(count(&module, "ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16"), 1);
+    assert_eq!(count(&module, "ld.global.v4.b32"), 2);
+    assert_eq!(count(&module, "st.shared.v4.b32"), 4);
     golden::check("f16_product.ptx", &module.to_string()).unwrap();
 }
 

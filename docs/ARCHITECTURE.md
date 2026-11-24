@@ -354,7 +354,11 @@ Arg-reductions combine (value, position) pairs by a rule that depends only
 on both, so any loop order or thread split gives the same position. A
 staged input's loop allocates its tile, and each iteration fills it between
 two barriers, the block's threads copying elements in rounds, before the
-loads read the tile instead of global memory.
+loads read the tile instead of global memory. A thread copies a 16-byte
+run at a time, as a vectorized loop, where the tile's and its input's
+innermost extents and the tile's origin along that axis are multiples of
+the run, so a run lies in one row of both, aligned; the run's guards are
+its first element's. Otherwise it copies one element.
 
 `Tensorize` makes the innermost three loops of a product one `mma` tile per
 warp, the block's `threadIdx.x` its 32 lanes (D58). Validation checks the
@@ -467,6 +471,10 @@ and the GPU tests check them.
   to their type after every operation, D42), 8- and 32-bit integers in
   32-bit registers, wrapped after every operation, `i64` in 64-bit, and
   booleans as predicates. Index arithmetic is `s64`.
+- A vectorized loop that copies or clears a run of 8 or 16 bytes, both
+  indices stepping by one and starting aligned to the run, is one
+  `ld.v2`/`ld.v4.b32` and `st.v2`/`st.v4.b32`; every buffer starts 256-byte
+  aligned. Any other vectorized loop runs serially.
 - Index arithmetic is numbered once a block, a loop body's entries
   dropped when it ends. Index expressions that divide and read only grid
   and block indices, such as a block's place in a grid fused onto

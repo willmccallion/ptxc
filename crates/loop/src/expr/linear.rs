@@ -117,3 +117,15 @@ impl LinearSum {
         sum
     }
 }
+
+impl ExprArena {
+    /// Whether every value of `id` is a multiple of `factor`: the constant
+    /// and every coefficient of its affine form are.
+    pub(crate) fn is_multiple_of(&self, id: ExprId, factor: u64) -> bool {
+        let Ok(factor) = i64::try_from(factor) else { return false };
+        LinearSum::of(self, id).is_some_and(|sum| {
+            sum.constant() % factor == 0
+                && sum.terms().all(|(_, coefficient)| coefficient % factor == 0)
+        })
+    }
+}

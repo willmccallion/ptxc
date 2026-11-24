@@ -1,5 +1,6 @@
 //! Instruction selection from lowered loop IR.
 
+mod alignment;
 mod async_copy;
 mod cast;
 mod control;
@@ -14,6 +15,7 @@ mod memory;
 mod mma;
 mod ops;
 mod values;
+mod vector;
 
 use crate::ast::{B16, B64, F32, FunctionBuilder, PtxModule, Reg};
 use fragment::{Fragment, Lane, fragments};

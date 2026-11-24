@@ -62,6 +62,36 @@ fn a_warp_computing_one_tile_per_step_matches_the_serial_product() {
 }
 
 #[test]
+fn a_staged_tile_fills_in_16_byte_runs_only_where_its_rows_are_whole_runs() {
+    let [whole, ragged] = [32, 20].map(|depth| {
+        let compute = product([16, 8, depth], TileOrder::RowMajor);
+        print_kernel(&tensorized(&compute, ONE_TILE).validate(&target()).unwrap().lower())
+    });
+
+    let runs =
+        |kernel: &str, tile: &str| kernel.contains(&format!("for %{tile}_run in 8 vectorize"));
+    assert!(runs(&whole, "a") && runs(&whole, "b"));
+    // `a`'s rows run along a depth of 20; `b`'s are its 8 columns.
+    assert!(!runs(&ragged, "a") && runs(&ragged, "b"), "{ragged}");
+}
+
+#[test]
+fn a_staged_tile_whose_origin_is_not_a_whole_run_from_its_rows_start_fills_by_element() {
+    let shifted: Box<Loads> = Box::new(|compute, [a, b], [i, j, k]| {
+        let four = compute.exprs().constant(4);
+        [(a, vec![i, compute.exprs().add(k, four)]), (b, vec![k, j])]
+    });
+    let compute = product_reading([&[32, 40], &[32, 16]], [32, 16, 32], shifted);
+    let schedule = tensorized(&compute, ONE_TILE);
+
+    let kernel = print_kernel(&schedule.validate(&target()).unwrap().lower());
+
+    assert!(!kernel.contains("%a_run") && kernel.contains("for %b_run in 8 vectorize"), "{kernel}");
+    let [tiled, serial] = tensorized_and_serial(&compute, tensorized(&compute, ONE_TILE));
+    assert_eq!(tiled, serial);
+}
+
+#[test]
 fn only_a_tensorized_kernel_multiplies_on_tensor_cores() {
     let compute = product([32, 16, 32], TileOrder::RowMajor);
 
