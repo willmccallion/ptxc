@@ -1042,3 +1042,35 @@ the old one.
   product, convolution and attention stage issues one instruction per
   term. A fused sum is at least as accurate as a separate one, and the
   reference comparisons already allow a sum's rounding.
+
+## D58. Tensor-core fragments are logical tiles in the loop IR
+
+- **Context:** a warp's `mma.sync` operands live in registers spread over
+  its 32 lanes, in layouts the PTX ISA fixes per shape and type, and
+  `ldmatrix` has its own x1, x2, x4 and transposed forms. M3's plan had the
+  loop IR and its interpreter model those per-lane layouts, so
+  tensor-core schedules could be checked without a GPU, and codegen encode
+  them again.
+- **Options:**
+  - per-lane fragments in the loop IR, the interpreter following the PTX
+    layouts and codegen repeating them;
+  - fragments as logical tiles one warp owns, with codegen the only place
+    that maps them to lanes, as Triton's block-level dot and TVM's first
+    wmma fragments do.
+- **Choice:** a `Fragment` memory scope carries its tile's rows and
+  columns. Four statements, each executed by a whole warp at once, touch
+  fragments: fill, load a tile from shared memory (stored or transposed),
+  `Mma` for an instruction of the target's table, and store a tile. The
+  interpreter runs each once per warp on the logical tile; its `Mma` adds
+  the exact products to the accumulator in `k` order and rounds once. The
+  verifier checks shapes and types against the instruction, that tiles
+  stay in their buffers, and that whole warps reach the statements.
+- **Reason:** what CPU verification protects is the schedule: which tiles
+  are staged, loaded and multiplied, and that, at the logical level, still
+  runs in the interpreter. The lane layouts belong to instruction
+  selection, like every other register assignment, and the GPU tests check
+  them. One encoding of them instead of two is less code and one fewer
+  place to be wrong, and the PTX emitted is the same. NVIDIA does not
+  document how tensor cores round a sum, so GPU and interpreter are
+  compared bit for bit on inputs whose sums are exact in any order, and
+  within the type's tolerance otherwise.

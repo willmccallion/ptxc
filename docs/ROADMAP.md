@@ -127,8 +127,9 @@ and the convolution sweep table.
 - cp.async multi-stage pipelines, XOR swizzles, vectorised global loads,
   split-K for tall-skinny shapes.
 - Implicit-GEMM convolution (NHWC).
-- The loop interpreter models `ldmatrix` and `mma` fragments, so tensor-core
-  schedules are verified on the CPU.
+- The loop interpreter runs warp-level fragment loads and `mma` on logical
+  tiles, so tensor-core schedules are verified on the CPU; codegen alone
+  maps them to lane layouts (D58).
 - **Exit:**
   - every swept shape and dtype is correct against the interpreter;
   - geometric-mean throughput of at least 80% of cuBLAS on f16 GEMMs with

@@ -322,7 +322,7 @@ accident (gathers go through an explicit `LoadIndex` into an index).
 ```rust
 pub struct LoweredKernel {
     name: KernelName, params: Vec<KernelParam>,                 // global buffers, each Read or Write
-    buffers: IndexVec<BufferId, Buffer>,                        // name, dtype, MemScope::{Global, Shared, Local}, size
+    buffers: IndexVec<BufferId, Buffer>,                        // name, dtype, MemScope::{Global, Shared, Local, Fragment}, size
     vars: IndexVec<VarId, KernelVar>,                           // Loop, Thread { axis }, Loaded
     launch: LaunchShape, smem: SmemBytes, body: Stmt, exprs: ExprArena,
 }
@@ -334,7 +334,11 @@ pub enum Stmt {
     LoadIndex { var: VarId, buffer: BufferId, index: ExprId, body: Box<Stmt> },
     Store { buffer: BufferId, index: ExprId, value: ValueExpr },
     Barrier,
-    // M3: AsyncCopy, AsyncCommit, AsyncWait, LdMatrix, Mma
+    FragmentFill { fragment: BufferId, value: Scalar },                  // the whole warp at once
+    FragmentLoad { fragment: BufferId, source: BufferId, at: TileAccess }, // from shared memory
+    Mma { instruction: MmaInstruction, a: BufferId, b: BufferId, accumulator: BufferId },
+    FragmentStore { fragment: BufferId, target: BufferId, at: TileAccess },
+    // M3: AsyncCopy, AsyncCommit, AsyncWait
 }
 ```
 
