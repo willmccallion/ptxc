@@ -50,15 +50,16 @@ fn every_mma_the_target_has_assembles_with_either_storage_of_b() {
 }
 
 #[test]
-fn an_f16_product_stages_16_byte_runs_and_loads_both_tiles_with_ldmatrix() {
+fn an_f16_product_stages_16_byte_runs_with_cp_async_and_loads_both_tiles_with_ldmatrix() {
     let compute = matmul(f16_mma(), TileOrder::RowMajor);
 
     let module = emitted(&compute, UNROLLED, f16_mma());
 
     assert_eq!(count(&module, "ldmatrix.sync.aligned.m8n8.x4.shared.b16"), 1);
     assert_eq!(count(&module, "ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16"), 1);
-    assert_eq!(count(&module, "ld.global.v4.b32"), 2);
-    assert_eq!(count(&module, "st.shared.v4.b32"), 4);
+    assert_eq!(count(&module, "cp.async.cg.shared.global"), 2);
+    let landed = ["cp.async.commit_group", "cp.async.wait_group 0", "ld.global", "st.shared"];
+    assert_eq!(landed.map(|text| count(&module, text)), [1, 1, 0, 0]);
     golden::check("f16_product.ptx", &module.to_string()).unwrap();
 }
 

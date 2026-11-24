@@ -16,20 +16,12 @@ kernel product(%a: f16[512] read, %b: f16[256] read, %out: f32[128] write)
           alloc %b_tile: f16[128] shared {
             for %k.0 in 2 {
               barrier
-              for %a_clear in 8 vectorize {
-                %a_tile[(%i.1 * 32 + %lane) * 8 + %a_clear] = 0.0:f16
-              }
-              for %a_run in 8 vectorize {
-                %a_tile[(%i.1 * 32 + %lane) * 8 + %a_run] = %a[%i.0 * 512 + %k.0 * 16 + floordiv(%lane * 8, 16) * 32 + floormod(%lane * 8, 16) + %a_run]
-              }
+              %a_tile[(%i.1 * 32 + %lane) * 8] <- async %a[%i.0 * 512 + %k.0 * 16 + floordiv(%lane * 8, 16) * 32 + floormod(%lane * 8, 16)] run 8
               if %i.1 * 32 + %lane < 16 {
-                for %b_clear in 8 vectorize {
-                  %b_tile[(%i.1 * 32 + %lane) * 8 + %b_clear] = 0.0:f16
-                }
-                for %b_run in 8 vectorize {
-                  %b_tile[(%i.1 * 32 + %lane) * 8 + %b_run] = %b[%j.0 * 8 + %k.0 * 128 + floormod(%lane, 16) * 8 + %b_run]
-                }
+                %b_tile[(%i.1 * 32 + %lane) * 8] <- async %b[%j.0 * 8 + %k.0 * 128 + floormod(%lane, 16) * 8] run 8
               }
+              async commit
+              async wait 0
               barrier
               for %i.2 in 1 {
                 %lhs[%i.2] = tile %a_tile[%i.2 * 256 + %i.1 * 256] stride 16

@@ -62,33 +62,38 @@ fn a_warp_computing_one_tile_per_step_matches_the_serial_product() {
 }
 
 #[test]
-fn a_staged_tile_fills_in_16_byte_runs_only_where_its_rows_are_whole_runs() {
-    let [whole, ragged] = [32, 20].map(|depth| {
+fn a_staged_tile_copies_the_longest_runs_of_16_8_or_4_bytes_its_rows_allow() {
+    let kernels = [32, 20, 18].map(|depth| {
         let compute = product([16, 8, depth], TileOrder::RowMajor);
         print_kernel(&tensorized(&compute, ONE_TILE).validate(&target()).unwrap().lower())
     });
 
-    let runs =
-        |kernel: &str, tile: &str| kernel.contains(&format!("for %{tile}_run in 8 vectorize"));
-    assert!(runs(&whole, "a") && runs(&whole, "b"));
-    // `a`'s rows run along a depth of 20; `b`'s are its 8 columns.
-    assert!(!runs(&ragged, "a") && runs(&ragged, "b"), "{ragged}");
+    // `a`'s rows run along the depth; `b`'s are its 8 columns.
+    let runs = kernels.each_ref().map(|kernel| [copied_run(kernel, "a"), copied_run(kernel, "b")]);
+    assert_eq!(runs, [[Some(8), Some(8)], [Some(4), Some(8)], [Some(2), Some(8)]]);
 }
 
 #[test]
-fn a_staged_tile_whose_origin_is_not_a_whole_run_from_its_rows_start_fills_by_element() {
+fn a_staged_tile_whose_origin_is_odd_copies_element_by_element() {
     let shifted: Box<Loads> = Box::new(|compute, [a, b], [i, j, k]| {
-        let four = compute.exprs().constant(4);
-        [(a, vec![i, compute.exprs().add(k, four)]), (b, vec![k, j])]
+        let one = compute.exprs().constant(1);
+        [(a, vec![i, compute.exprs().add(k, one)]), (b, vec![k, j])]
     });
     let compute = product_reading([&[32, 40], &[32, 16]], [32, 16, 32], shifted);
     let schedule = tensorized(&compute, ONE_TILE);
 
     let kernel = print_kernel(&schedule.validate(&target()).unwrap().lower());
 
-    assert!(!kernel.contains("%a_run") && kernel.contains("for %b_run in 8 vectorize"), "{kernel}");
+    assert_eq!([copied_run(&kernel, "a"), copied_run(&kernel, "b")], [None, Some(8)], "{kernel}");
     let [tiled, serial] = tensorized_and_serial(&compute, tensorized(&compute, ONE_TILE));
     assert_eq!(tiled, serial);
+}
+
+/// The elements each asynchronous copy from `tensor` in `kernel` runs
+/// over, if any copies from it.
+fn copied_run(kernel: &str, tensor: &str) -> Option<u64> {
+    let copy = kernel.lines().find(|line| line.contains(&format!("<- async %{tensor}[")))?;
+    copy.split(" run ").nth(1)?.split_whitespace().next()?.parse().ok()
 }
 
 #[test]

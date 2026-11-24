@@ -10,20 +10,12 @@ kernel matmul(%a: i32[2590] read, %b: i32[3150] read, %out: i32[1665] write)
       alloc %b_tile: i32[128] shared {
         for %k.0 in 5 {
           barrier
-          for %a_fill in 2 {
-            if %i.0 * 8 + %a_fill * 4 + floordiv(%i.1 * 8 + %j.1, 16) < 37 {
-              if %k.0 * 16 + floormod(%i.1 * 8 + %j.1, 16) < 70 {
-                %a_tile[%i.1 * 8 + %j.1 + %a_fill * 64] = %a[%i.0 * 560 + %k.0 * 16 + %a_fill * 280 + floordiv(%i.1 * 8 + %j.1, 16) * 70 + floormod(%i.1 * 8 + %j.1, 16)]
-              }
-            }
-          }
+          %a_tile[(%i.1 * 8 + %j.1) * 2] <- async %a[%i.1 * 70 + %i.0 * 560 + %j.1 * 2 + %k.0 * 16] run 2 if %j.1 * 2 + %k.0 * 16 < 70, %i.1 + %i.0 * 8 < 37
           for %b_fill in 2 {
-            if %i.1 + %k.0 * 16 + %b_fill * 8 < 70 {
-              if %j.1 + %j.0 * 8 < 45 {
-                %b_tile[%i.1 * 8 + %j.1 + %b_fill * 64] = %b[%i.1 * 45 + %j.1 + %j.0 * 8 + %k.0 * 720 + %b_fill * 360]
-              }
-            }
+            %b_tile[%i.1 * 8 + %j.1 + %b_fill * 64] <- async %b[%i.1 * 45 + %j.1 + %j.0 * 8 + %k.0 * 720 + %b_fill * 360] run 1 if %j.1 + %j.0 * 8 < 45, %i.1 + %k.0 * 16 + %b_fill * 8 < 70
           }
+          async commit
+          async wait 0
           barrier
           for %k.1 in 16 {
             if %i.1 + %i.0 * 8 < 37 {
