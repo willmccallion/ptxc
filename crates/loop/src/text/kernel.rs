@@ -5,7 +5,11 @@ use super::cast::cast_name;
 use super::index::write_index;
 use crate::compute::UnaryOp;
 use crate::expr::{ExprId, VarId};
-use crate::stmt::{Access, BufferId, ForKind, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
+use crate::stmt::{
+    Access, BufferId, ForKind, KernelVar, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder,
+    ValueExpr,
+};
+use ptxc_target::MmaInstruction;
 use std::fmt::Write;
 
 /// The text of `kernel`:
@@ -84,11 +88,7 @@ impl KernelPrinter<'_> {
         match stmt {
             Stmt::Seq(stmts) => stmts.iter().for_each(|stmt| self.write_stmt(out, stmt, depth)),
             Stmt::For { var, extent, kind, body } => {
-                let kind = match kind {
-                    ForKind::Serial => "",
-                    ForKind::Unrolled => " unroll",
-                    ForKind::Vectorized => " vectorize",
-                };
+                let kind = kind_suffix(*kind);
                 let _infallible =
                     writeln!(out, "{pad}for %{} in {}{kind} {{", self.name(*var), extent.get());
                 self.close(out, body, depth);
@@ -103,13 +103,8 @@ impl KernelPrinter<'_> {
                 self.close(out, then, depth);
             }
             Stmt::Alloc { buffer, body } => {
-                let scope = match self.kernel.buffers()[*buffer].scope {
-                    MemScope::Global => "global",
-                    MemScope::Shared => "shared",
-                    MemScope::Local => "local",
-                };
-                let _infallible =
-                    writeln!(out, "{pad}alloc {} {scope} {{", self.buffer_type(*buffer));
+                let (typed, scope) = (self.buffer_type(*buffer), self.scope(*buffer));
+                let _infallible = writeln!(out, "{pad}alloc {typed} {scope} {{");
                 self.close(out, body, depth);
             }
             Stmt::LoadIndex { var, buffer, index, body } => {
@@ -128,6 +123,72 @@ impl KernelPrinter<'_> {
             Stmt::Barrier => {
                 let _infallible = writeln!(out, "{pad}barrier");
             }
+            Stmt::FragmentFill { fragment, value } => {
+                let _infallible = writeln!(out, "{pad}{} = fill({value})", self.named(*fragment));
+            }
+            Stmt::FragmentLoad { fragment, source, at } => {
+                let _infallible = write!(out, "{pad}{} = tile ", self.named(*fragment));
+                self.tile(out, *source, *at);
+                out.push('\n');
+            }
+            Stmt::Mma { instruction, a, b, accumulator } => {
+                out.push_str(&pad);
+                self.mma(out, *instruction, [*a, *b, *accumulator]);
+            }
+            Stmt::FragmentStore { fragment, target, at } => {
+                out.push_str(&pad);
+                out.push_str("tile ");
+                self.tile(out, *target, *at);
+                let _infallible = writeln!(out, " = {}", self.named(*fragment));
+            }
+        }
+    }
+
+    /// Where `buffer` lives, with a fragment's tile shape.
+    fn scope(&self, buffer: BufferId) -> String {
+        match self.kernel.buffers()[buffer].scope {
+            MemScope::Global => "global".to_owned(),
+            MemScope::Shared => "shared".to_owned(),
+            MemScope::Local => "local".to_owned(),
+            MemScope::Fragment(shape) => {
+                format!("fragment<{}x{}>", shape.rows.get(), shape.columns.get())
+            }
+        }
+    }
+
+    /// `%c = mma.m16n8k16.f16.f32(%a, %b, %c)`.
+    fn mma(
+        &self,
+        out: &mut String,
+        instruction: MmaInstruction,
+        [a, b, accumulator]: [BufferId; 3],
+    ) {
+        let shape = instruction.shape;
+        let acc = self.named(accumulator);
+        let _infallible = writeln!(
+            out,
+            "{acc} = mma.m{}n{}k{}.{}.{}({}, {}, {acc})",
+            shape.m.get(),
+            shape.n.get(),
+            shape.k.get(),
+            instruction.multiplicands.name(),
+            instruction.accumulator.name(),
+            self.named(a),
+            self.named(b),
+        );
+    }
+
+    /// `%name`.
+    fn named(&self, buffer: BufferId) -> String {
+        format!("%{}", self.kernel.buffers()[buffer].name)
+    }
+
+    /// `%buffer[origin] stride s`, then ` transposed` for a transposed tile.
+    fn tile(&self, out: &mut String, buffer: BufferId, at: TileAccess) {
+        self.access(out, buffer, at.origin);
+        let _infallible = write!(out, " stride {}", at.stride.get());
+        if at.order == TileOrder::Transposed {
+            out.push_str(" transposed");
         }
     }
 
@@ -183,5 +244,14 @@ impl KernelPrinter<'_> {
             self.value(out, arg);
         }
         out.push(')');
+    }
+}
+
+/// How a `for` line marks its loop's kind.
+const fn kind_suffix(kind: ForKind) -> &'static str {
+    match kind {
+        ForKind::Serial => "",
+        ForKind::Unrolled => " unroll",
+        ForKind::Vectorized => " vectorize",
     }
 }

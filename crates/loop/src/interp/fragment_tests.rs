@@ -1,0 +1,223 @@
+//! The fragment statements: every mma instruction of the target against
+//! products computed by hand, and the warps they need whole and agreeing.
+
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
+
+use super::tensors::{data, values};
+use super::value::Value;
+use super::{RunError, execute, run};
+use crate::compute::VarName;
+use crate::compute::{Scalar, TensorName};
+use crate::expr::VarId;
+use crate::stmt::{
+    Access, Buffer, BufferId, FragmentShape, KernelParam, LoweredKernel, MemScope, Stmt,
+    TileAccess, TileOrder,
+};
+use crate::test_kernels::{mma_kernel, warp_kernel};
+use crate::verify::VerifyError;
+use ptxc_core::convert::int_to_f64;
+use ptxc_core::{DType, Dim, ElementCount, HostTensor, Idx, Shape};
+use ptxc_target::{MmaInstruction, MmaShape, SmVersion, ThreadsPerBlock, preset};
+
+/// The shapes and types of the `sm_89` mma table.
+const INSTRUCTIONS: [([u64; 3], DType, DType); 6] = [
+    ([16, 8, 16], DType::F16, DType::F32),
+    ([16, 8, 16], DType::Bf16, DType::F32),
+    ([16, 8, 32], DType::F8E4M3Fn, DType::F32),
+    ([16, 8, 32], DType::F8E5M2, DType::F32),
+    ([16, 8, 32], DType::I8, DType::I32),
+    ([16, 8, 32], DType::U8, DType::I32),
+];
+
+fn instruction(
+    ([m, n, k], multiplicands, accumulator): ([u64; 3], DType, DType),
+) -> MmaInstruction {
+    let shape = MmaShape { m: Dim::new(m), n: Dim::new(n), k: Dim::new(k) };
+    preset(SmVersion::SM_89).unwrap().mma_instruction(shape, multiplicands, accumulator).unwrap()
+}
+
+/// A small integer at row `row`, column `column`: in `-4..=4`, or `0..=8`
+/// for an unsigned type, so every multiplicand type holds it and every sum
+/// of products is exact.
+fn entry(dtype: DType, row: u64, column: u64, salt: u64) -> i64 {
+    let value = i64::try_from((3 * row + 5 * column + salt) % 9).unwrap();
+    if dtype == DType::U8 { value } else { value - 4 }
+}
+
+/// `entries` as values of `dtype`.
+fn as_values(dtype: DType, entries: &[i64]) -> Vec<Value> {
+    let value = |&entry: &i64| {
+        if dtype.is_float() { Value::Float(int_to_f64(entry)) } else { Value::Int(entry) }
+    };
+    entries.iter().map(value).collect()
+}
+
+fn tensor(dtype: DType, dims: [u64; 2], entries: &[i64]) -> HostTensor {
+    let shape = Shape::new(dims.map(Dim::new).to_vec()).unwrap();
+    HostTensor::new(shape, data(&as_values(dtype, entries), dtype)).unwrap()
+}
+
+/// `rows × columns` entries of `dtype`, row by row, the one at (r, c)
+/// from `at(r, c)`.
+fn matrix(rows: u64, columns: u64, at: impl Fn(u64, u64) -> i64) -> Vec<i64> {
+    (0..rows)
+        .flat_map(|row| (0..columns).map(move |column| (row, column)))
+        .map(|(row, column)| at(row, column))
+        .collect()
+}
+
+#[test]
+fn each_mma_instruction_multiplies_its_fragments_as_stored_or_transposed() {
+    for entry_types in INSTRUCTIONS {
+        let instruction = instruction(entry_types);
+        let shape = instruction.shape;
+        let [rows, columns, depth] = [shape.m, shape.n, shape.k].map(Dim::get);
+        let dtype = instruction.multiplicands;
+        let lhs_at = |row, step| entry(dtype, row, step, 0);
+        let rhs_at = |step, column| entry(dtype, step, column, 4);
+        let product = matrix(rows, columns, |row, column| {
+            (0..depth).map(|step| lhs_at(row, step) * rhs_at(step, column)).sum()
+        });
+        let lhs = tensor(dtype, [rows, depth], &matrix(rows, depth, lhs_at));
+        for order in [TileOrder::RowMajor, TileOrder::Transposed] {
+            let rhs = match order {
+                TileOrder::RowMajor => {
+                    tensor(dtype, [depth, columns], &matrix(depth, columns, rhs_at))
+                }
+                TileOrder::Transposed => tensor(
+                    dtype,
+                    [columns, depth],
+                    &matrix(columns, depth, |column, step| rhs_at(step, column)),
+                ),
+            };
+
+            let outputs = run(&mma_kernel(instruction, order), &[lhs.clone(), rhs]).unwrap();
+
+            let expected = as_values(instruction.accumulator, &product);
+            assert_eq!(values(outputs[0].data()), expected, "{instruction:?} {order:?}");
+        }
+    }
+}
+
+/// A one-warp kernel whose body is `body`, given a shared `tile` of 256
+/// f16s and an f16 `fragment` of 16 by 16, both allocated around it.
+fn with_fragment(body: impl FnOnce(&mut LoweredKernel, [BufferId; 2]) -> Stmt) -> LoweredKernel {
+    let mut kernel = warp_kernel();
+    let mut buffer = |name: &str, scope| {
+        let (name, size) = (TensorName::new(name), ElementCount::new(256));
+        kernel.buffers.push(Buffer { name, dtype: DType::F16, scope, size })
+    };
+    let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
+    let tile = buffer("tile", MemScope::Shared);
+    let fragment = buffer("fragment", MemScope::Fragment(shape));
+    let inner = body(&mut kernel, [tile, fragment]);
+    let in_fragment = Stmt::Alloc { buffer: fragment, body: Box::new(inner) };
+    kernel.body = Stmt::Alloc { buffer: tile, body: Box::new(in_fragment) };
+    kernel
+}
+
+#[test]
+fn a_fragment_statement_in_a_warp_the_block_does_not_fill_is_refused() {
+    let mut kernel = with_fragment(|_, [_, fragment]| Stmt::FragmentFill {
+        fragment,
+        value: Scalar::zero(DType::F16),
+    });
+    kernel.launch.block[0] = ThreadsPerBlock::new(48);
+
+    let unverified = execute(&kernel, &[]).unwrap_err();
+
+    assert_eq!(unverified, RunError::PartialWarp);
+    assert_eq!(run(&kernel, &[]).unwrap_err(), RunError::Invalid(VerifyError::PartialWarp));
+}
+
+#[test]
+fn lanes_that_disagree_on_where_a_tile_is_are_refused() {
+    let kernel = with_fragment(|kernel, [tile, fragment]| {
+        let lane = kernel.exprs.var(VarId::new(0));
+        let at = TileAccess { origin: lane, stride: Dim::new(16), order: TileOrder::RowMajor };
+        Stmt::FragmentLoad { fragment, source: tile, at }
+    });
+
+    let error = execute(&kernel, &[]).unwrap_err();
+
+    assert_eq!(error, RunError::WarpDisagrees);
+}
+
+#[test]
+fn a_fragment_kernel_prints_its_tiles_and_mma() {
+    let kernel = mma_kernel(instruction(INSTRUCTIONS[0]), TileOrder::Transposed);
+
+    let text = crate::print_kernel(&kernel);
+
+    ptxc_testkit::golden::check("lower/mma_fragments.txt", &text).unwrap();
+}
+
+/// Two warps, each loading its own 16 × 16 tile of a shared copy of `x`
+/// and storing it to its own part of `y`.
+fn two_warps() -> LoweredKernel {
+    let mut kernel = warp_kernel();
+    kernel.launch.block[0] = ThreadsPerBlock::new(64);
+    let mut buffer = |name: &str, scope| {
+        let (name, size) = (TensorName::new(name), ElementCount::new(512));
+        kernel.buffers.push(Buffer { name, dtype: DType::F16, scope, size })
+    };
+    let x = buffer("x", MemScope::Global);
+    let y = buffer("y", MemScope::Global);
+    let tile = buffer("tile", MemScope::Shared);
+    let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
+    let fragment = kernel.buffers.push(Buffer {
+        name: TensorName::new("fragment"),
+        dtype: DType::F16,
+        scope: MemScope::Fragment(shape),
+        size: ElementCount::new(256),
+    });
+    kernel.params = vec![
+        KernelParam { buffer: x, access: Access::Read },
+        KernelParam { buffer: y, access: Access::Write },
+    ];
+    let exprs = &mut kernel.exprs;
+    let thread = exprs.var(VarId::new(0));
+    let (warp_size, tile_size) = (exprs.constant(32), exprs.constant(256));
+    let warp = exprs.floor_div(thread, warp_size);
+    let origin = exprs.mul(warp, tile_size);
+    let round = kernel.vars.push(crate::stmt::KernelVar::Loop(VarName::new("round")));
+    let (round, block) = (kernel.exprs.var(round), kernel.exprs.constant(64));
+    let scaled = kernel.exprs.mul(round, block);
+    let element = kernel.exprs.add(scaled, thread);
+    let at = TileAccess { origin, stride: Dim::new(16), order: TileOrder::RowMajor };
+    let copy = Stmt::For {
+        var: VarId::new(1),
+        extent: Dim::new(8),
+        kind: crate::stmt::ForKind::Serial,
+        body: Box::new(Stmt::Store {
+            buffer: tile,
+            index: element,
+            value: crate::stmt::ValueExpr::Load { buffer: x, index: element },
+        }),
+    };
+    let per_warp = Stmt::Seq(vec![
+        Stmt::FragmentLoad { fragment, source: tile, at },
+        Stmt::FragmentStore { fragment, target: y, at },
+    ]);
+    let body = Stmt::Seq(vec![
+        copy,
+        Stmt::Barrier,
+        Stmt::Alloc { buffer: fragment, body: Box::new(per_warp) },
+    ]);
+    kernel.body = Stmt::Alloc { buffer: tile, body: Box::new(body) };
+    kernel
+}
+
+#[test]
+fn each_warp_holds_its_own_fragments() {
+    let entries: Vec<i64> = (0..512).map(|entry| entry % 97).collect();
+    let x = HostTensor::new(
+        Shape::new(vec![Dim::new(512)]).unwrap(),
+        data(&as_values(DType::F16, &entries), DType::F16),
+    )
+    .unwrap();
+
+    let outputs = run(&two_warps(), &[x]).unwrap();
+
+    assert_eq!(values(outputs[0].data()), as_values(DType::F16, &entries));
+}

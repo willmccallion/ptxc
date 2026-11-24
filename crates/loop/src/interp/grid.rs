@@ -5,10 +5,11 @@ use super::memory::Memory;
 use super::ops;
 use super::race::{GlobalWriters, PhaseLog};
 use super::value::{Value, wrap};
+use super::warp::{Tile, warp_of};
 use crate::expr::{ExprId, VarId};
 use crate::schedule::ThreadAxis;
 use crate::stmt::{BufferId, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 /// One thread's variables and local buffers.
 #[derive(Default)]
@@ -24,11 +25,14 @@ pub(super) struct Grid<'k> {
     pub(super) writers: GlobalWriters,
 }
 
-/// One block running: its threads, shared memory and current phase.
-struct Block<'g, 'k> {
-    grid: &'g mut Grid<'k>,
+/// One block running: its threads, shared memory, each warp's fragments
+/// and the current phase.
+pub(super) struct Block<'g, 'k> {
+    pub(super) grid: &'g mut Grid<'k>,
     threads: Vec<Thread>,
     shared: HashMap<BufferId, Memory>,
+    /// Each warp's fragments, by warp and buffer.
+    fragments: HashMap<(usize, BufferId), Memory>,
     phase: PhaseLog,
     first_thread: usize,
 }
@@ -51,6 +55,7 @@ impl Grid<'_> {
             grid: self,
             threads,
             shared: HashMap::new(),
+            fragments: HashMap::new(),
             phase: PhaseLog::default(),
             first_thread: block * count,
         };
@@ -134,11 +139,22 @@ impl Block<'_, '_> {
                 self.phase.clear();
                 Ok(())
             }
+            Stmt::FragmentFill { fragment, value } => self.fill(*fragment, *value, active),
+            Stmt::FragmentLoad { fragment, source, at } => {
+                self.copy_tile(Tile::Load { fragment: *fragment, other: *source, at: *at }, active)
+            }
+            Stmt::Mma { instruction, a, b, accumulator } => {
+                self.mma(*instruction, [*a, *b, *accumulator], active)
+            }
+            Stmt::FragmentStore { fragment, target, at } => {
+                self.copy_tile(Tile::Store { fragment: *fragment, other: *target, at: *at }, active)
+            }
         }
     }
 
     /// Runs `body` with `buffer` allocated: once for the block if shared,
-    /// once per active thread if local.
+    /// once per warp of the active threads if a fragment, and once per
+    /// active thread if local.
     fn alloc(&mut self, buffer: BufferId, body: &Stmt, active: &[usize]) -> Result<(), RunError> {
         let found = &self.grid.kernel.buffers()[buffer];
         let size = usize::try_from(found.size.get()).unwrap_or(usize::MAX);
@@ -147,6 +163,17 @@ impl Block<'_, '_> {
             let _previous = self.shared.insert(buffer, fresh);
             let result = self.exec(body, active);
             let _freed = self.shared.remove(&buffer);
+            return result;
+        }
+        if let MemScope::Fragment(_) = found.scope {
+            let warps: BTreeSet<usize> = active.iter().map(|&thread| warp_of(thread)).collect();
+            for &warp in &warps {
+                let _previous = self.fragments.insert((warp, buffer), fresh.clone());
+            }
+            let result = self.exec(body, active);
+            for warp in warps {
+                let _freed = self.fragments.remove(&(warp, buffer));
+            }
             return result;
         }
         for &thread in active {
@@ -159,7 +186,7 @@ impl Block<'_, '_> {
         result
     }
 
-    fn index(&self, index: ExprId, thread: usize) -> Result<i64, RunError> {
+    pub(super) fn index(&self, index: ExprId, thread: usize) -> Result<i64, RunError> {
         let vars = &self.threads[thread].vars;
         self.grid
             .kernel
@@ -174,11 +201,17 @@ impl Block<'_, '_> {
             MemScope::Global => self.grid.globals.get_mut(&buffer),
             MemScope::Shared => self.shared.get_mut(&buffer),
             MemScope::Local => self.threads[thread].locals.get_mut(&buffer),
+            MemScope::Fragment(_) => self.fragments.get_mut(&(warp_of(thread), buffer)),
         };
         memory.ok_or_else(|| RunError::NotAllocated(found.name.clone()))
     }
 
-    fn load(&mut self, buffer: BufferId, index: i64, thread: usize) -> Result<Value, RunError> {
+    pub(super) fn load(
+        &mut self,
+        buffer: BufferId,
+        index: i64,
+        thread: usize,
+    ) -> Result<Value, RunError> {
         let value = self.memory(buffer, thread)?.read(index)?;
         if self.grid.kernel.buffers()[buffer].scope == MemScope::Shared {
             let name = self.grid.kernel.buffers()[buffer].name.clone();
@@ -187,7 +220,7 @@ impl Block<'_, '_> {
         Ok(value)
     }
 
-    fn store(
+    pub(super) fn store(
         &mut self,
         buffer: BufferId,
         index: i64,
@@ -202,7 +235,7 @@ impl Block<'_, '_> {
             MemScope::Global => {
                 self.grid.writers.write(buffer, &name, index, self.first_thread + thread)
             }
-            MemScope::Local => Ok(()),
+            MemScope::Local | MemScope::Fragment(_) => Ok(()),
         }
     }
 
