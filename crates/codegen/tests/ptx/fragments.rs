@@ -11,6 +11,7 @@ use ptxc_loop::{ComputeDef, TileOrder};
 use ptxc_target::{MmaInstruction, MmaShape};
 use ptxc_testkit::golden;
 use ptxc_testkit::tensorized::{Layout, ONE_TILE, Operands, TileLoops, product, tensorized};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 const UNROLLED: Layout = Layout { tile_loops: TileLoops::Unrolled, ..ONE_TILE };
@@ -89,8 +90,19 @@ fn a_tile_whose_rows_are_not_16_byte_aligned_loads_element_by_element() {
     assemble(&module);
 }
 
+/// The byte offsets into `array` of `module`'s f32 stores to local memory.
+fn f32_store_offsets(module: &str, array: &str) -> BTreeSet<u64> {
+    let prefix = format!("st.local.f32 [{array}");
+    module
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix(&prefix))
+        .map(|rest| rest.split(']').next().unwrap())
+        .map(|offset| offset.strip_prefix('+').map_or(0, |bytes| bytes.parse().unwrap()))
+        .collect()
+}
+
 #[test]
-fn a_warps_array_of_tiles_unrolled_needs_no_stack_frame() {
+fn a_warps_array_of_tiles_unrolled_keeps_each_tiles_accumulators_apart_in_registers() {
     let instruction = f16_mma();
     let layout = Layout { tiles: [2, 2], ..UNROLLED };
     let compute = matmul(instruction, TileOrder::RowMajor);
@@ -99,4 +111,6 @@ fn a_warps_array_of_tiles_unrolled_needs_no_stack_frame() {
 
     let frame = ptxc_testkit::ptxas::stack_frame(&module, &target().sm().to_string()).unwrap();
     assert_eq!(frame, ByteSize::new(0));
+    assert!(module.contains(".local .align 16 .b8 local_0[64];"));
+    assert_eq!(f32_store_offsets(&module, "local_0"), (0..64).step_by(4).collect());
 }
