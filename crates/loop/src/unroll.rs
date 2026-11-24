@@ -121,6 +121,9 @@ impl Unroller {
                 then: sub(then),
                 otherwise: sub(otherwise),
             },
+            ValueExpr::MulAdd { lhs, rhs, addend } => {
+                ValueExpr::MulAdd { lhs: sub(lhs), rhs: sub(rhs), addend: sub(addend) }
+            }
         }
     }
 

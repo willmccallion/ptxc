@@ -236,6 +236,10 @@ impl Block<'_, '_> {
                 let (then, otherwise) = (self.value(then, thread)?, self.value(otherwise, thread)?);
                 if condition { then } else { otherwise }
             }
+            ValueExpr::MulAdd { lhs, rhs, addend } => {
+                let (lhs, rhs) = (self.value(lhs, thread)?, self.value(rhs, thread)?);
+                ops::mul_add(lhs, rhs, self.value(addend, thread)?)
+            }
         })
     }
 }

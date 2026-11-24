@@ -244,3 +244,25 @@ fn a_condition_on_a_whole_index_caps_an_access_at_that_same_index() {
         Err(VerifyError::OutOfBounds(TensorName::new("scratch")))
     );
 }
+
+#[test]
+fn a_multiply_add_takes_f32_operands() {
+    let mut base = kernel();
+    let zero = base.exprs.constant(0);
+    let int = ValueExpr::Const(Scalar::int(DType::I32, 2).unwrap());
+    let fused = |addend: ValueExpr| Stmt::Store {
+        buffer: BufferId::new(Y),
+        index: zero,
+        value: ValueExpr::MulAdd {
+            lhs: Box::new(float(2.0)),
+            rhs: Box::new(float(3.0)),
+            addend: Box::new(addend),
+        },
+    };
+
+    assert_eq!(verify(&with_body(&base, fused(float(1.0)))), Ok(()));
+    assert!(matches!(
+        verify(&with_body(&base, fused(int))),
+        Err(VerifyError::WrongType { expected: DType::F32, actual: DType::I32, .. })
+    ));
+}

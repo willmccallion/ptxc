@@ -31,6 +31,16 @@ pub enum ValueExpr {
     Unary(UnaryOp, Box<Self>),
     /// An operation on two values of one type.
     Binary(BinaryOp, Box<Self>, Box<Self>),
+    /// `lhs * rhs + addend` on f32, rounded once, as IEEE's fused
+    /// multiply-add.
+    MulAdd {
+        /// The first factor.
+        lhs: Box<Self>,
+        /// The second factor.
+        rhs: Box<Self>,
+        /// The value added to the product.
+        addend: Box<Self>,
+    },
     /// A conversion to another element type.
     Cast {
         /// The element type converted to.
@@ -68,6 +78,7 @@ impl ValueExpr {
                     lhs.dtype(buffers)
                 }
             }
+            Self::MulAdd { addend, .. } => addend.dtype(buffers),
             Self::Select { then, .. } => then.dtype(buffers),
         }
     }
@@ -79,8 +90,9 @@ impl ValueExpr {
             Self::Const(_) | Self::Index { .. } => false,
             Self::Unary(_, value) | Self::Cast { value, .. } => value.reads(buffer),
             Self::Binary(_, lhs, rhs) => lhs.reads(buffer) || rhs.reads(buffer),
-            Self::Select { condition, then, otherwise } => {
-                condition.reads(buffer) || then.reads(buffer) || otherwise.reads(buffer)
+            Self::Select { condition: first, then: second, otherwise: third }
+            | Self::MulAdd { lhs: first, rhs: second, addend: third } => {
+                first.reads(buffer) || second.reads(buffer) || third.reads(buffer)
             }
         }
     }

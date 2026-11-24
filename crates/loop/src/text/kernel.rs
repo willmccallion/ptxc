@@ -167,6 +167,10 @@ impl KernelPrinter<'_> {
                 out.push_str("select");
                 self.args(out, &[condition, then, otherwise]);
             }
+            ValueExpr::MulAdd { lhs, rhs, addend } => {
+                out.push_str("fma");
+                self.args(out, &[lhs, rhs, addend]);
+            }
         }
     }
 
