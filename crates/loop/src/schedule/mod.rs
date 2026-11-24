@@ -7,12 +7,18 @@ mod primitive;
 mod trace;
 mod validate;
 mod validate_caches;
+mod validate_tensorize;
 
 pub use error::ScheduleError;
-pub use loop_tree::{CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree};
+pub(crate) use loop_tree::CacheId;
+pub use loop_tree::{
+    CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Tensorized,
+};
 pub use primitive::{Primitive, SplitFactor, ThreadAxis};
 pub use trace::Trace;
 pub use validate::Validated;
+pub(crate) use validate::WARP_LANES;
+pub(crate) use validate_tensorize::{Operand, TensorizedProduct};
 
 use crate::compute::ComputeDef;
 use std::sync::Arc;
@@ -59,6 +65,9 @@ impl Schedule<Open> {
             Primitive::Bind { loop_, axis } => self.record(step, |tree| tree.bind(loop_, axis)),
             Primitive::Unroll { loop_ } => self.record(step, |tree| tree.unroll(loop_)),
             Primitive::Vectorize { loop_ } => self.record(step, |tree| tree.vectorize(loop_)),
+            Primitive::Tensorize { m, n, k, instruction } => {
+                self.record(step, |tree| tree.tensorize([m, n, k], instruction))
+            }
             Primitive::CacheRead { tensor, at } => {
                 let compute = Arc::clone(&self.compute);
                 self.record(step, |tree| tree.cache_read(&compute, tensor, at))

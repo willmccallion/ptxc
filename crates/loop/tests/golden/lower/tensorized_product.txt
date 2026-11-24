@@ -1,0 +1,47 @@
+kernel product(%a: f16[512] read, %b: f16[256] read, %out: f32[128] write)
+  grid(1, 1, 1) block(32, 1, 1) smem 768
+  %i.0 = blockIdx.y
+  %i.1 = threadIdx.y
+  %j.0 = blockIdx.x
+  %lane = threadIdx.x
+  alloc %acc: f32[128] fragment<16x8> {
+    alloc %lhs: f16[256] fragment<16x16> {
+      alloc %rhs: f16[128] fragment<16x8> {
+        for %i.2 in 1 {
+          for %j.1 in 1 {
+            %acc[%i.2 + %j.1] = fill(0.0:f32)
+          }
+        }
+        alloc %a_tile: f16[256] shared {
+          alloc %b_tile: f16[128] shared {
+            for %k.0 in 2 {
+              barrier
+              for %a_fill in 8 {
+                %a_tile[%i.1 * 32 + %a_fill * 32 + %lane] = 0.0:f16
+                %a_tile[%i.1 * 32 + %a_fill * 32 + %lane] = %a[%i.1 * 64 + %i.0 * 512 + %k.0 * 16 + %a_fill * 64 + floordiv(%lane, 16) * 32 + floormod(%lane, 16)]
+              }
+              for %b_fill in 4 {
+                %b_tile[%i.1 * 32 + %lane + %b_fill * 32] = 0.0:f16
+                %b_tile[%i.1 * 32 + %lane + %b_fill * 32] = %b[%i.1 * 32 + %j.0 * 8 + %k.0 * 128 + %lane + %b_fill * 32]
+              }
+              barrier
+              for %i.2 in 1 {
+                for %j.1 in 1 {
+                  %lhs[0] = tile %a_tile[%i.2 * 256 + %i.1 * 256] stride 16
+                  %rhs[0] = tile %b_tile[%j.1 * 8] stride 8
+                  %acc[%i.2 + %j.1] = mma.m16n8k16.f16.f32(%lhs[0], %rhs[0], %acc[%i.2 + %j.1])
+                }
+              }
+            }
+          }
+        }
+        for %i.2 in 1 {
+          for %j.1 in 1 {
+            each %acc[%i.2 + %j.1] as (%i.3, %j.2) {
+              %out[%i.3 * 8 + %i.2 * 128 + %i.1 * 128 + %i.0 * 128 + %j.2 + %j.1 * 8 + %j.0 * 8] = element(%acc)
+            }
+          }
+        }
+      }
+    }
+  }

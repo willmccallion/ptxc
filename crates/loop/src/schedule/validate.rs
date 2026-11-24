@@ -7,6 +7,7 @@ use super::error::ScheduleError;
 use super::loop_tree::{LoopAnnotation, LoopId, LoopKind, LoopTree};
 use super::primitive::ThreadAxis;
 use super::validate_caches::check_caches;
+use super::validate_tensorize::{TensorizedProduct, check_tensorized};
 use super::{Open, Schedule};
 use ptxc_core::Dim;
 use ptxc_target::{Target, ThreadsPerBlock};
@@ -19,7 +20,12 @@ pub struct Validated {
     threads: ThreadsPerBlock,
     /// Each cache's tile extents, per axis of its input.
     tiles: Vec<Vec<Dim>>,
+    /// The product a tensorized nest computes.
+    product: Option<TensorizedProduct>,
 }
+
+/// The lanes of a warp, which a tensorized nest puts on `threadIdx.x`.
+pub(crate) const WARP_LANES: u64 = 32;
 
 /// Every axis in `(grid x, y, z, block x, y, z)` order.
 const AXES: [ThreadAxis; 6] = [
@@ -38,11 +44,12 @@ impl Schedule<Open> {
         check_vectors(&self.loops)?;
         check_cross_thread(&self.loops)?;
         let tiles = check_caches(&self.compute, &self.loops, target)?;
+        let product = check_tensorized(&self.compute, &self.loops, (&tiles, threads))?;
         Ok(Schedule {
             compute: self.compute,
             loops: self.loops,
             trace: self.trace,
-            state: Validated { threads, tiles },
+            state: Validated { threads, tiles, product },
         })
     }
 }
@@ -58,11 +65,20 @@ impl Schedule<Validated> {
     pub(crate) fn tiles(&self) -> &[Vec<Dim>] {
         &self.state.tiles
     }
+
+    /// The product a tensorized nest computes.
+    pub(crate) const fn product(&self) -> Option<&TensorizedProduct> {
+        self.state.product.as_ref()
+    }
 }
 
 impl LoopTree {
-    /// The extent of the loop bound to `axis`, or 1 if none is.
+    /// The extent of `axis`: the loop bound to it, a tensorized nest's
+    /// warp lanes on `threadIdx.x`, or 1.
     pub(crate) fn axis_extent(&self, axis: ThreadAxis) -> u64 {
+        if axis == ThreadAxis::ThreadX && self.tensorized.is_some() {
+            return WARP_LANES;
+        }
         self.nest
             .iter()
             .find(|&&id| self.loops[id].annotation == LoopAnnotation::Bound(axis))

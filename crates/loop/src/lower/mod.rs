@@ -5,7 +5,9 @@ mod combine;
 mod context;
 mod cross_thread;
 mod elementwise;
+mod fill;
 mod reduction;
+mod tensorize;
 
 use crate::schedule::{LoopAnnotation, LoopKind, Schedule, Validated};
 use crate::stmt::{LaunchShape, LoweredKernel, MemScope};
@@ -13,6 +15,7 @@ pub(crate) use cache::tile_extents;
 use context::Lowerer;
 use ptxc_core::KernelName;
 use ptxc_target::{BlockCount, SmemBytes, ThreadsPerBlock};
+pub(crate) use tensorize::operand_layout;
 
 impl Schedule<Validated> {
     /// The schedule as an explicit loop nest: bound loops become grid and
@@ -28,10 +31,11 @@ impl Schedule<Validated> {
             let found = &tree.loops()[id];
             found.kind == LoopKind::Reduce && matches!(found.annotation, LoopAnnotation::Bound(_))
         });
-        let body = match (&reduction, shared) {
-            (None, _) => lowerer.elementwise(),
-            (Some(reduction), None) => lowerer.reduction(reduction),
-            (Some(reduction), Some(shared)) => lowerer.cross_thread(reduction, shared),
+        let body = match (&reduction, shared, self.product()) {
+            (None, _, _) => lowerer.elementwise(),
+            (Some(_), _, Some(product)) => lowerer.tensorized(product),
+            (Some(reduction), None, None) => lowerer.reduction(reduction),
+            (Some(reduction), Some(shared), None) => lowerer.cross_thread(reduction, shared),
         };
         let smem = shared_bytes(&lowerer);
         let launch = launch_shape(tree);

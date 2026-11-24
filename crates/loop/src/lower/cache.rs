@@ -6,24 +6,24 @@
 //! read it instead.
 
 use super::context::Lowerer;
-use crate::compute::{ComputeDef, TensorName, TensorParamId, VarName};
-use crate::expr::{Expr, ExprId, Interval, LinearSum, VarId};
-use crate::schedule::{CacheRead, LoopAnnotation, LoopId, LoopTree, ScheduleError, ThreadAxis};
-use crate::stmt::{BufferId, Condition, ForKind, KernelVar, MemScope, Stmt, ValueExpr};
+use crate::compute::{ComputeDef, TensorName, TensorParamId};
+use crate::expr::{Expr, ExprId, LinearSum, VarId};
+use crate::schedule::{CacheId, CacheRead, LoopAnnotation, LoopId, LoopTree, ScheduleError};
+use crate::stmt::{BufferId, MemScope, Stmt, ValueExpr};
 use ptxc_core::{Dim, Idx};
 use ptxc_target::ThreadsPerBlock;
 
 /// A staged input's tile, as lowering fills and reads it.
 #[derive(Clone, Debug)]
 pub(super) struct Tile {
-    tensor: TensorParamId,
-    at: LoopId,
-    buffer: BufferId,
+    pub(super) tensor: TensorParamId,
+    pub(super) at: LoopId,
+    pub(super) buffer: BufferId,
     /// The input's index of the tile's first element, per axis.
-    origin: Vec<ExprId>,
-    extents: Vec<Dim>,
+    pub(super) origin: Vec<ExprId>,
+    pub(super) extents: Vec<Dim>,
     /// The block's threads, which share the filling.
-    threads: ThreadsPerBlock,
+    pub(super) threads: ThreadsPerBlock,
 }
 
 /// Each cache's tile extents, per axis of its input, if each staged index
@@ -47,7 +47,7 @@ pub(super) fn allocate_tiles(tiles: &[Tile], stmt: Stmt) -> Stmt {
 
 /// The elements of a tile with `extents`. Validation checked that its
 /// bytes fit shared memory, so the product does not overflow.
-fn tile_size(extents: &[Dim]) -> u64 {
+pub(super) fn tile_size(extents: &[Dim]) -> u64 {
     extents.iter().map(|extent| extent.get()).product()
 }
 
@@ -64,7 +64,8 @@ impl Lowerer<'_> {
             let name = format!("{}_tile", input.name);
             let buffer = self.scratch(&name, input.dtype, MemScope::Shared, tile_size(extents));
             let (tensor, at, extents) = (cache.tensor, cache.at, extents.clone());
-            self.tiles.push(Tile { tensor, at, buffer, origin, extents, threads });
+            let _stage: CacheId =
+                self.tiles.push(Tile { tensor, at, buffer, origin, extents, threads });
         }
     }
 
@@ -155,7 +156,15 @@ impl Lowerer<'_> {
         tensor: TensorParamId,
         index: &[ExprId],
     ) -> Option<ValueExpr> {
-        let tile = self.tiles.iter().find(|tile| tile.tensor == tensor)?.clone();
+        let (cache, tile) = self.tiles.iter_enumerated().find(|(_, tile)| tile.tensor == tensor)?;
+        let buffer = tile.buffer;
+        Some(ValueExpr::Load { buffer, index: self.tile_position(cache, index) })
+    }
+
+    /// The position in stage `cache`'s tile of its input's element at
+    /// compute-level `index`.
+    pub(super) fn tile_position(&mut self, cache: CacheId, index: &[ExprId]) -> ExprId {
+        let tile = self.tiles[cache].clone();
         let mut offsets = Vec::new();
         for (&axis, &origin) in index.iter().zip(&tile.origin) {
             let translated = self.translate(axis);
@@ -163,8 +172,7 @@ impl Lowerer<'_> {
             let offset = self.exprs.add(translated, negated);
             offsets.push(self.simplify(offset));
         }
-        let position = self.linearize(&offsets, &tile.extents);
-        Some(ValueExpr::Load { buffer: tile.buffer, index: position })
+        self.linearize(&offsets, &tile.extents)
     }
 
     /// The tiles staged at `at` that `body` reads.
@@ -172,125 +180,8 @@ impl Lowerer<'_> {
         self.tiles.iter().filter(|tile| tile.at == at && body.reads(tile.buffer)).cloned().collect()
     }
 
-    /// `body` after a barrier, the filling of `tiles`, and another barrier.
-    /// The first barrier keeps the fill from overwriting elements the
-    /// previous iteration's body may still be reading.
-    pub(super) fn fill_before(&mut self, tiles: &[Tile], body: Stmt) -> Stmt {
-        if tiles.is_empty() {
-            return body;
-        }
-        let mut steps = vec![Stmt::Barrier];
-        for tile in tiles {
-            steps.push(self.fill(tile));
-        }
-        steps.extend([Stmt::Barrier, body]);
-        Stmt::Seq(steps)
-    }
-
-    /// The block's threads copying `tile` from its input: element `e` by
-    /// thread `e mod T` in round `e div T`, for `T` threads. A tile no
-    /// larger than the block takes one round, with no loop.
-    fn fill(&mut self, tile: &Tile) -> Stmt {
-        let size = tile_size(&tile.extents);
-        // Validation's thread count is at least 1: an empty loop cannot be bound.
-        let rounds = Dim::new(size.div_ceil(u64::from(tile.threads.get())));
-        if rounds.get() == 1 {
-            let only = self.constant(0);
-            return self.fill_round(tile, only, rounds);
-        }
-        let (round_var, round) = self.fill_var(tile.tensor, rounds);
-        let copy = self.fill_round(tile, round, rounds);
-        Stmt::For { var: round_var, extent: rounds, kind: ForKind::Serial, body: Box::new(copy) }
-    }
-
-    /// Each thread's copy of its element of `tile` in `round` of `rounds`,
-    /// under the bounds the loops' ranges do not already prove.
-    fn fill_round(&mut self, tile: &Tile, round: ExprId, rounds: Dim) -> Stmt {
-        let element = self.tile_element(round, rounds);
-        let coordinates = self.coordinates(element, tile);
-        let dims = self.compute.inputs()[tile.tensor].shape.dims().to_vec();
-        let position = self.linearize(&coordinates, &dims);
-        let value = ValueExpr::Load { buffer: self.input_buffer(tile.tensor), index: position };
-        let store = Stmt::Store { buffer: tile.buffer, index: element, value };
-        let in_input = coordinates
-            .iter()
-            .zip(&dims)
-            .rev()
-            .fold(store, |body, (&index, &dim)| self.within(index, dim, body));
-        self.within(element, Dim::new(tile_size(&tile.extents)), in_input)
-    }
-
-    /// A new loop variable over `rounds`, for filling `tensor`'s tile, and
-    /// its expression.
-    fn fill_var(&mut self, tensor: TensorParamId, rounds: Dim) -> (VarId, ExprId) {
-        let name = VarName::new(format!("{}_fill", self.compute.inputs()[tensor].name));
-        let var = self.vars.push(KernelVar::Loop(name));
-        if let Some(range) = Interval::of_loop(rounds) {
-            self.insert_range(var, range);
-        }
-        (var, self.exprs.var(var))
-    }
-
-    /// The tile element the thread copies in `round` of `rounds`:
-    /// `round * T + t`, for `T` threads and the thread's position `t` in
-    /// its block, x fastest.
-    fn tile_element(&mut self, round: ExprId, rounds: Dim) -> ExprId {
-        let tree = self.tree;
-        let axes = [ThreadAxis::ThreadZ, ThreadAxis::ThreadY, ThreadAxis::ThreadX];
-        let mut indices = vec![round];
-        let mut extents = vec![rounds];
-        for axis in axes {
-            let bound = tree
-                .nest()
-                .iter()
-                .find(|&&id| tree.loops()[id].annotation == LoopAnnotation::Bound(axis));
-            indices.push(match bound {
-                Some(&id) => self.exprs.var(VarId::new(id.index())),
-                None => self.constant(0),
-            });
-            extents.push(Dim::new(tree.axis_extent(axis)));
-        }
-        self.linearize(&indices, &extents)
-    }
-
-    /// The input index of tile element `element`, per axis: its row-major
-    /// coordinates in the tile, offset by the tile's origin.
-    fn coordinates(&mut self, element: ExprId, tile: &Tile) -> Vec<ExprId> {
-        let mut stride = tile_size(&tile.extents);
-        let mut coordinates = Vec::new();
-        for (&origin, &extent) in tile.origin.iter().zip(&tile.extents) {
-            // Tile extents are at least 1, so the stride stays exact.
-            stride /= extent.get();
-            let (stride_expr, extent_expr) = (self.extent(Dim::new(stride)), self.extent(extent));
-            let quotient = self.exprs.floor_div(element, stride_expr);
-            let local = self.exprs.floor_mod(quotient, extent_expr);
-            let index = self.exprs.add(origin, local);
-            coordinates.push(self.simplify(index));
-        }
-        coordinates
-    }
-
-    /// `body` under `0 <= index < bound`, checking only the sides the
-    /// loops' ranges leave open.
-    fn within(&mut self, index: ExprId, bound: Dim, body: Stmt) -> Stmt {
-        let known = self.bounds(index);
-        let mut guarded = body;
-        if known.is_none_or(|known| i128::from(known.max()) >= i128::from(bound.get())) {
-            let limit = self.extent(bound);
-            let condition = Condition { index, bound: limit };
-            guarded = Stmt::If { condition, then: Box::new(guarded) };
-        }
-        if known.is_none_or(|known| known.min() < 0) {
-            // `0 <= index` as `-index < 1`: an `If` compares only one way.
-            let negated = self.negated(index);
-            let condition = Condition { index: self.simplify(negated), bound: self.constant(1) };
-            guarded = Stmt::If { condition, then: Box::new(guarded) };
-        }
-        guarded
-    }
-
     /// `-id`.
-    fn negated(&mut self, id: ExprId) -> ExprId {
+    pub(super) fn negated(&mut self, id: ExprId) -> ExprId {
         let minus_one = self.constant(-1);
         self.exprs.mul(id, minus_one)
     }

@@ -16,6 +16,8 @@ mod schedule_rules;
 mod schedule_support;
 mod simplify_properties;
 mod simplify_rules;
+mod tensorize;
+mod tensorize_errors;
 mod unroll;
 mod validate;
 mod values;

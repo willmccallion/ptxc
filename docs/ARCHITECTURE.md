@@ -289,12 +289,13 @@ impl Schedule<Open> {
 }
 impl Schedule<Validated> { pub fn lower(&self) -> Result<LoweredKernel, LowerError> }
 
-pub enum Primitive {                                    // compute-at, tensorize, pipeline
-    Split { loop_: LoopId, factors: Vec<SplitFactor> },  // and layout come with M3
+pub enum Primitive {                                    // compute-at, pipeline and layout
+    Split { loop_: LoopId, factors: Vec<SplitFactor> },  // come with M3
     Reorder { order: Vec<LoopId> }, Fuse { loops: Vec<LoopId> },
     Bind { loop_: LoopId, axis: ThreadAxis },          // blockIdx/threadIdx.{x,y,z}; never an empty loop
     Unroll { loop_: LoopId }, Vectorize { loop_: LoopId },
     CacheRead { tensor: TensorParamId, at: LoopId },   // the input's tile in shared memory, filled at `at`
+    Tensorize { m: LoopId, n: LoopId, k: LoopId, instruction: MmaInstruction }, // one mma per warp
 }
 ```
 
@@ -354,6 +355,19 @@ on both, so any loop order or thread split gives the same position. A
 staged input's loop allocates its tile, and each iteration fills it between
 two barriers, the block's threads copying elements in rounds, before the
 loads read the tile instead of global memory.
+
+`Tensorize` makes the innermost three loops of a product one `mma` tile per
+warp, the block's `threadIdx.x` its 32 lanes (D58). Validation checks the
+loops are innermost inside a reduction step, the definition multiplies two
+loads of the instruction's types, and both operands are staged outside the
+tile, each holding its tile as rows a fixed distance apart, with adjacent
+elements along its rows or its columns, and reading none of the third tile
+loop. Lowering keeps the accumulators in a fragment array over
+the tile loops left inside the reduction, loads both operands' fragments
+from their staged tiles at each step, and stores the result through a
+`FragmentEach` that binds the tile's row and column loops, so the output's
+guards and epilogue apply unchanged. Staged tiles are cleared before they
+are filled, so a tile overhanging its input multiplies zeros there.
 `verify` checks what code generation relies on: variables bound where read,
 buffers used as their scope and access allow, shared and local accesses
 provably in bounds (with `If` conditions narrowing ranges and capping the

@@ -16,7 +16,8 @@ impl LoopTree {
         if axis.is_block() && bound.kind == LoopKind::Reduce {
             return Err(ScheduleError::BlockBoundReduce(bound.name.clone()));
         }
-        if self.loops.iter().any(|other| other.annotation == LoopAnnotation::Bound(axis)) {
+        let lanes = axis == ThreadAxis::ThreadX && self.tensorized.is_some();
+        if lanes || self.loops.iter().any(|other| other.annotation == LoopAnnotation::Bound(axis)) {
             return Err(ScheduleError::AxisTaken(axis));
         }
         self.loops[target].annotation = LoopAnnotation::Bound(axis);

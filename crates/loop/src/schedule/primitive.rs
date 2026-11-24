@@ -2,6 +2,7 @@
 
 use super::loop_tree::LoopId;
 use crate::compute::TensorParamId;
+use ptxc_target::MmaInstruction;
 
 /// A split's factor for one of the inner loops it makes; never zero.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -95,6 +96,19 @@ pub enum Primitive {
     Vectorize {
         /// The loop vectorized.
         loop_: LoopId,
+    },
+    /// Computes the tile the innermost loops `m`, `n` and `k` iterate with
+    /// one `mma` per warp, as TVM's `tensorize` replaces a loop nest with
+    /// an intrinsic. The block's `threadIdx.x` becomes the warp's 32 lanes.
+    Tensorize {
+        /// The tile's rows.
+        m: LoopId,
+        /// The tile's columns.
+        n: LoopId,
+        /// The tile's depth, a reduction loop.
+        k: LoopId,
+        /// The `mma` the tile becomes.
+        instruction: MmaInstruction,
     },
     /// Stages the tile of an input that each iteration of a serial loop
     /// reads in shared memory, as TVM's `cache_read` with `compute_at`.
