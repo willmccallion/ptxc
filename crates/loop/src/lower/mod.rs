@@ -6,12 +6,13 @@ mod context;
 mod cross_thread;
 mod elementwise;
 mod fill;
+mod pipeline;
 mod reduction;
 mod tensorize;
 
 use crate::schedule::{LoopAnnotation, LoopKind, Schedule, Validated};
 use crate::stmt::{LaunchShape, LoweredKernel, MemScope};
-pub(crate) use cache::tile_extents;
+pub(crate) use cache::{slots_at, tile_extents};
 use context::Lowerer;
 use ptxc_core::KernelName;
 use ptxc_target::{BlockCount, SmemBytes, ThreadsPerBlock};

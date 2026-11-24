@@ -22,6 +22,9 @@ pub(super) struct Tile {
     /// The input's index of the tile's first element, per axis.
     pub(super) origin: Vec<ExprId>,
     pub(super) extents: Vec<Dim>,
+    /// The iterations of `at` whose tiles the buffer holds at once, one
+    /// after another: the pipeline's stages, or 1.
+    pub(super) slots: Dim,
     /// The block's threads, which share the filling.
     pub(super) threads: ThreadsPerBlock,
 }
@@ -45,6 +48,15 @@ pub(super) fn allocate_tiles(tiles: &[Tile], stmt: Stmt) -> Stmt {
         .fold(stmt, |body, tile| Stmt::Alloc { buffer: tile.buffer, body: Box::new(body) })
 }
 
+/// The iterations' tiles the buffers of the tiles staged at `at` hold: the
+/// stages of a pipeline there, or 1.
+pub(crate) fn slots_at(tree: &LoopTree, at: LoopId) -> Dim {
+    match tree.loops()[at].annotation {
+        LoopAnnotation::Pipelined(stages) => Dim::new(u64::from(stages.get())),
+        _ => Dim::new(1),
+    }
+}
+
 /// The elements of a tile with `extents`. Validation checked that its
 /// bytes fit shared memory, so the product does not overflow.
 pub(super) fn tile_size(extents: &[Dim]) -> u64 {
@@ -62,10 +74,12 @@ impl Lowerer<'_> {
             let origin = index.into_iter().map(|axis| self.first_point(axis, &spanned)).collect();
             let input = &compute.inputs()[cache.tensor];
             let name = format!("{}_tile", input.name);
-            let buffer = self.scratch(&name, input.dtype, MemScope::Shared, tile_size(extents));
+            let slots = slots_at(tree, cache.at);
+            let size = slots.get() * tile_size(extents);
+            let buffer = self.scratch(&name, input.dtype, MemScope::Shared, size);
             let (tensor, at, extents) = (cache.tensor, cache.at, extents.clone());
-            let _stage: CacheId =
-                self.tiles.push(Tile { tensor, at, buffer, origin, extents, threads });
+            let tile = Tile { tensor, at, buffer, origin, extents, slots, threads };
+            let _stage: CacheId = self.tiles.push(tile);
         }
     }
 
@@ -172,7 +186,27 @@ impl Lowerer<'_> {
             let offset = self.exprs.add(translated, negated);
             offsets.push(self.simplify(offset));
         }
-        self.linearize(&offsets, &tile.extents)
+        let position = self.linearize(&offsets, &tile.extents);
+        let iteration = self.exprs.var(VarId::new(tile.at.index()));
+        match self.slot_start(&tile, iteration) {
+            Some(start) => self.exprs.add(start, position),
+            None => position,
+        }
+    }
+
+    /// The first element of the copy of `tile` for the iteration of its
+    /// loop at `iteration`, in a buffer of several: the copy
+    /// `iteration mod slots`. None where it is the buffer's first.
+    pub(super) fn slot_start(&mut self, tile: &Tile, iteration: ExprId) -> Option<ExprId> {
+        if tile.slots.get() == 1 {
+            return None;
+        }
+        let slots = self.extent(tile.slots);
+        let slot = self.exprs.floor_mod(iteration, slots);
+        let size = self.extent(Dim::new(tile_size(&tile.extents)));
+        let start = self.exprs.mul(slot, size);
+        let start = self.simplify(start);
+        (self.exprs.get(start) != Expr::Const(0)).then_some(start)
     }
 
     /// The tiles staged at `at` that `body` reads.

@@ -65,6 +65,9 @@ fn write_loop(out: &mut String, loops: &LoopTree, id: LoopId, depth: usize) {
         LoopAnnotation::Bound(axis) => {
             let _infallible = write!(out, " bind({})", axis.name());
         }
+        LoopAnnotation::Pipelined(stages) => {
+            let _infallible = write!(out, " pipeline({})", stages.get());
+        }
     }
     out.push('\n');
 }
@@ -100,6 +103,9 @@ fn write_step(out: &mut String, (compute, loops): (&ComputeDef, &LoopTree), step
         }
         Primitive::CacheRead { tensor, at } => {
             write!(out, "cache_read {} {}", compute.inputs()[*tensor].name, name(*at))
+        }
+        Primitive::Pipeline { loop_, stages } => {
+            write!(out, "pipeline {} {}", name(*loop_), stages.get())
         }
     };
 }

@@ -1198,3 +1198,28 @@ the old one.
   where tiles overhang their input or the product is skinny. The f16 NN
   sweep's shapes of at least 1024 go from 70% to 78% of cuBLAS. It
   depends on codegen holding fragments in registers (D62).
+
+## D64. Pipelining fills a loop's tiles `S - 1` iterations ahead
+
+- **Context:** with one stage, each reduction step waits for its own
+  copies before computing (D63), so the copies' latency is never hidden.
+- **Options:**
+  - Double buffering only, as TVM's `double_buffer` scope.
+  - An `S`-stage pipeline, as CUTLASS's multistage mainloop.
+  - A pipeline annotation per stage, as TVM's `software_pipeline_stage`.
+- **Choice:**
+  - `Primitive::Pipeline { loop_, stages }` marks a serial loop with at
+    least one input staged at it `Pipelined(stages)`, for any `stages` of
+    2 or more. Like the other annotations, it keeps the loop from being
+    split, fused or annotated again.
+  - Lowering gives each tile `stages` slots. Before the loop it starts the
+    first `stages - 1` iterations' copies, a group each.
+  - Each iteration waits until at most `stages - 2` groups are in flight,
+    passes one barrier, starts iteration `i + stages - 1`'s copies into
+    the slot iteration `i - 1` read, commits them, and computes on slot
+    `i mod stages`.
+  - A barrier before the prologue keeps the loop safe inside an outer one.
+- **Reason:** the structure is the one CUTLASS's Ampere GEMMs use, and two
+  stages give double buffering as a case of it. The interpreter checks every wait and barrier, so a schedule
+  with too few of either fails on the CPU. The tuner can search the stage
+  count against shared memory.

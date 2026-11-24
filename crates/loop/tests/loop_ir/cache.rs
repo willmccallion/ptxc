@@ -68,20 +68,24 @@ pub(crate) fn tiled(
     (schedule, [k[0], k[1]])
 }
 
-fn stage(schedule: &mut Schedule<Open>, tensor: TensorParamId, at: LoopId) {
+pub(crate) fn stage(schedule: &mut Schedule<Open>, tensor: TensorParamId, at: LoopId) {
     schedule.apply(Primitive::CacheRead { tensor, at }).unwrap();
 }
 
 /// Inputs of `matmul(extents)` counting up from distinct starts, so a read
 /// of the wrong element shows.
-fn operands([m, n, k]: [u64; 3]) -> [HostTensor; 2] {
+pub(crate) fn operands([m, n, k]: [u64; 3]) -> [HostTensor; 2] {
     let values = |count: u64, start: i32| -> Vec<i32> {
         (0..i32::try_from(count).unwrap()).map(|value| start + value).collect()
     };
     [tensor(&[m, k], values(m * k, 1)), tensor(&[k, n], values(k * n, -40))]
 }
 
-fn agrees_with_default(compute: &Arc<ComputeDef>, schedule: Schedule<Open>, inputs: &[HostTensor]) {
+pub(crate) fn agrees_with_default(
+    compute: &Arc<ComputeDef>,
+    schedule: Schedule<Open>,
+    inputs: &[HostTensor],
+) {
     let expected = run_default(compute, inputs).unwrap();
     let actual = run(&lower(schedule), inputs).unwrap();
     assert_eq!(ints(&actual[0]), ints(&expected[0]));

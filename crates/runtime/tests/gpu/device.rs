@@ -3,7 +3,7 @@
 use ptxc_codegen::generate;
 use ptxc_core::{ByteSize, HostTensor, TensorData};
 use ptxc_cuda::{BlockDim, Context, Device, DeviceBuffer, DeviceOrdinal, Driver, GridDim};
-use ptxc_loop::{Access, ComputeDef, LoweredKernel, RunError};
+use ptxc_loop::{Access, ComputeDef, LoweredKernel, Primitive, RunError, Schedule, StageCount};
 use ptxc_target::{BlockCount, SmVersion, Target, ThreadsPerBlock, preset};
 use ptxc_testkit::compare::compare;
 use ptxc_testkit::sums::SumRounding;
@@ -27,6 +27,17 @@ fn context() -> Context {
 /// `compute` under its default schedule.
 pub(crate) fn lowered(compute: ComputeDef) -> LoweredKernel {
     ptxc_schedule::default_schedule(Arc::new(compute), &target()).unwrap().lower()
+}
+
+/// `compute` under its default schedule, with the loop its first staged
+/// input is staged at pipelined over `stages`.
+pub(crate) fn pipelined(compute: &Arc<ComputeDef>, stages: u32) -> LoweredKernel {
+    let default = ptxc_schedule::default_schedule(Arc::clone(compute), &target()).unwrap();
+    let mut schedule = Schedule::replay(Arc::clone(compute), default.trace()).unwrap();
+    let at = schedule.loops().caches()[0].at;
+    let stages = StageCount::new(stages).unwrap();
+    schedule.apply(Primitive::Pipeline { loop_: at, stages }).unwrap();
+    schedule.validate(&target()).unwrap().lower()
 }
 
 /// `kernel`'s outputs on the GPU for `inputs`, ordered as the loop

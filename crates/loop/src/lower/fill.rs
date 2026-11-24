@@ -28,7 +28,7 @@ enum RunCopy {
 
 /// The adjacent elements a thread copies at once, and how.
 #[derive(Clone, Copy)]
-struct Run {
+pub(super) struct Run {
     length: u64,
     copy: RunCopy,
 }
@@ -45,7 +45,7 @@ impl Lowerer<'_> {
         let runs: Vec<Run> = tiles.iter().map(|tile| self.run(tile)).collect();
         let mut steps = vec![Stmt::Barrier];
         for (tile, &run) in tiles.iter().zip(&runs) {
-            steps.push(self.fill(tile, run));
+            steps.push(self.fill(tile, run, None));
         }
         if runs.iter().any(|run| run.copy == RunCopy::Async) {
             steps.extend([Stmt::AsyncCommit, Stmt::AsyncWait { pending: 0 }]);
@@ -54,19 +54,20 @@ impl Lowerer<'_> {
         Stmt::Seq(steps)
     }
 
-    /// The block's threads copying `tile` from its input in runs of `run`:
-    /// run `r` by thread `r mod T` in round `r div T`, for `T` threads. A
-    /// tile no larger than the block takes one round, with no loop.
-    fn fill(&mut self, tile: &Tile, run: Run) -> Stmt {
+    /// The block's threads copying `tile` from its input in runs of `run`,
+    /// into its buffer from `start`, or the first element without one: run
+    /// `r` by thread `r mod T` in round `r div T`, for `T` threads. A tile
+    /// no larger than the block takes one round, with no loop.
+    pub(super) fn fill(&mut self, tile: &Tile, run: Run, start: Option<ExprId>) -> Stmt {
         let runs = Dim::new(tile_size(&tile.extents) / run.length);
         // Validation's thread count is at least 1: an empty loop cannot be bound.
         let rounds = Dim::new(runs.get().div_ceil(u64::from(tile.threads.get())));
         if rounds.get() == 1 {
             let only = self.constant(0);
-            return self.fill_round(tile, (only, rounds), run);
+            return self.fill_round(tile, (only, rounds), (run, start));
         }
         let (round_var, round) = self.fill_var(tile.tensor, "fill", rounds);
-        let copy = self.fill_round(tile, (round, rounds), run);
+        let copy = self.fill_round(tile, (round, rounds), (run, start));
         Stmt::For { var: round_var, extent: rounds, kind: ForKind::Serial, body: Box::new(copy) }
     }
 
@@ -74,7 +75,7 @@ impl Lowerer<'_> {
     /// divides the tile's and its input's innermost extents and the tile's
     /// origin along that axis, so a run lies in one row of both, aligned;
     /// and one element where none does.
-    fn run(&self, tile: &Tile) -> Run {
+    pub(super) fn run(&self, tile: &Tile) -> Run {
         let input = &self.compute.inputs()[tile.tensor];
         let element = input.dtype.element_size().get();
         let innermost = (tile.extents.last(), input.shape.dims().last(), tile.origin.last());
@@ -94,10 +95,16 @@ impl Lowerer<'_> {
         Run { length, copy }
     }
 
-    /// Each thread's copy of its run of `tile` in `round` of `rounds`. A
-    /// run starts at a multiple of its length in a row whose extent is one,
-    /// so its first element's bounds are all of its elements'.
-    fn fill_round(&mut self, tile: &Tile, (round, rounds): (ExprId, Dim), run: Run) -> Stmt {
+    /// Each thread's copy of its run of `tile` in `round` of `rounds`, into
+    /// the buffer from `start`. A run starts at a multiple of its length in
+    /// a row whose extent is one, so its first element's bounds are all of
+    /// its elements'.
+    fn fill_round(
+        &mut self,
+        tile: &Tile,
+        (round, rounds): (ExprId, Dim),
+        (run, start): (Run, Option<ExprId>),
+    ) -> Stmt {
         let index = self.tile_element(round, rounds);
         let first = self.scaled(index, run.length);
         let coordinates = self.coordinates(first, tile);
@@ -108,23 +115,26 @@ impl Lowerer<'_> {
         for (&coordinate, &dim) in coordinates.iter().zip(&dims).rev() {
             in_input.extend(self.open_bounds(coordinate, dim));
         }
+        // Unsimplified, so the guard on the run's index bounds the copy.
+        let target_index = start.map_or(first, |start| self.exprs.add(start, first));
         let copy = match run.copy {
             RunCopy::Async => Stmt::AsyncCopy {
                 target: tile.buffer,
-                target_index: first,
+                target_index,
                 source: source.0,
                 source_index: source.1,
                 run: Dim::new(run.length),
                 bounds: in_input,
             },
-            RunCopy::Direct => self.element_copy(tile, (first, source), in_input),
+            RunCopy::Direct => self.element_copy(tile, (target_index, source), in_input),
         };
         self.within(index, Dim::new(tile_size(&tile.extents) / run.length), copy)
     }
 
-    /// `tile`'s element `first` stored from `source`'s, where every one of
-    /// `in_input` holds. In a tensorized nest the element is cleared first,
-    /// so an `mma` over a tile overhanging its input multiplies zeros there.
+    /// `tile`'s buffer's element `first` stored from `source`'s, where every
+    /// one of `in_input` holds. In a tensorized nest the element is cleared
+    /// first, so an `mma` over a tile overhanging its input multiplies zeros
+    /// there.
     fn element_copy(
         &self,
         tile: &Tile,
@@ -211,7 +221,7 @@ impl Lowerer<'_> {
 
     /// `body` under `0 <= index < bound`, checking only the sides the
     /// loops' ranges leave open.
-    fn within(&mut self, index: ExprId, bound: Dim, body: Stmt) -> Stmt {
+    pub(super) fn within(&mut self, index: ExprId, bound: Dim, body: Stmt) -> Stmt {
         let open = self.open_bounds(index, bound);
         guarded_by(open, body)
     }

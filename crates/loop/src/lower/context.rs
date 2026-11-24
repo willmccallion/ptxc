@@ -264,16 +264,24 @@ impl<'s> Lowerer<'s> {
     pub(super) fn wrap_loops(&mut self, loops: &[LoopId], body: Stmt) -> Stmt {
         loops.iter().rev().fold(body, |body, &id| {
             let found = &self.tree.loops()[id];
+            let (var, extent) = (VarId::new(id.index()), found.extent);
             let kind = match found.annotation {
                 LoopAnnotation::Unrolled => ForKind::Unrolled,
                 LoopAnnotation::Vectorized => ForKind::Vectorized,
-                LoopAnnotation::Serial | LoopAnnotation::Bound(_) => ForKind::Serial,
+                LoopAnnotation::Serial
+                | LoopAnnotation::Bound(_)
+                | LoopAnnotation::Pipelined(_) => ForKind::Serial,
             };
-            let extent = found.extent;
             let tiles = self.tiles_read_in(id, &body);
-            let body = self.fill_before(&tiles, body);
-            let looped =
-                Stmt::For { var: VarId::new(id.index()), extent, kind, body: Box::new(body) };
+            let looped = match found.annotation {
+                LoopAnnotation::Pipelined(stages) if !tiles.is_empty() => {
+                    self.pipelined((var, extent), stages, &tiles, body)
+                }
+                _ => {
+                    let body = self.fill_before(&tiles, body);
+                    Stmt::For { var, extent, kind, body: Box::new(body) }
+                }
+            };
             allocate_tiles(&tiles, looped)
         })
     }

@@ -14,7 +14,7 @@ pub(crate) use loop_tree::CacheId;
 pub use loop_tree::{
     CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Tensorized,
 };
-pub use primitive::{Primitive, SplitFactor, ThreadAxis};
+pub use primitive::{Primitive, SplitFactor, StageCount, ThreadAxis};
 pub use trace::Trace;
 pub use validate::Validated;
 pub(crate) use validate::WARP_LANES;
@@ -71,6 +71,9 @@ impl Schedule<Open> {
             Primitive::CacheRead { tensor, at } => {
                 let compute = Arc::clone(&self.compute);
                 self.record(step, |tree| tree.cache_read(&compute, tensor, at))
+            }
+            Primitive::Pipeline { loop_, stages } => {
+                self.record(step, |tree| tree.pipeline(loop_, stages))
             }
         }
     }

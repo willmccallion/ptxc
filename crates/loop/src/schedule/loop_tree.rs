@@ -1,7 +1,7 @@
 //! `LoopTree`: a compute definition's loop nest as a schedule has shaped it.
 
 use super::error::ScheduleError;
-use super::primitive::ThreadAxis;
+use super::primitive::{StageCount, ThreadAxis};
 use crate::compute::{ComputeDef, IterKind, IterVarId, TensorParamId, VarName};
 use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 use ptxc_core::{Dim, Idx, IndexVec};
@@ -33,6 +33,16 @@ pub enum LoopAnnotation {
     Vectorized,
     /// In parallel, on a grid or block axis.
     Bound(ThreadAxis),
+    /// One after another, the tiles staged at it filled `stages - 1`
+    /// iterations ahead.
+    Pipelined(StageCount),
+}
+
+impl LoopAnnotation {
+    /// Whether the loop's iterations run one after another.
+    pub const fn runs_serially(self) -> bool {
+        matches!(self, Self::Serial | Self::Pipelined(_))
+    }
 }
 
 /// A loop: its name, extent, kind and how it runs.
