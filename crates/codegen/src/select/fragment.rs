@@ -10,7 +10,8 @@ use crate::ast::{
     Address, B64, BinaryOp, CvtMode, PtxType, Reg, Signedness, Space, Special, Value,
 };
 use ptxc_loop::{
-    BufferId, Expr, FragmentTile, Scalar, Stmt, TileAccess, TileOrder, ValueExpr, VarId,
+    BufferId, Expr, FragmentTile, Interval, MemScope, Scalar, Stmt, TileAccess, TileOrder,
+    ValueExpr, VarId,
 };
 use ptxc_target::{MmaInstruction, Target};
 use std::collections::HashMap;
@@ -227,7 +228,15 @@ impl Selector<'_> {
         body: &Stmt,
     ) -> Result<(), CodegenError> {
         let layout = self.fragment(fragment.buffer)?.layout();
-        let dtype = self.kernel.buffers()[fragment.buffer].dtype;
+        let found = &self.kernel.buffers()[fragment.buffer];
+        let dtype = found.dtype;
+        if let MemScope::Fragment(shape) = found.scope {
+            for (var, extent) in [(row, shape.rows), (column, shape.columns)] {
+                if let Some(range) = Interval::of_loop(extent) {
+                    self.ranges.insert(var, range);
+                }
+            }
+        }
         for element in 0..layout.elements() {
             let [at_row, at_column] = self.lane_place(layout, element)?;
             let _row = self.vars.insert(row, at_row);

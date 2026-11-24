@@ -57,27 +57,56 @@ impl Selector<'_> {
     }
 
     /// `a` divided by `b`, floored: an arithmetic shift right where `b` is
-    /// a power of two.
+    /// a power of two, and 32-bit unsigned division where `a` is known to
+    /// fit.
     fn floor_div(&mut self, a: ExprId, b: ExprId) -> Result<Reg<B64>, CodegenError> {
         let dividend = self.index_operand(a)?;
         if let Some(divisor) = self.power_of_two(b) {
             let shift = Value::<B64>::int(i64::from(divisor.trailing_zeros()));
             return Ok(self.builder.int(BinaryOp::Shr, Signedness::Signed, dividend, shift));
         }
+        if let Some(divisor) = self.unsigned_divisor(a, b) {
+            return Ok(self.unsigned32(BinaryOp::Div, dividend, divisor));
+        }
         let divisor = self.index_operand(b)?;
         Ok(self.floored(dividend, divisor).0)
     }
 
     /// The remainder of `a` by `b` with `b`'s sign: a mask where `b` is a
-    /// power of two.
+    /// power of two, and a 32-bit unsigned remainder where `a` is known to
+    /// fit.
     fn floor_mod(&mut self, a: ExprId, b: ExprId) -> Result<Reg<B64>, CodegenError> {
         let dividend = self.index_operand(a)?;
         if let Some(divisor) = self.power_of_two(b) {
             let mask = Value::<B64>::int(divisor - 1);
             return Ok(self.builder.int(BinaryOp::And, Signedness::Bits, dividend, mask));
         }
+        if let Some(divisor) = self.unsigned_divisor(a, b) {
+            return Ok(self.unsigned32(BinaryOp::Rem, dividend, divisor));
+        }
         let divisor = self.index_operand(b)?;
         Ok(self.floored(dividend, divisor).1)
+    }
+
+    /// `b`'s value if it is a positive constant that fits in `i32` and every
+    /// value `a` takes lies in `0..2^32`: where floored division and modulo
+    /// are 32-bit unsigned ones, which ptxas multiplies out.
+    fn unsigned_divisor(&self, a: ExprId, b: ExprId) -> Option<i32> {
+        let Expr::Const(divisor) = self.kernel.exprs().get(b) else { return None };
+        let divisor = i32::try_from(divisor).ok().filter(|&divisor| divisor > 0)?;
+        let range = self.kernel.exprs().bounds(a, &self.ranges)?;
+        let fits = range.min() >= 0 && u32::try_from(range.max()).is_ok();
+        fits.then_some(divisor)
+    }
+
+    /// `op`, `Div` or `Rem`, on `dividend`'s low 32 bits and `divisor`,
+    /// unsigned, widened back to 64 bits.
+    fn unsigned32(&mut self, op: BinaryOp, dividend: Value<B64>, divisor: i32) -> Reg<B64> {
+        let narrow: Reg<B32> =
+            self.builder.convert(CvtMode::Plain, (PtxType::U32, PtxType::U64), dividend);
+        let unsigned = Signedness::Unsigned;
+        let result = self.builder.int(op, unsigned, narrow.into(), Value::<B32>::int(divisor));
+        self.builder.convert(CvtMode::Plain, (PtxType::U64, PtxType::U32), result.into())
     }
 
     /// `id`'s value if it is a constant positive power of two. Floored

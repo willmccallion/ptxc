@@ -114,3 +114,21 @@ fn a_warps_array_of_tiles_unrolled_keeps_each_tiles_accumulators_apart_in_regist
     assert!(module.contains(".local .align 16 .b8 local_0[64];"));
     assert_eq!(f32_store_offsets(&module, "local_0"), (0..64).step_by(4).collect());
 }
+
+#[test]
+fn a_grid_of_uneven_block_counts_divides_once_in_32_bits() {
+    let instruction = f16_mma();
+    let extents = [128, 768, 768];
+    let compute = product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor));
+    let kernel = ptxc_schedule::default_schedule(compute, &target()).unwrap().lower();
+
+    let module = generate(&kernel, &target()).unwrap();
+
+    assert_eq!(count(&module, "div.s64") + count(&module, "rem.s64"), 0);
+    assert_eq!([count(&module, "div.u32"), count(&module, "rem.u32")], [1, 1]);
+    let text = module.to_string();
+    let by_column_blocks =
+        |op: &str| text.lines().any(|line| line.contains(op) && line.ends_with(", 12;"));
+    assert!(by_column_blocks("div.u32") && by_column_blocks("rem.u32"), "{text}");
+    assemble(&module);
+}

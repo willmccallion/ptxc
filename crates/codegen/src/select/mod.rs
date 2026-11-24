@@ -6,6 +6,7 @@ mod control;
 mod expr;
 mod fp8;
 mod fragment;
+mod hoist;
 mod known;
 mod lanes;
 mod math;
@@ -18,7 +19,7 @@ use crate::ast::{B16, B64, F32, FunctionBuilder, PtxModule, Reg};
 use fragment::{Fragment, Lane, fragments};
 use known::Known;
 use memory::Storage;
-use ptxc_loop::{BufferId, LoweredKernel, VarId};
+use ptxc_loop::{BufferId, LoweredKernel, VarId, VarRanges};
 use ptxc_target::Target;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -52,6 +53,9 @@ pub fn generate(kernel: &LoweredKernel, target: &Target) -> Result<PtxModule, Co
     if !selector.fragments.is_empty() {
         selector.lane_indices()?;
     }
+    for invariant in hoist::invariant_indices(&kernel) {
+        let _held = selector.index(invariant)?;
+    }
     selector.statement(kernel.body())?;
     let function = selector.builder.finish();
     Ok(PtxModule { version: target.ptx_isa(), target: target.sm(), functions: vec![function] })
@@ -75,6 +79,8 @@ struct Selector<'k> {
     /// The lane's position in its warp, read where the kernel has
     /// fragments.
     lane: Option<Lane>,
+    /// The values each variable bound so far takes.
+    ranges: VarRanges,
 }
 
 impl<'k> Selector<'k> {
@@ -89,6 +95,7 @@ impl<'k> Selector<'k> {
             fragments,
             elements: HashMap::new(),
             lane: None,
+            ranges: kernel.thread_ranges(),
         }
     }
 }
