@@ -988,3 +988,34 @@ the old one.
   on, and `ptxc-cuda` stays the only unsafe crate on the compiler and
   runtime path. `cargo xtask check-deps` names the one file, so no other
   unsafe code can join it unnoticed.
+
+## D56. Matrix products are tiled on CUDA cores by a third fixed rule
+
+- **Context:** D49's reduction rule gives a matrix product one block per
+  output row, its threads splitting the sum, so every block rereads both
+  operands from global memory. A 256³ f32 GEMM takes about 1 ms against
+  cuBLAS's 7 µs. Tensor cores come later in M3, the search in M5.
+- **Options:**
+  - recognise MatMul and Gemm stages by the op that made them;
+  - recognise a matrix product from the compute definition alone, as
+    Ansor's multi-level tiling recognises the data reuse that pays for
+    tiling.
+- **Choice:** `default_schedule` recognises the structure.
+  - A product is a sum over one axis of two loads multiplied, each reading
+    an output axis the other does not. The innermost such axis is the row
+    or column and any other a broadcast batch. Every index part is a plain
+    axis or a constant, each operand is read by its one load alone, and no
+    axis is empty.
+  - The rule tiles it as CUTLASS's SIMT GEMM does. A block of 16 × 16
+    threads computes a 64 × 64 output tile, each thread a 4 × 4 tile in
+    registers. Each 8-deep step of the sum stages both operands' slices
+    with `cache_read`, and the step's depth and the thread's tile are
+    unrolled. The batch and block loops fuse onto `blockIdx.x`, which no
+    grid limit binds.
+  - Like D49's rules, it is a plain function with fixed tiles until the
+    search has knobs to tune.
+- **Reason:** the structure, not the op, is what tiling depends on, so any
+  stage of that shape benefits, and the tensor-core rule reuses the same
+  recognition. Every output still sums its axis in order, so a tiled
+  kernel matches the serial schedule bit for bit, which the tests check in
+  the interpreter and on the GPU.
