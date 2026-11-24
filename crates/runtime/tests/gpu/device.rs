@@ -8,7 +8,7 @@ use ptxc_target::{BlockCount, SmVersion, Target, ThreadsPerBlock, preset};
 use ptxc_testkit::compare::{Tolerance, compare};
 use std::sync::{Arc, OnceLock};
 
-fn target() -> Target {
+pub(crate) fn target() -> Target {
     preset(SmVersion::SM_89).unwrap()
 }
 

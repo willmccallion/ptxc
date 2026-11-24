@@ -1,6 +1,7 @@
 //! `Instr`: the PTX instructions ptxc emits, stored with their types and
 //! erased registers. Only `FunctionBuilder`'s typed methods make them.
 
+use super::matrix::{MatrixOrder, MmaOp};
 use super::operand::{Address, Operand, Special};
 use super::reg::RegId;
 
@@ -27,6 +28,9 @@ pub(crate) enum PtxType {
     /// Two FP8 values in 16 bits, the first in the high byte.
     E4m3x2,
     E5m2x2,
+    /// FP8, as `mma` names its multiplicands.
+    E4m3,
+    E5m2,
 }
 
 impl PtxType {
@@ -50,6 +54,8 @@ impl PtxType {
             Self::F16x2 => ".f16x2",
             Self::E4m3x2 => ".e4m3x2",
             Self::E5m2x2 => ".e5m2x2",
+            Self::E4m3 => ".e4m3",
+            Self::E5m2 => ".e5m2",
         }
     }
 }
@@ -222,5 +228,20 @@ pub(crate) enum Instr {
         guard: Option<(RegId, bool)>,
     },
     BarSync,
+    /// `ldmatrix`: one 8 by 8 matrix of 16-bit elements into each of
+    /// `dst`, the warp's lanes giving the rows' addresses.
+    LdMatrix {
+        order: MatrixOrder,
+        dst: Vec<RegId>,
+        addr: Address,
+    },
+    /// `mma.sync`: `d = a · b + c` on the warp's fragments.
+    Mma {
+        op: MmaOp,
+        d: Vec<RegId>,
+        a: Vec<RegId>,
+        b: Vec<RegId>,
+        c: Vec<RegId>,
+    },
     Ret,
 }

@@ -80,6 +80,8 @@ pub(crate) enum Special {
     BlockX,
     BlockY,
     BlockZ,
+    /// The thread's lane within its warp.
+    LaneId,
 }
 
 impl Special {
@@ -91,6 +93,7 @@ impl Special {
             Self::BlockX => "%ctaid.x",
             Self::BlockY => "%ctaid.y",
             Self::BlockZ => "%ctaid.z",
+            Self::LaneId => "%laneid",
         }
     }
 }

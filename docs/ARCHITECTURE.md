@@ -335,10 +335,11 @@ pub enum Stmt {
     LoadIndex { var: VarId, buffer: BufferId, index: ExprId, body: Box<Stmt> },
     Store { buffer: BufferId, index: ExprId, value: ValueExpr },
     Barrier,
-    FragmentFill { fragment: BufferId, value: Scalar },                  // the whole warp at once
-    FragmentLoad { fragment: BufferId, source: BufferId, at: TileAccess }, // from shared memory
-    Mma { instruction: MmaInstruction, a: BufferId, b: BufferId, accumulator: BufferId },
-    FragmentStore { fragment: BufferId, target: BufferId, at: TileAccess },
+    FragmentFill { fragment: FragmentTile, value: Scalar },              // the whole warp at once
+    FragmentLoad { fragment: FragmentTile, source: BufferId, at: TileAccess }, // from shared memory
+    Mma { instruction: MmaInstruction, a: FragmentTile, b: FragmentTile, accumulator: FragmentTile },
+    FragmentStore { fragment: FragmentTile, target: BufferId, at: TileAccess },
+    FragmentEach { fragment: FragmentTile, row: VarId, column: VarId, body: Box<Stmt> }, // ValueExpr::Element
     // M3: AsyncCopy, AsyncCommit, AsyncWait
 }
 ```
@@ -392,10 +393,12 @@ to its element type at each operation, as a GPU computes it. Memory starts
 unset: reading an element no one stored, or leaving an output element
 unwritten, is an error. `race.rs` flags two threads touching one shared
 element between barriers (one of them writing) and two threads writing one
-global element. In M3, `Mma` and `LdMatrix` are interpreted from the PTX
-ISA's fragment layouts. A schedule is therefore checked with no GPU: most
-scheduling bugs (wrong tiling, a missing barrier, a bad swizzle, a wrong
-fragment layout) are caught by `cargo test`.
+global element. Fragment statements run once per warp on logical tiles,
+`Mma` adding exact products in `k` order and rounding once (D58). A
+schedule is therefore checked with no GPU: most scheduling bugs (wrong
+tiling, a missing barrier, a bad swizzle, the wrong tile multiplied) are
+caught by `cargo test`. The lanes' fragment layouts are codegen's alone,
+and the GPU tests check them.
 
 ### Lowering (`ptxc-lower`)
 
@@ -462,7 +465,15 @@ fragment layout) are caught by `cargo test`.
   32-bit registers, wrapped after every operation, `i64` in 64-bit, and
   booleans as predicates. Index arithmetic is `s64`.
 - FP8 converts in hardware, which needs PTX ISA 8.1 on `sm_89`; the
-  `sm_89` preset declares 8.4 (D50).
+  `sm_89` preset declares 8.4 (D50), which FP8 `mma` also needs.
+- Fragments follow the PTX ISA's lane layouts, which only codegen knows
+  (D58, `select/lanes.rs`). Each lane keeps its elements of a fragment's
+  tiles in a local array, at constant offsets once the loops over a warp's
+  tiles are unrolled, so ptxas keeps them in registers. A multiplicand
+  loads with one `ldmatrix` (`.x4` or `.x2`, `.trans` for a 16-bit tile
+  stored the other way) where its tile's rows are 16-byte aligned in shared
+  memory, and element by element otherwise. Each `Mma` is one `mma.sync`;
+  stores and `FragmentEach` go element by element.
 - Transcendental functions are emitted inline from the math programs the
   loop interpreter evaluates, one instruction per step (D51).
 - **Validation:** in tests every emitted module is assembled by ptxas

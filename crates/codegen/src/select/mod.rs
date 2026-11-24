@@ -5,7 +5,9 @@ mod cast;
 mod control;
 mod expr;
 mod fp8;
+mod fragment;
 mod known;
+mod lanes;
 mod math;
 mod memory;
 mod mma;
@@ -13,13 +15,14 @@ mod ops;
 mod values;
 
 use crate::ast::{B16, B64, F32, FunctionBuilder, PtxModule, Reg};
+use fragment::{Fragment, Lane, fragments};
 use known::Known;
 use memory::Storage;
 use ptxc_loop::{BufferId, LoweredKernel, VarId};
 use ptxc_target::Target;
 use std::collections::HashMap;
 use thiserror::Error;
-use values::Narrow;
+use values::{Held, Narrow};
 
 /// A kernel codegen cannot emit.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -43,9 +46,12 @@ pub enum CodegenError {
 /// expanded first.
 pub fn generate(kernel: &LoweredKernel, target: &Target) -> Result<PtxModule, CodegenError> {
     let kernel = ptxc_loop::unrolled(kernel);
-    let mut selector = Selector::new(&kernel);
+    let mut selector = Selector::new(&kernel, fragments(kernel.body(), target)?);
     selector.parameters();
     selector.thread_indices();
+    if !selector.fragments.is_empty() {
+        selector.lane_indices()?;
+    }
     selector.statement(kernel.body())?;
     let function = selector.builder.finish();
     Ok(PtxModule { version: target.ptx_isa(), target: target.sm(), functions: vec![function] })
@@ -62,10 +68,17 @@ struct Selector<'k> {
     /// Each f32 register widened from a narrow float's memory form, with
     /// that form, which a store of the register reuses.
     narrow_forms: HashMap<Reg<F32>, (Reg<B16>, Narrow)>,
+    /// Each fragment's role in the kernel's `mma`s.
+    fragments: HashMap<BufferId, Fragment>,
+    /// The element of each fragment a `FragmentEach` is at.
+    elements: HashMap<BufferId, Held>,
+    /// The lane's position in its warp, read where the kernel has
+    /// fragments.
+    lane: Option<Lane>,
 }
 
 impl<'k> Selector<'k> {
-    fn new(kernel: &'k LoweredKernel) -> Self {
+    fn new(kernel: &'k LoweredKernel, fragments: HashMap<BufferId, Fragment>) -> Self {
         Self {
             builder: FunctionBuilder::new(kernel.name().as_str()),
             kernel,
@@ -73,6 +86,9 @@ impl<'k> Selector<'k> {
             storage: HashMap::new(),
             known: Known::default(),
             narrow_forms: HashMap::new(),
+            fragments,
+            elements: HashMap::new(),
+            lane: None,
         }
     }
 }
