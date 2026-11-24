@@ -1,8 +1,8 @@
 //! Prints a `PtxModule` as PTX text.
 
 use crate::ast::{
-    Address, Array, BinaryOp, Compare, CvtMode, Function, Instr, Label, Operand, PtxModule,
-    PtxType, RegClass, RegId, Space, UnaryOp,
+    Address, Array, BinaryOp, Compare, CvtMode, Function, Instr, Label, MatrixOrder, MmaOp,
+    Operand, PtxModule, PtxType, RegClass, RegId, Space, UnaryOp,
 };
 use std::fmt::{self, Write};
 
@@ -57,6 +57,32 @@ fn operand(operand: Operand) -> String {
         Operand::Int(value) => value.to_string(),
         Operand::F32(bits) => format!("0f{bits:08X}"),
     }
+}
+
+/// `regs` as a vector operand.
+fn registers(regs: &[RegId]) -> String {
+    let names: Vec<String> = regs.iter().map(|&id| reg(id)).collect();
+    format!("{{{}}}", names.join(", "))
+}
+
+fn ld_matrix(order: MatrixOrder, dst: &[RegId], addr: &Address) -> String {
+    let trans = match order {
+        MatrixOrder::Rows => "",
+        MatrixOrder::Columns => ".trans",
+    };
+    let (count, dst, addr) = (dst.len(), registers(dst), address(addr));
+    format!("ldmatrix.sync.aligned.m8n8.x{count}{trans}.shared.b16 {dst}, {addr}")
+}
+
+/// An `mma.sync` with its operands, `A` row-major and `B` column-major as
+/// every variant ptxc emits takes them.
+fn mma(op: MmaOp, operands: [&[RegId]; 4]) -> String {
+    let MmaOp { shape, accumulator, multiplicands } = op;
+    let (sum, product) = (accumulator.suffix(), multiplicands.suffix());
+    let (m, n, k) = (shape.m.get(), shape.n.get(), shape.k.get());
+    let operands: Vec<String> = operands.into_iter().map(registers).collect();
+    let name = format!("mma.sync.aligned.m{m}n{n}k{k}.row.col{sum}{product}{product}{sum}");
+    format!("{name} {}", operands.join(", "))
 }
 
 fn label(label: Label) -> String {
@@ -194,6 +220,8 @@ fn write_instr(f: &mut fmt::Formatter<'_>, instr: &Instr) -> fmt::Result {
         Instr::AddressOf { dst, name } => write!(line, "mov.u64 {}, {name}", reg(*dst)),
         Instr::Increment { dst } => write!(line, "add.s64 {0}, {0}, 1", reg(*dst)),
         Instr::BarSync => write!(line, "bar.sync 0"),
+        Instr::LdMatrix { order, dst, addr } => write!(line, "{}", ld_matrix(*order, dst, addr)),
+        Instr::Mma { op, d, a, b, c } => write!(line, "{}", mma(*op, [d, a, b, c])),
         Instr::Ret => write!(line, "ret"),
     };
     writeln!(f, "\t{line};")

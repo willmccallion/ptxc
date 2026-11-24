@@ -74,12 +74,18 @@ impl Selector<'_> {
                 self.known.forget_values();
                 Ok(())
             }
-            Stmt::FragmentFill { .. }
-            | Stmt::FragmentLoad { .. }
-            | Stmt::Mma { .. }
-            | Stmt::FragmentStore { .. }
-            | Stmt::FragmentEach { .. } => {
-                Err(CodegenError::Unsupported { op: "fragment statements, until #104" })
+            Stmt::FragmentFill { fragment, value } => self.fill_fragment(*fragment, *value),
+            Stmt::FragmentLoad { fragment, source, at } => {
+                self.load_fragment(*fragment, (*source, *at))
+            }
+            Stmt::Mma { instruction, a, b, accumulator } => {
+                self.mma(*instruction, [*a, *b, *accumulator])
+            }
+            Stmt::FragmentStore { fragment, target, at } => {
+                self.store_fragment(*fragment, (*target, *at))
+            }
+            Stmt::FragmentEach { fragment, row, column, body } => {
+                self.each_element(*fragment, [*row, *column], body)
             }
         }
     }

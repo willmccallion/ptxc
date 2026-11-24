@@ -8,6 +8,7 @@
 
 mod device;
 mod families;
+mod fragments;
 mod kernels;
 mod products;
 mod programs;

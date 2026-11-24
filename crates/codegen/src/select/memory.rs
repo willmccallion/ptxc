@@ -1,5 +1,6 @@
 //! Where each buffer lives, element addresses, and loads and stores.
 
+use super::lanes::WARP_LANES;
 use super::values::{Held, Narrow, Stored, memory_type, stored};
 use super::{CodegenError, Selector};
 use crate::ast::{
@@ -33,14 +34,12 @@ impl Selector<'_> {
     /// scope.
     pub(super) fn declare(&mut self, buffer: BufferId) -> Result<(), CodegenError> {
         let found = &self.kernel.buffers()[buffer];
-        let space = match found.scope {
-            MemScope::Shared => Space::Shared,
-            MemScope::Local | MemScope::Global => Space::Local,
-            MemScope::Fragment(_) => {
-                return Err(CodegenError::Unsupported { op: "fragment statements, until #104" });
-            }
-        };
         let bytes = found.size.in_bytes(found.dtype).map_err(|_| CodegenError::TooLarge)?.get();
+        let (space, bytes) = match found.scope {
+            MemScope::Shared => (Space::Shared, bytes),
+            MemScope::Local | MemScope::Global => (Space::Local, bytes),
+            MemScope::Fragment(_) => (Space::Local, bytes / WARP_LANES),
+        };
         let stem = if space == Space::Shared { "shared" } else { "local" };
         let name = self.builder.array(space, stem, bytes);
         let _new = self.storage.insert(buffer, Storage::Array { space, name });
@@ -80,6 +79,18 @@ impl Selector<'_> {
             });
         }
         let position = self.index(index)?;
+        self.address_at(buffer, position)
+    }
+
+    /// The address of the element of `buffer` at `position`, and its space.
+    pub(super) fn address_at(
+        &mut self,
+        buffer: BufferId,
+        position: Reg<B64>,
+    ) -> Result<(Space, Address), CodegenError> {
+        let dtype = self.kernel.buffers()[buffer].dtype;
+        let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
+        let storage = self.storage.get(&buffer).ok_or(CodegenError::Unbound)?.clone();
         let scaled = self.builder.int(
             BinaryOp::Mul,
             Signedness::Signed,
@@ -97,9 +108,14 @@ impl Selector<'_> {
     /// Element `index` of `buffer`, as a held value.
     pub(super) fn load(&mut self, buffer: BufferId, index: ExprId) -> Result<Held, CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
-        let (space, addr) = self.element(buffer, index)?;
+        let at = self.element(buffer, index)?;
+        Ok(self.load_at(dtype, at))
+    }
+
+    /// The element of `dtype` at `at`, as a held value.
+    pub(super) fn load_at(&mut self, dtype: DType, (space, addr): (Space, Address)) -> Held {
         let ty = memory_type(dtype);
-        Ok(match (dtype, Narrow::of(dtype)) {
+        match (dtype, Narrow::of(dtype)) {
             (DType::F32, _) => Held::Float(self.builder.load::<F32>(space, ty, addr)),
             (_, Some(kind)) => {
                 let bits = self.builder.load::<B16>(space, ty, addr);
@@ -117,7 +133,7 @@ impl Selector<'_> {
                 ))
             }
             _ => Held::Int32(self.builder.load::<B32>(space, ty, addr)),
-        })
+        }
     }
 
     /// Stores `value` as element `index` of `buffer`.
@@ -128,7 +144,13 @@ impl Selector<'_> {
         value: Held,
     ) -> Result<(), CodegenError> {
         let dtype = self.kernel.buffers()[buffer].dtype;
-        let (space, addr) = self.element(buffer, index)?;
+        let at = self.element(buffer, index)?;
+        self.store_at(dtype, at, value);
+        Ok(())
+    }
+
+    /// Stores `value` as the element of `dtype` at `at`.
+    pub(super) fn store_at(&mut self, dtype: DType, (space, addr): (Space, Address), value: Held) {
         let ty = memory_type(dtype);
         let form = self.narrow_form(value, dtype);
         match form.unwrap_or_else(|| stored(&mut self.builder, value, dtype)) {
@@ -137,7 +159,6 @@ impl Selector<'_> {
             Stored::Int32(value) => self.builder.store(space, ty, addr, value.into()),
             Stored::Int64(value) => self.builder.store(space, ty, addr, value.into()),
         }
-        Ok(())
     }
 
     /// `value`'s memory form if it was widened from `dtype`'s: storing it
