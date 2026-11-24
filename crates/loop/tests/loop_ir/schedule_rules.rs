@@ -217,3 +217,22 @@ fn an_empty_loop_cannot_be_bound() {
 
     assert_eq!(error, Err(ScheduleError::EmptyBound(VarName::new("j"))));
 }
+
+#[test]
+fn an_axis_has_its_own_loop_until_a_split_combines_loops_for_it() {
+    let compute = reduction([4, 6, 5]);
+    let (mut schedule, nest) = open(&compute);
+    let axes: Vec<_> = compute.iter_vars().ids().collect();
+    let own = |schedule: &Schedule<ptxc_loop::Open>| -> Vec<Option<LoopId>> {
+        axes.iter().map(|&axis| schedule.loops().loop_of(axis)).collect()
+    };
+    let before = own(&schedule);
+    schedule.apply(Primitive::Reorder { order: vec![nest[2], nest[0]] }).unwrap();
+    let reordered = own(&schedule);
+
+    let _parts = schedule.split(nest[1], factors(&[4])).unwrap();
+
+    assert_eq!(before, [Some(nest[0]), Some(nest[1]), Some(nest[2])]);
+    assert_eq!(reordered, before);
+    assert_eq!(own(&schedule), [Some(nest[0]), None, Some(nest[2])]);
+}
