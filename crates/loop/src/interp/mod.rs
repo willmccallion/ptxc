@@ -7,6 +7,7 @@
 //! unwritten, is an error; two threads touching one shared element between
 //! barriers, one writing, or writing one global element, race.
 
+mod async_copy;
 mod grid;
 mod memory;
 mod ops;
@@ -91,6 +92,18 @@ pub enum RunError {
     /// A barrier some threads of the block did not reach.
     #[error("a barrier is reached by only some threads of a block")]
     DivergentBarrier,
+    /// An element touched while an asynchronous copy to it is in flight:
+    /// started and not yet landed by a wait.
+    #[error("{buffer}[{index}] is touched while an asynchronous copy to it is in flight")]
+    InFlight {
+        /// The buffer.
+        buffer: TensorName,
+        /// The element.
+        index: i64,
+    },
+    /// A shared buffer freed while asynchronous copies to it are in flight.
+    #[error("{0} is freed while asynchronous copies to it are in flight")]
+    Unlanded(TensorName),
     /// A buffer used outside its allocation.
     #[error("{0} is used where it is not allocated")]
     NotAllocated(TensorName),
@@ -158,6 +171,8 @@ fn outputs(
     Ok(outputs)
 }
 
+#[cfg(test)]
+mod async_tests;
 #[cfg(test)]
 mod fragment_tests;
 #[cfg(test)]

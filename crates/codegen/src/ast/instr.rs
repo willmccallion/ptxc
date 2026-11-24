@@ -1,6 +1,7 @@
 //! `Instr`: the PTX instructions ptxc emits, stored with their types and
 //! erased registers. Only `FunctionBuilder`'s typed methods make them.
 
+use super::async_copy::CopySize;
 use super::matrix::{MatrixOrder, MmaOp};
 use super::operand::{Address, Operand, Special};
 use super::reg::RegId;
@@ -239,6 +240,20 @@ pub(crate) enum Instr {
         space: Space,
         src: Vec<RegId>,
         addr: Address,
+    },
+    /// `cp.async`: `size` bytes from global `src` to shared `dst`, the
+    /// bytes past the count in `copied` zero where it is given.
+    CpAsync {
+        size: CopySize,
+        dst: Address,
+        src: Address,
+        copied: Option<RegId>,
+    },
+    /// `cp.async.commit_group`.
+    CpAsyncCommit,
+    /// `cp.async.wait_group`: until at most `pending` groups are in flight.
+    CpAsyncWait {
+        pending: u32,
     },
     /// `ldmatrix`: one 8 by 8 matrix of 16-bit elements into each of
     /// `dst`, the warp's lanes giving the rows' addresses.

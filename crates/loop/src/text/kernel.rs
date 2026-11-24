@@ -119,6 +119,16 @@ impl KernelPrinter<'_> {
             Stmt::Barrier => {
                 let _infallible = writeln!(out, "{pad}barrier");
             }
+            Stmt::AsyncCopy { target, target_index, source, source_index, run, bounds } => {
+                let ends = [(*target, *target_index), (*source, *source_index)];
+                self.async_copy(out, &pad, ends, (*run, bounds));
+            }
+            Stmt::AsyncCommit => {
+                let _infallible = writeln!(out, "{pad}async commit");
+            }
+            Stmt::AsyncWait { pending } => {
+                let _infallible = writeln!(out, "{pad}async wait {pending}");
+            }
             Stmt::FragmentFill { fragment, value } => self.fill(out, &pad, *fragment, *value),
             Stmt::FragmentLoad { fragment, source, at } => {
                 self.load_tile(out, &pad, *fragment, (*source, *at));

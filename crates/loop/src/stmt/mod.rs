@@ -89,6 +89,36 @@ pub enum Stmt {
     },
     /// Waits for every thread of the block, as `__syncthreads`.
     Barrier,
+    /// Starts copying `run` adjacent elements of `source`, a global buffer,
+    /// from `source_index` into `target`, a shared buffer, from
+    /// `target_index`, as `cp.async` does: zeros where any of `bounds`
+    /// fails. The elements land only once a wait completes the group the
+    /// copy is committed in; until then they may not be read or written.
+    AsyncCopy {
+        /// The shared buffer written.
+        target: BufferId,
+        /// The first element written.
+        target_index: ExprId,
+        /// The global buffer read.
+        source: BufferId,
+        /// The first element read.
+        source_index: ExprId,
+        /// The adjacent elements copied.
+        run: Dim,
+        /// The conditions under which the elements are copied rather than
+        /// zero.
+        bounds: Vec<Condition>,
+    },
+    /// Closes the thread's group of asynchronous copies started since the
+    /// last, as `cp.async.commit_group`.
+    AsyncCommit,
+    /// Waits until at most `pending` of the thread's committed groups are
+    /// still in flight, as `cp.async.wait_group`; the copies of every
+    /// other group have landed.
+    AsyncWait {
+        /// The groups that may stay in flight.
+        pending: u32,
+    },
     /// Sets every element of `fragment` to `value`; the whole warp
     /// executes it at once.
     FragmentFill {
@@ -152,7 +182,10 @@ impl Stmt {
             Self::Store { .. }
             | Self::Barrier
             | Self::FragmentFill { .. }
-            | Self::FragmentLoad { .. } => false,
+            | Self::FragmentLoad { .. }
+            | Self::AsyncCopy { .. }
+            | Self::AsyncCommit
+            | Self::AsyncWait { .. } => false,
         }
     }
 
@@ -165,8 +198,11 @@ impl Stmt {
             }
             Self::LoadIndex { buffer: read, body, .. } => *read == buffer || body.reads(buffer),
             Self::Store { value, .. } => value.reads(buffer),
-            Self::Barrier | Self::FragmentFill { .. } => false,
-            Self::FragmentLoad { source, .. } => *source == buffer,
+            Self::Barrier
+            | Self::FragmentFill { .. }
+            | Self::AsyncCommit
+            | Self::AsyncWait { .. } => false,
+            Self::AsyncCopy { source, .. } | Self::FragmentLoad { source, .. } => *source == buffer,
             Self::Mma { a, b, accumulator, .. } => {
                 [a, b, accumulator].iter().any(|operand| operand.buffer == buffer)
             }

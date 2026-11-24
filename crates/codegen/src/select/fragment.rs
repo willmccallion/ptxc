@@ -78,6 +78,9 @@ fn collect_mmas(stmt: &Stmt, mmas: &mut Vec<(MmaInstruction, [FragmentTile; 3])>
         }
         Stmt::Store { .. }
         | Stmt::Barrier
+        | Stmt::AsyncCopy { .. }
+        | Stmt::AsyncCommit
+        | Stmt::AsyncWait { .. }
         | Stmt::FragmentFill { .. }
         | Stmt::FragmentLoad { .. } => {}
     }

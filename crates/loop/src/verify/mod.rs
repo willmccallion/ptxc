@@ -6,9 +6,10 @@ use crate::expr::{ExprId, Interval, VarId};
 use crate::stmt::{Access, BufferId, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
 pub use error::VerifyError;
 use facts::Facts;
-use ptxc_core::DType;
+use ptxc_core::{DType, Dim};
 use std::collections::HashSet;
 
+mod async_copy;
 mod error;
 mod facts;
 mod fragment;
@@ -97,6 +98,11 @@ impl Scope<'_> {
                     Ok(())
                 }
             }
+            Stmt::AsyncCopy { target, target_index, source, source_index, run, bounds } => {
+                let ends = [(*target, *target_index), (*source, *source_index)];
+                self.async_copy(ends, (*run, bounds))
+            }
+            Stmt::AsyncCommit | Stmt::AsyncWait { .. } => Ok(()),
             Stmt::FragmentFill { fragment, value } => self.fill(*fragment, *value),
             Stmt::FragmentLoad { fragment, source, at } => self.tile_load(*fragment, *source, *at),
             Stmt::Mma { instruction, a, b, accumulator } => {
@@ -163,6 +169,11 @@ impl Scope<'_> {
     /// Checks an access's index and, for a scratch buffer, that it is
     /// allocated here and the index stays within it.
     fn access(&self, buffer: BufferId, index: ExprId) -> Result<(), VerifyError> {
+        self.access_run(buffer, index, Dim::new(1))
+    }
+
+    /// As `access`, for `run` adjacent elements from `index`.
+    fn access_run(&self, buffer: BufferId, index: ExprId, run: Dim) -> Result<(), VerifyError> {
         self.index(index)?;
         let found = &self.kernel.buffers()[buffer];
         if found.scope == MemScope::Global {
@@ -174,7 +185,8 @@ impl Scope<'_> {
         if !self.allocated.contains(&buffer) {
             return Err(VerifyError::NotAllocated(found.name.clone()));
         }
-        let last = found.size.get().checked_sub(1).and_then(|last| i64::try_from(last).ok());
+        let last =
+            found.size.get().checked_sub(run.get()).and_then(|last| i64::try_from(last).ok());
         let bounds = self.facts.bounds(self.kernel.exprs(), index);
         match bounds.zip(last) {
             Some((bounds, last)) if bounds.min() >= 0 && bounds.max() <= last => Ok(()),
@@ -256,6 +268,17 @@ impl Scope<'_> {
 }
 
 #[cfg(test)]
+mod async_tests;
+#[cfg(test)]
 mod fragment_tests;
 #[cfg(test)]
 mod tests;
+
+/// `actual` where `place` takes `expected`.
+fn same_type(place: &str, expected: DType, actual: DType) -> Result<(), VerifyError> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(VerifyError::WrongType { place: place.to_owned(), expected, actual })
+    }
+}

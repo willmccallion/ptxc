@@ -1,6 +1,7 @@
 //! Runs every thread of a block in lockstep between barriers.
 
 use super::RunError;
+use super::async_copy::InFlight;
 use super::memory::Memory;
 use super::ops;
 use super::race::{GlobalWriters, PhaseLog};
@@ -36,7 +37,9 @@ pub(super) struct Block<'g, 'k> {
     /// The element each enclosing `FragmentEach` is at: its fragment and
     /// position, innermost last.
     pub(super) elements: Vec<(BufferId, i64)>,
-    phase: PhaseLog,
+    /// The copies the threads have started and not landed.
+    pub(super) copies: InFlight,
+    pub(super) phase: PhaseLog,
     first_thread: usize,
 }
 
@@ -60,6 +63,7 @@ impl Grid<'_> {
             shared: HashMap::new(),
             fragments: HashMap::new(),
             elements: Vec::new(),
+            copies: InFlight::default(),
             phase: PhaseLog::default(),
             first_thread: block * count,
         };
@@ -136,13 +140,16 @@ impl Block<'_, '_> {
                 }
                 Ok(())
             }
-            Stmt::Barrier => {
-                if active.len() != self.threads.len() {
-                    return Err(RunError::DivergentBarrier);
-                }
-                self.phase.clear();
+            Stmt::Barrier => self.barrier(active),
+            Stmt::AsyncCopy { target, target_index, source, source_index, run, bounds } => {
+                let ends = [(*target, *target_index), (*source, *source_index)];
+                self.start_copies(ends, (*run, bounds), active)
+            }
+            Stmt::AsyncCommit => {
+                self.commit_copies(active);
                 Ok(())
             }
+            Stmt::AsyncWait { pending } => self.land_copies(*pending, active),
             Stmt::FragmentFill { fragment, value } => self.fill(*fragment, *value, active),
             Stmt::FragmentLoad { fragment, source, at } => {
                 self.load_tile(*fragment, (*source, *at), active)
@@ -154,6 +161,15 @@ impl Block<'_, '_> {
                 self.each_element(*fragment, [*row, *column], body, active)
             }
         }
+    }
+
+    /// Ends the phase, which every thread of the block must reach.
+    fn barrier(&mut self, active: &[usize]) -> Result<(), RunError> {
+        if active.len() != self.threads.len() {
+            return Err(RunError::DivergentBarrier);
+        }
+        self.phase.clear();
+        Ok(())
     }
 
     /// Binds `var` to `value` in thread `thread`.
@@ -170,7 +186,7 @@ impl Block<'_, '_> {
         let fresh = Memory::unset(found.name.clone(), size);
         if found.scope == MemScope::Shared {
             let _previous = self.shared.insert(buffer, fresh);
-            let result = self.exec(body, active);
+            let result = self.exec(body, active).and_then(|()| self.all_landed(buffer));
             let _freed = self.shared.remove(&buffer);
             return result;
         }
@@ -221,6 +237,7 @@ impl Block<'_, '_> {
         index: i64,
         thread: usize,
     ) -> Result<Value, RunError> {
+        self.settled(buffer, index)?;
         let value = self.memory(buffer, thread)?.read(index)?;
         if self.grid.kernel.buffers()[buffer].scope == MemScope::Shared {
             let name = self.grid.kernel.buffers()[buffer].name.clone();
@@ -236,6 +253,7 @@ impl Block<'_, '_> {
         value: Value,
         thread: usize,
     ) -> Result<(), RunError> {
+        self.settled(buffer, index)?;
         self.memory(buffer, thread)?.write(index, value)?;
         let found = &self.grid.kernel.buffers()[buffer];
         let name = found.name.clone();

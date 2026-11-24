@@ -65,6 +65,22 @@ pub enum VerifyError {
     /// A fragment's element read outside a `FragmentEach` over it.
     #[error("an element of {0} is read outside a loop over its elements")]
     ElementOutsideEach(TensorName),
+    /// An asynchronous copy into a buffer outside shared memory.
+    #[error("an asynchronous copy writes {0}, which is not in shared memory")]
+    AsyncTarget(TensorName),
+    /// An asynchronous copy from a buffer outside global memory.
+    #[error("an asynchronous copy reads {0}, which is not in global memory")]
+    AsyncSource(TensorName),
+    /// An asynchronous copy of a size `cp.async` does not copy.
+    #[error("an asynchronous copy of {bytes} bytes; cp.async copies 4, 8 or 16")]
+    AsyncRun {
+        /// The bytes copied.
+        bytes: u64,
+    },
+    /// An asynchronous copy whose runs may not start at a multiple of their
+    /// length, so not aligned to the copy's size.
+    #[error("an asynchronous copy into {0} may start a run unaligned to its length")]
+    AsyncUnaligned(TensorName),
     /// A fragment loaded from a buffer outside shared memory.
     #[error("a fragment is loaded from {0}, which is not in shared memory")]
     TileNotShared(TensorName),

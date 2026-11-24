@@ -2,7 +2,7 @@
 //! take fragments of the shapes and types their operation does, and tiles
 //! stay inside the buffers they are copied to and from.
 
-use super::{Scope, VerifyError};
+use super::{Scope, VerifyError, same_type};
 use crate::compute::Scalar;
 use crate::expr::{Interval, VarId};
 use crate::stmt::{BufferId, FragmentShape, FragmentTile, MemScope, Stmt, TileAccess};
@@ -162,14 +162,5 @@ impl Scope<'_> {
         let last = at.position(origin.max(), last_row, last_column).ok_or_else(out_of_bounds)?;
         let size = i64::try_from(found.size.get()).map_err(|_| out_of_bounds())?;
         if origin.min() >= 0 && last < size { Ok(()) } else { Err(out_of_bounds()) }
-    }
-}
-
-/// `actual` where `place` takes `expected`.
-fn same_type(place: &str, expected: DType, actual: DType) -> Result<(), VerifyError> {
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(VerifyError::WrongType { place: place.to_owned(), expected, actual })
     }
 }

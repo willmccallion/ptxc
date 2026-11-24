@@ -1,8 +1,8 @@
 //! Prints a `PtxModule` as PTX text.
 
 use crate::ast::{
-    Address, Array, BinaryOp, Compare, CvtMode, Function, Instr, Label, MatrixOrder, MmaOp,
-    Operand, PtxModule, PtxType, RegClass, RegId, Space, UnaryOp,
+    Address, Array, BinaryOp, Compare, CopySize, CvtMode, Function, Instr, Label, MatrixOrder,
+    MmaOp, Operand, PtxModule, PtxType, RegClass, RegId, Space, UnaryOp,
 };
 use std::fmt;
 
@@ -71,6 +71,15 @@ fn vector_load(at: Space, dst: &[RegId], addr: &Address) -> String {
 
 fn vector_store(at: Space, src: &[RegId], addr: &Address) -> String {
     format!("st{}.v{}.b32 {}, {}", space(at), src.len(), address(addr), registers(src))
+}
+
+/// `cp.async`, 16-byte copies cached only in L2, as CUTLASS's are, and
+/// smaller ones, which `.cg` does not take, in L1 too.
+fn copy_async(size: CopySize, [dst, src]: [&Address; 2], copied: Option<RegId>) -> String {
+    let cache = if size == CopySize::Sixteen { "cg" } else { "ca" };
+    let copied = copied.map_or_else(String::new, |count| format!(", {}", reg(count)));
+    let (dst, src, bytes) = (address(dst), address(src), size.bytes());
+    format!("cp.async.{cache}.shared.global {dst}, {src}, {bytes}{copied}")
 }
 
 fn ld_matrix(order: MatrixOrder, dst: &[RegId], addr: &Address) -> String {
@@ -235,6 +244,9 @@ fn instr_text(instr: &Instr) -> String {
         Instr::BarSync => "bar.sync 0".to_owned(),
         Instr::LdVector { space: at, dst, addr } => vector_load(*at, dst, addr),
         Instr::StVector { space: at, src, addr } => vector_store(*at, src, addr),
+        Instr::CpAsync { size, dst, src, copied } => copy_async(*size, [dst, src], *copied),
+        Instr::CpAsyncCommit => "cp.async.commit_group".to_owned(),
+        Instr::CpAsyncWait { pending } => format!("cp.async.wait_group {pending}"),
         Instr::LdMatrix { order, dst, addr } => ld_matrix(*order, dst, addr),
         Instr::Mma { op, d, a, b, c } => mma(*op, [d, a, b, c]),
         Instr::Ret => "ret".to_owned(),

@@ -3,11 +3,11 @@
 //!
 //! Index expressions read only variables, so what they hold stays valid
 //! for the rest of the block. A value may load from memory, so a store
-//! forgets the values that load the buffer stored to, and a barrier, after
-//! which other threads' stores are visible, forgets every value. Entries
-//! made inside a loop or branch body do not dominate the code after it,
-//! and a loop's later iterations may see memory its body stored, so bodies
-//! are scoped.
+//! forgets the values that load the buffer stored to, and a barrier or a
+//! wait for asynchronous copies, after which other threads' stores or the
+//! copies are visible, forgets every value. Entries made inside a loop or
+//! branch body do not dominate the code after it, and a loop's later
+//! iterations may see memory its body stored, so bodies are scoped.
 
 use super::memory::Place;
 use super::values::Held;
