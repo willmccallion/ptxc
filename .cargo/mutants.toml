@@ -42,6 +42,11 @@ exclude_re = [
     # OR of bit fields that cannot overlap (sign and magnitude, implicit bit and
     # mantissa, exponent and mantissa), where XOR gives the same result.
     "replace \\| with \\^ in (FloatFormat::(encode|decode_magnitude|pack)|decompose)",
+    # A sum's possible bits OR its addends', which cannot overlap below the
+    # lowest bit both may have, and every bit from there up is set anyway:
+    # XOR in their place gives the same result. The OR setting those upper
+    # bits is not equivalent; sum_bits's unit test pins it.
+    "replace \\| with \\^ in sum_bits",
     # Writes generated.rs; what it writes is checked by xtask's test.
     "replace run -> Result<\\(\\), ProtoError> with Ok\\(\\(\\)\\)",
     # The step's direction picks the clamp range; SliceStep rejects zero, so

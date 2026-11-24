@@ -169,9 +169,22 @@ impl Selector<'_> {
         Ok([self.lane_coordinate(row)?, self.lane_coordinate(column)?])
     }
 
+    /// The address in `source` of the tile's element at `row` and
+    /// `column`, where `at` places the tile.
+    pub(super) fn tile_address(
+        &mut self,
+        source: BufferId,
+        at: TileAccess,
+        place: [Reg<B64>; 2],
+    ) -> Result<(Space, Address), CodegenError> {
+        let (origin, constant) = self.swizzle_split(source, at.origin);
+        let position = self.tile_position(TileAccess { origin, ..at }, place)?;
+        self.address_at(source, (position, constant))
+    }
+
     /// The position of the tile's element at `row` and `column` in the
     /// buffer `at` places the tile in.
-    pub(super) fn tile_position(
+    fn tile_position(
         &mut self,
         at: TileAccess,
         [row, column]: [Reg<B64>; 2],
@@ -214,8 +227,7 @@ impl Selector<'_> {
         let dtype = self.kernel.buffers()[fragment.buffer].dtype;
         for element in 0..layout.elements() {
             let place = self.lane_place(layout, element)?;
-            let position = self.tile_position(at, place)?;
-            let (space, addr) = self.address_at(source, position)?;
+            let (space, addr) = self.tile_address(source, at, place)?;
             let value =
                 self.load_at(self.kernel.buffers()[source].dtype, &Place::Memory(space, addr))?;
             let slot = self.slot(fragment, element)?;

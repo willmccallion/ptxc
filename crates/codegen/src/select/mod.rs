@@ -2,6 +2,7 @@
 
 mod alignment;
 mod async_copy;
+mod bits;
 mod cast;
 mod control;
 mod expr;

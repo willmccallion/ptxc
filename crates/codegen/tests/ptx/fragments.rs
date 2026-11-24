@@ -130,8 +130,23 @@ fn a_default_product_swizzles_its_tiles_addresses_and_assembles() {
 
     assemble(&module);
     let text = module.to_string();
-    let swizzles = swizzled_offsets(&text);
-    assert!(swizzles > 0 && swizzles == count(&module, "xor.b64"), "{text}");
+    // Each swizzled address is either swizzled whole, or swizzled once with
+    // its tile's constant folded in by an exclusive-or with an immediate
+    // or an immediate offset.
+    let (whole, folded) = (swizzled_offsets(&text), folded_constants(&text));
+    assert!(whole > 0 && !folded.is_empty() && !folded.contains(&0), "{text}");
+    assert_eq!(whole + folded.len(), count(&module, "xor.b64"), "{text}");
+    assert!(text.contains("+1024];"), "{text}");
+}
+
+/// The immediates of the exclusive-ors in `module` that fold a constant
+/// into a swizzled offset.
+fn folded_constants(module: &str) -> Vec<i64> {
+    module
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("xor.b64 "))
+        .filter_map(|operands| operands.trim_end_matches(';').rsplit(", ").next()?.parse().ok())
+        .collect()
 }
 
 /// How many byte offsets `module` swizzles as `<3,4,3>` does: shifted

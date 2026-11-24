@@ -2,10 +2,11 @@
 //! builder that makes instructions through typed methods only: control flow
 //! and memory here, arithmetic in `arithmetic.rs`.
 
-use super::definitions::Var;
+use super::definitions::{Definition, Var};
 use super::instr::{Instr, Label, PtxType, Space};
 use super::operand::{Address, Special, Value};
-use super::reg::{B32, B64, Class, Pred, Reg, RegClass};
+use super::reg::{B32, B64, Class, Pred, Reg, RegClass, RegId};
+use std::collections::HashMap;
 
 /// An array a function declares in shared or local memory.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -25,10 +26,12 @@ pub(crate) struct Function {
     pub(crate) body: Vec<Instr>,
 }
 
-/// Builds a function, allocating registers and labels as it goes.
+/// Builds a function, allocating registers and labels as it goes, and
+/// recording which instruction defines each register.
 pub(crate) struct FunctionBuilder {
-    function: Function,
+    pub(super) function: Function,
     labels: u32,
+    pub(super) definitions: HashMap<RegId, Definition>,
 }
 
 impl FunctionBuilder {
@@ -40,7 +43,7 @@ impl FunctionBuilder {
             registers: [0; RegClass::ALL.len()],
             body: Vec::new(),
         };
-        Self { function, labels: 0 }
+        Self { function, labels: 0, definitions: HashMap::new() }
     }
 
     pub(crate) fn finish(mut self) -> Function {
@@ -79,6 +82,14 @@ impl FunctionBuilder {
     }
 
     pub(super) fn push(&mut self, instr: Instr) {
+        let position = self.function.body.len();
+        for &dst in instr.destinations() {
+            let _definition = self
+                .definitions
+                .entry(dst)
+                .and_modify(|definition| *definition = Definition::Several)
+                .or_insert(Definition::Once(position));
+        }
         self.function.body.push(instr);
     }
 
