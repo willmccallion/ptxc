@@ -3,7 +3,8 @@
 mod conv_implicit_gemm;
 pub(crate) mod elementwise;
 mod matmul_mma;
-mod matmul_simt;
+pub(crate) mod matmul_shape;
+pub(crate) mod matmul_simt;
 pub(crate) mod reduction;
 
 use ptxc_loop::{LoopId, Open, Primitive, Schedule, ScheduleError, SplitFactor, ThreadAxis};

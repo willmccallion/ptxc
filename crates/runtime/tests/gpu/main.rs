@@ -9,4 +9,5 @@
 mod device;
 mod families;
 mod kernels;
+mod products;
 mod programs;

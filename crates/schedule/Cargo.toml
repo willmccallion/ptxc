@@ -20,4 +20,5 @@ ptxc-target.workspace = true
 ptxc-loop.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 ptxc-testkit.workspace = true
