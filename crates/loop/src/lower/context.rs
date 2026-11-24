@@ -2,9 +2,11 @@
 //! indices, loads and values become kernel-level ones.
 
 use super::cache::{Tile, allocate_tiles};
-use crate::compute::{ComputeDef, IndexVar, TensorExpr, TensorParamId};
+use crate::compute::{ComputeDef, IndexVar, TensorExpr, TensorParamId, VarName};
 use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
-use crate::schedule::{Guard, LoopAnnotation, LoopId, LoopKind, LoopTree};
+use crate::schedule::{
+    CacheId, Guard, LoopAnnotation, LoopId, LoopKind, LoopTree, ThreadAxis, WARP_LANES,
+};
 use crate::stmt::{
     Access, Buffer, BufferId, Condition, ForKind, KernelParam, KernelVar, MemScope, Stmt, ValueExpr,
 };
@@ -32,8 +34,10 @@ pub(super) struct Lowerer<'s> {
     pub(super) outputs: Vec<BufferId>,
     loaded: HashMap<VarId, VarId>,
     ranges: VarRanges,
-    /// The tiles of the inputs staged in shared memory.
-    pub(super) tiles: Vec<Tile>,
+    /// The tiles of the inputs staged in shared memory, by stage.
+    pub(super) tiles: IndexVec<CacheId, Tile>,
+    /// A tensorized nest's lane, its index on `threadIdx.x`.
+    pub(super) lane: Option<VarId>,
 }
 
 impl<'s> Lowerer<'s> {
@@ -46,6 +50,15 @@ impl<'s> Lowerer<'s> {
             };
             let _id: VarId = vars.push(var);
         }
+        let mut ranges = tree.ranges();
+        let lane = tree.tensorized().map(|_| {
+            let name = VarName::new("lane");
+            let lane = vars.push(KernelVar::Thread { name, axis: ThreadAxis::ThreadX });
+            if let Some(range) = Interval::of_loop(Dim::new(WARP_LANES)) {
+                ranges.insert(lane, range);
+            }
+            lane
+        });
         let mut lowerer = Self {
             compute,
             tree,
@@ -56,8 +69,9 @@ impl<'s> Lowerer<'s> {
             inputs: IndexVec::new(),
             outputs: Vec::new(),
             loaded: HashMap::new(),
-            ranges: tree.ranges(),
-            tiles: Vec::new(),
+            ranges,
+            tiles: IndexVec::new(),
+            lane,
         };
         lowerer.add_params();
         lowerer

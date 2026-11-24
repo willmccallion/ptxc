@@ -83,6 +83,21 @@ fn write_step(out: &mut String, (compute, loops): (&ComputeDef, &LoopTree), step
         Primitive::Bind { loop_, axis } => write!(out, "bind {} {}", name(*loop_), axis.name()),
         Primitive::Unroll { loop_ } => write!(out, "unroll {}", name(*loop_)),
         Primitive::Vectorize { loop_ } => write!(out, "vectorize {}", name(*loop_)),
+        Primitive::Tensorize { m, n, k, instruction } => {
+            let shape = instruction.shape;
+            write!(
+                out,
+                "tensorize {}, {}, {} mma.m{}n{}k{}.{}.{}",
+                name(*m),
+                name(*n),
+                name(*k),
+                shape.m.get(),
+                shape.n.get(),
+                shape.k.get(),
+                instruction.multiplicands.name(),
+                instruction.accumulator.name()
+            )
+        }
         Primitive::CacheRead { tensor, at } => {
             write!(out, "cache_read {} {}", compute.inputs()[*tensor].name, name(*at))
         }

@@ -128,6 +128,42 @@ pub enum ScheduleError {
     /// lowering does not combine with one yet.
     #[error("input {0} cannot be staged in a reduction shared between threads")]
     CacheCrossThread(TensorName),
+    /// A tensorized loop whose extent is not the instruction's.
+    #[error("loop {loop_} has {actual:?} iterations, but the mma's tile has {expected:?}")]
+    TensorizeExtent {
+        /// The loop.
+        loop_: VarName,
+        /// The instruction's extent.
+        expected: Dim,
+        /// The loop's.
+        actual: Dim,
+    },
+    /// A tensorized row or column loop that is a reduction, or a depth loop
+    /// that is not.
+    #[error("loop {0} is not the kind of loop its place in the tile needs")]
+    TensorizeKind(VarName),
+    /// A second `tensorize`.
+    #[error("the nest is already tensorized")]
+    AlreadyTensorized,
+    /// Tensorized loops that are not the innermost serial loops, rows, then
+    /// columns, then depth.
+    #[error("the tensorized loops are not the innermost serial loops, in order")]
+    TensorizeNotInnermost,
+    /// A tensorized tile with no reduction loop outside it, whose steps the
+    /// accumulators persist across.
+    #[error("no reduction loop encloses the tensorized tile")]
+    TensorizeNoStep,
+    /// A tensorized definition that is not a sum of products of two loads
+    /// of the instruction's types.
+    #[error("the definition is not a sum of products the mma computes")]
+    TensorizeNotProduct,
+    /// An operand or output whose index does not step one element per
+    /// iteration of the tile's loops.
+    #[error("{0} is not indexed one element per step of the tensorized loops")]
+    TensorizeIndex(TensorName),
+    /// A tensorized operand not staged in shared memory outside the tile.
+    #[error("operand {0} is not staged in shared memory outside the tensorized tile")]
+    TensorizeUnstaged(TensorName),
     /// Tiles past the shared memory a block has.
     #[error("the staged tiles take {bytes:?} of shared memory; a block has {limit:?}")]
     SharedTooLarge {

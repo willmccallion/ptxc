@@ -5,6 +5,7 @@ use super::primitive::ThreadAxis;
 use crate::compute::{ComputeDef, IterKind, IterVarId, TensorParamId, VarName};
 use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 use ptxc_core::{Dim, Idx, IndexVec};
+use ptxc_target::MmaInstruction;
 
 ptxc_core::define_index!(
     /// A loop a schedule created. Ids are never reused, so a trace replayed
@@ -72,6 +73,21 @@ pub struct CacheRead {
     pub index: Vec<ExprId>,
 }
 
+ptxc_core::define_index!(
+    /// A staged input of a loop tree, numbered in the order it was staged.
+    pub(crate) CacheId
+);
+
+/// A tile computed by `mma`: the loops it replaces, rows, columns and
+/// depth, and the instruction.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Tensorized {
+    /// The tile's rows, columns and depth.
+    pub loops: [LoopId; 3],
+    /// The `mma` computing it.
+    pub instruction: MmaInstruction,
+}
+
 /// The loop nest of one compute definition.
 ///
 /// It holds every loop made so far, the current nest from outermost to
@@ -85,6 +101,7 @@ pub struct LoopTree {
     pub(super) axes: IndexVec<IterVarId, ExprId>,
     pub(super) guards: Vec<Guard>,
     pub(super) caches: Vec<CacheRead>,
+    pub(super) tensorized: Option<Tensorized>,
 }
 
 impl LoopTree {
@@ -98,6 +115,7 @@ impl LoopTree {
             axes: IndexVec::new(),
             guards: Vec::new(),
             caches: Vec::new(),
+            tensorized: None,
         };
         let mut reductions = Vec::new();
         for iter in compute.iter_vars() {
@@ -147,6 +165,11 @@ impl LoopTree {
     /// The guards the nest must check.
     pub fn guards(&self) -> &[Guard] {
         &self.guards
+    }
+
+    /// The tile `mma` computes, if the nest is tensorized.
+    pub const fn tensorized(&self) -> Option<Tensorized> {
+        self.tensorized
     }
 
     /// The inputs staged in shared memory, in the order they were staged.
