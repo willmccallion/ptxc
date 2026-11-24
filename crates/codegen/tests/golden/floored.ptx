@@ -7,10 +7,9 @@
 	.param .u64 floored_param_1
 )
 {
-	.reg .pred %p<6>;
 	.reg .b16 %h<1>;
 	.reg .b32 %r<2>;
-	.reg .b64 %rd<31>;
+	.reg .b64 %rd<19>;
 	.reg .f32 %f<1>;
 	ld.param.u64 %rd0, [floored_param_0];
 	cvta.to.global.u64 %rd1, %rd0;
@@ -23,36 +22,18 @@
 	mul.lo.s64 %rd6, %rd4, 25;
 	add.s64 %rd7, %rd5, %rd6;
 	add.s64 %rd8, %rd7, 1;
-	div.s64 %rd9, %rd8, 4;
-	rem.s64 %rd10, %rd8, 4;
-	setp.ne.s64 %p0, %rd10, 0;
-	xor.b64 %rd11, %rd10, 4;
-	setp.lt.s64 %p1, %rd11, 0;
-	and.pred %p2, %p0, %p1;
-	sub.s64 %rd12, %rd9, 1;
-	add.s64 %rd13, %rd10, 4;
-	selp.b64 %rd14, %rd12, %rd9, %p2;
-	selp.b64 %rd15, %rd13, %rd10, %p2;
-	add.s64 %rd16, %rd14, -1;
-	max.s64 %rd17, 0, %rd16;
-	mul.lo.s64 %rd18, %rd17, 4;
-	div.s64 %rd19, %rd8, 4;
-	rem.s64 %rd20, %rd8, 4;
-	setp.ne.s64 %p3, %rd20, 0;
-	xor.b64 %rd21, %rd20, 4;
-	setp.lt.s64 %p4, %rd21, 0;
-	and.pred %p5, %p3, %p4;
-	sub.s64 %rd22, %rd19, 1;
-	add.s64 %rd23, %rd20, 4;
-	selp.b64 %rd24, %rd22, %rd19, %p5;
-	selp.b64 %rd25, %rd23, %rd20, %p5;
-	add.s64 %rd26, %rd18, %rd25;
-	mul.lo.s64 %rd27, %rd26, 2;
-	add.s64 %rd28, %rd1, %rd27;
-	ld.global.b16 %h0, [%rd28];
+	shr.s64 %rd9, %rd8, 2;
+	add.s64 %rd10, %rd9, -1;
+	max.s64 %rd11, 0, %rd10;
+	mul.lo.s64 %rd12, %rd11, 4;
+	and.b64 %rd13, %rd8, 3;
+	add.s64 %rd14, %rd12, %rd13;
+	mul.lo.s64 %rd15, %rd14, 2;
+	add.s64 %rd16, %rd1, %rd15;
+	ld.global.b16 %h0, [%rd16];
 	cvt.f32.f16 %f0, %h0;
-	mul.lo.s64 %rd29, %rd7, 2;
-	add.s64 %rd30, %rd3, %rd29;
-	st.global.b16 [%rd30], %h0;
+	mul.lo.s64 %rd17, %rd7, 2;
+	add.s64 %rd18, %rd3, %rd17;
+	st.global.b16 [%rd18], %h0;
 	ret;
 }
