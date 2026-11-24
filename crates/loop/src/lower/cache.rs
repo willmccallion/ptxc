@@ -76,7 +76,8 @@ impl Lowerer<'_> {
             let name = format!("{}_tile", input.name);
             let slots = slots_at(tree, cache.at);
             let size = slots.get() * tile_size(extents);
-            let buffer = self.scratch(&name, input.dtype, MemScope::Shared, size);
+            let scope = MemScope::Shared { swizzle: cache.swizzle };
+            let buffer = self.scratch(&name, input.dtype, scope, size);
             let (tensor, at, extents) = (cache.tensor, cache.at, extents.clone());
             let tile = Tile { tensor, at, buffer, origin, extents, slots, threads };
             let _stage: CacheId = self.tiles.push(tile);

@@ -9,6 +9,7 @@ mod fused;
 mod kernels;
 mod pipelined;
 mod ptxas;
+mod swizzled;
 mod unrolled;
 mod vector;
 

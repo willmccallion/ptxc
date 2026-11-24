@@ -104,6 +104,11 @@ fn write_step(out: &mut String, (compute, loops): (&ComputeDef, &LoopTree), step
         Primitive::CacheRead { tensor, at } => {
             write!(out, "cache_read {} {}", compute.inputs()[*tensor].name, name(*at))
         }
+        Primitive::Swizzle { tensor, swizzle } => {
+            let name = &compute.inputs()[*tensor].name;
+            let (bits, unit, shift) = (swizzle.bits(), swizzle.unit(), swizzle.shift());
+            write!(out, "swizzle {name} {bits} {unit} {shift}")
+        }
         Primitive::Pipeline { loop_, stages } => {
             write!(out, "pipeline {} {}", name(*loop_), stages.get())
         }

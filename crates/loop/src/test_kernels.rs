@@ -103,8 +103,9 @@ pub(crate) fn mma_kernel_storing(
     let a = buffer("a", multiplicands, MemScope::Global, rows * depth);
     let b = buffer("b", multiplicands, MemScope::Global, depth * columns);
     let c = buffer("c", accumulator, MemScope::Global, rows * columns);
-    let a_tile = buffer("a_tile", multiplicands, MemScope::Shared, rows * depth);
-    let b_tile = buffer("b_tile", multiplicands, MemScope::Shared, depth * columns);
+    let a_tile = buffer("a_tile", multiplicands, MemScope::Shared { swizzle: None }, rows * depth);
+    let b_tile =
+        buffer("b_tile", multiplicands, MemScope::Shared { swizzle: None }, depth * columns);
     let a_fragment = buffer("a_fragment", multiplicands, fragment(m, k), rows * depth);
     let b_fragment = buffer("b_fragment", multiplicands, fragment(k, n), depth * columns);
     let c_fragment = buffer("c_fragment", accumulator, fragment(m, n), rows * columns);

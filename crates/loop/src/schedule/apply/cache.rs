@@ -46,7 +46,7 @@ impl LoopTree {
             return Err(ScheduleError::AlreadyCached(input.name.clone()));
         }
         let index = shared_index(compute, tensor)?;
-        self.caches.push(CacheRead { tensor, at, index });
+        self.caches.push(CacheRead { tensor, at, index, swizzle: None });
         Ok(())
     }
 }

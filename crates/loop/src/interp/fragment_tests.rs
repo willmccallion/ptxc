@@ -110,7 +110,7 @@ fn with_fragment(
         kernel.buffers.push(Buffer { name, dtype: DType::F16, scope, size })
     };
     let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
-    let tile = buffer("tile", MemScope::Shared);
+    let tile = buffer("tile", MemScope::Shared { swizzle: None });
     let fragment = buffer("fragment", MemScope::Fragment(shape));
     let whole = FragmentTile { buffer: fragment, tile: kernel.exprs.constant(0) };
     let inner = body(&mut kernel, tile, whole);
@@ -166,7 +166,7 @@ fn two_warps() -> LoweredKernel {
     };
     let x = buffer("x", MemScope::Global);
     let y = buffer("y", MemScope::Global);
-    let tile = buffer("tile", MemScope::Shared);
+    let tile = buffer("tile", MemScope::Shared { swizzle: None });
     let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
     let fragment = kernel.buffers.push(Buffer {
         name: TensorName::new("fragment"),

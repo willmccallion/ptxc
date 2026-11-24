@@ -20,7 +20,7 @@ impl Scope<'_> {
         }
         let buffers = self.kernel.buffers();
         let (written, read) = (&buffers[target], &buffers[source]);
-        if written.scope != MemScope::Shared {
+        if !matches!(written.scope, MemScope::Shared { .. }) {
             return Err(VerifyError::AsyncTarget(written.name.clone()));
         }
         if read.scope != MemScope::Global {

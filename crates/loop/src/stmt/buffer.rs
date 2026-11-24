@@ -1,5 +1,6 @@
 //! `Buffer` and `MemScope` (global, shared, local, fragment).
 
+use super::swizzle::Swizzle;
 use crate::compute::TensorName;
 use ptxc_core::{DType, Dim, ElementCount};
 
@@ -13,8 +14,12 @@ ptxc_core::define_index!(
 pub enum MemScope {
     /// Device memory, passed as a kernel parameter.
     Global,
-    /// Shared by a block's threads, allocated by an `Alloc`.
-    Shared,
+    /// Shared by a block's threads, allocated by an `Alloc`, its bytes
+    /// permuted by `swizzle` where it has one.
+    Shared {
+        /// The permutation of its bytes, if any.
+        swizzle: Option<Swizzle>,
+    },
     /// Private to a thread, allocated by an `Alloc`.
     Local,
     /// A logical tile one warp holds, its elements spread over the warp's

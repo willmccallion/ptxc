@@ -41,7 +41,7 @@ pub(super) fn shared(base: &mut LoweredKernel, size: u64) -> BufferId {
     base.buffers.push(Buffer {
         name: TensorName::new("tile"),
         dtype: DType::F32,
-        scope: MemScope::Shared,
+        scope: MemScope::Shared { swizzle: None },
         size: ElementCount::new(size),
     })
 }
