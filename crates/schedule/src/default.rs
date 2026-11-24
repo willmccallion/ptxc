@@ -1,8 +1,9 @@
-//! Heuristic choices for workloads that have no tuning record: an injective
-//! stage spreads over blocks of threads, and a reduction gives each output
-//! row a block whose threads combine through shared memory.
+//! Heuristic choices for workloads that have no tuning record: a matrix
+//! product is tiled on CUDA cores, an injective stage spreads over blocks
+//! of threads, and any other reduction gives each output row a block whose
+//! threads combine through shared memory.
 
-use crate::rules::{elementwise, reduction};
+use crate::rules::{elementwise, matmul_shape, matmul_simt, reduction};
 use ptxc_loop::{ComputeDef, IterKind, Schedule, ScheduleError, Validated};
 use ptxc_target::Target;
 use std::sync::Arc;
@@ -14,11 +15,12 @@ pub fn default_schedule(
     target: &Target,
 ) -> Result<Schedule<Validated>, ScheduleError> {
     let reduces = compute.iter_vars().iter().any(|axis| axis.kind == IterKind::Reduce);
+    let product = matmul_shape::product(&compute);
     let mut schedule = Schedule::new(compute);
-    if reduces {
-        reduction::one_block_per_row(&mut schedule)?;
-    } else {
-        elementwise::flatten_over_blocks(&mut schedule)?;
+    match product {
+        Some(product) => matmul_simt::tiled_on_cuda_cores(&mut schedule, product)?,
+        None if reduces => reduction::one_block_per_row(&mut schedule)?,
+        None => elementwise::flatten_over_blocks(&mut schedule)?,
     }
     schedule.validate(target)
 }

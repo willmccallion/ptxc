@@ -1,0 +1,56 @@
+kernel product(%a: f16[2800] read, %b: f16[1800] read, %out: f32[6300] write)
+  grid(4, 1, 1) block(16, 16, 1) smem 2048
+  %i.1 = threadIdx.y
+  %j.1 = threadIdx.x
+  %batch_i.0_j.0 = blockIdx.x
+  alloc %acc: f32[16] local {
+    for %i.2 in 4 unroll {
+      for %j.2 in 4 unroll {
+        %acc[%i.2 * 4 + %j.2] = 0.0:f32
+      }
+    }
+    alloc %a_tile: f16[512] shared {
+      alloc %b_tile: f16[512] shared {
+        for %k.0 in 3 {
+          barrier
+          for %a_fill in 2 {
+            if %k.0 * 8 + %a_fill * 4 + floordiv(%i.1 * 16 + %j.1, 64) < 20 {
+              if floormod(%batch_i.0_j.0, 2) * 64 + floormod(%i.1 * 16 + %j.1, 64) < 70 {
+                %a_tile[%i.1 * 16 + %j.1 + %a_fill * 256] = %a[%k.0 * 560 + floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + %a_fill * 280 + floordiv(%i.1 * 16 + %j.1, 64) * 70 + floormod(%i.1 * 16 + %j.1, 64)]
+              }
+            }
+          }
+          for %b_fill in 2 {
+            if %k.0 * 8 + floordiv(%i.1 * 16 + %j.1, 64) + %b_fill * 4 < 20 {
+              if floormod(%i.1 * 16 + %j.1, 64) < 45 {
+                %b_tile[%i.1 * 16 + %j.1 + %b_fill * 256] = %b[%k.0 * 360 + floordiv(%batch_i.0_j.0, 2) * 900 + floordiv(%i.1 * 16 + %j.1, 64) * 45 + floormod(%i.1 * 16 + %j.1, 64) + %b_fill * 180]
+              }
+            }
+          }
+          barrier
+          for %k.1 in 8 unroll {
+            for %i.2 in 4 unroll {
+              for %j.2 in 4 unroll {
+                if %i.2 + %i.1 * 4 + floormod(%batch_i.0_j.0, 2) * 64 < 70 {
+                  if %j.2 + %j.1 * 4 < 45 {
+                    if %k.1 + %k.0 * 8 < 20 {
+                      %acc[%i.2 * 4 + %j.2] = add(%acc[%i.2 * 4 + %j.2], mul(cast<f32>(%a_tile[%i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%j.2 + %j.1 * 4 + %k.1 * 64])))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    for %i.2 in 4 unroll {
+      for %j.2 in 4 unroll {
+        if %i.2 + %i.1 * 4 + floormod(%batch_i.0_j.0, 2) * 64 < 70 {
+          if %j.2 + %j.1 * 4 < 45 {
+            %out[%i.2 * 45 + %i.1 * 180 + %j.2 + %j.1 * 4 + floordiv(%batch_i.0_j.0, 2) * 3150 + floormod(%batch_i.0_j.0, 2) * 2880] = %acc[%i.2 * 4 + %j.2]
+          }
+        }
+      }
+    }
+  }

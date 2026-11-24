@@ -1036,6 +1036,7 @@ dependencies = [
 name = "ptxc-schedule"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "ptxc-core",
  "ptxc-loop",
  "ptxc-target",

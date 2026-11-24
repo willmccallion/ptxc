@@ -3,6 +3,19 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+mod matmul;
+
+/// Property tests run `default` cases, or `PROPTEST_CASES` when set, so a
+/// longer run needs no code change (`ProptestConfig::with_cases` alone
+/// ignores the variable).
+fn cases(default: u32) -> proptest::prelude::ProptestConfig {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|cases| cases.parse().ok())
+        .unwrap_or(default);
+    proptest::prelude::ProptestConfig::with_cases(cases)
+}
+
 use ptxc_core::{DType, Dim, Shape};
 use ptxc_loop::{
     ArgKind, ComputeBuilder, ComputeDef, ComputeName, IterVarId, LaunchShape, ReduceOp, TensorExpr,
