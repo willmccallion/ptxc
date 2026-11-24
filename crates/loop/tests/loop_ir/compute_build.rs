@@ -177,3 +177,17 @@ fn a_definition_prints_its_inputs_axes_and_outputs() {
         golden::check(format!("compute/{name}.txt"), &print_compute(&def)).unwrap();
     }
 }
+
+#[test]
+fn an_expression_finds_its_one_reduction_under_its_epilogue() {
+    let sum = matmul().outputs()[0].expr.clone();
+    let narrowed = TensorExpr::Cast {
+        to: DType::F16,
+        overflow: Overflow::Saturate,
+        value: Box::new(sum.clone()),
+    };
+
+    assert_eq!(narrowed.reduction(), Some(&sum));
+    assert!(matches!(argmax().outputs()[0].expr.reduction(), Some(TensorExpr::ArgReduce { .. })));
+    assert_eq!(add().outputs()[0].expr.reduction(), None);
+}

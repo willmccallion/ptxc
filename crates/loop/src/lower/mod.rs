@@ -7,7 +7,6 @@ mod cross_thread;
 mod elementwise;
 mod reduction;
 
-use crate::compute::TensorExpr;
 use crate::schedule::{LoopAnnotation, LoopKind, Schedule, Validated};
 use crate::stmt::{LaunchShape, LoweredKernel, MemScope};
 pub(crate) use cache::tile_extents;
@@ -23,12 +22,8 @@ impl Schedule<Validated> {
         let tree = self.loops();
         let mut lowerer = Lowerer::new(self.compute(), tree);
         lowerer.stage(self.tiles(), self.threads());
-        let reduction = self
-            .compute()
-            .outputs()
-            .first()
-            .and_then(|output| find_reduction(&output.expr))
-            .cloned();
+        let reduction =
+            self.compute().outputs().first().and_then(|output| output.expr.reduction()).cloned();
         let shared = tree.nest().iter().copied().find(|&id| {
             let found = &tree.loops()[id];
             found.kind == LoopKind::Reduce && matches!(found.annotation, LoopAnnotation::Bound(_))
@@ -50,19 +45,6 @@ impl Schedule<Validated> {
             body,
             exprs: lowerer.exprs,
         }
-    }
-}
-
-/// The definition's one reduction node, if it has one (D40).
-fn find_reduction(expr: &TensorExpr) -> Option<&TensorExpr> {
-    match expr {
-        TensorExpr::Reduce { .. } | TensorExpr::ArgReduce { .. } => Some(expr),
-        TensorExpr::Load { .. } | TensorExpr::Const(_) | TensorExpr::Index { .. } => None,
-        TensorExpr::Unary(_, value) | TensorExpr::Cast { value, .. } => find_reduction(value),
-        TensorExpr::Binary(_, lhs, rhs) => find_reduction(lhs).or_else(|| find_reduction(rhs)),
-        TensorExpr::Select { condition, then, otherwise } => find_reduction(condition)
-            .or_else(|| find_reduction(then))
-            .or_else(|| find_reduction(otherwise)),
     }
 }
 
