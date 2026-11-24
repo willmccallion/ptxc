@@ -62,6 +62,17 @@ fn a_warp_computing_one_tile_per_step_matches_the_serial_product() {
 }
 
 #[test]
+fn only_a_tensorized_kernel_multiplies_on_tensor_cores() {
+    let compute = product([32, 16, 32], TileOrder::RowMajor);
+
+    let tiled = tensorized(&compute, ONE_TILE).validate(&target()).unwrap().lower();
+    let serial = Schedule::new(Arc::clone(&compute)).validate(&target()).unwrap().lower();
+
+    assert!(tiled.multiplies_on_tensor_cores());
+    assert!(!serial.multiplies_on_tensor_cores());
+}
+
+#[test]
 fn a_tensorized_kernel_loads_staged_tiles_into_fragments_and_stores_element_by_element() {
     let compute = product([16, 8, 32], TileOrder::RowMajor);
 
