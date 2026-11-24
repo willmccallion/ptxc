@@ -56,8 +56,8 @@ impl ThreadAxis {
 }
 
 /// One step that transforms a loop tree, as TVM's schedule primitives.
-/// The cache, compute-at, tensorize, pipeline and layout steps come with
-/// M3's tensor-core schedules.
+/// The compute-at, tensorize, pipeline and layout steps come with M3's
+/// tensor-core schedules.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Primitive {
     /// Splits a loop into an outer loop and one inner loop per factor,
