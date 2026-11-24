@@ -8,11 +8,10 @@
 )
 {
 	.reg .pred %p<19>;
-	.reg .b32 %r<2>;
+	.reg .b32 %r<3>;
 	.reg .b64 %rd<51>;
 	.reg .f32 %f<30>;
 	.shared .align 16 .b8 shared_0[1024];
-	.local .align 16 .b8 local_1[4];
 	ld.param.u64 %rd0, [rows_param_0];
 	cvta.to.global.u64 %rd1, %rd0;
 	ld.param.u64 %rd2, [rows_param_1];
@@ -22,7 +21,7 @@
 	mov.u32 %r1, %tid.x;
 	cvt.s64.u32 %rd5, %r1;
 	mov.f32 %f0, 0f00000000;
-	st.local.f32 [local_1], %f0;
+	mov.b32 %r2, %f0;
 	mov.s64 %rd6, 0;
 $L__1:
 	setp.ge.s64 %p0, %rd6, 2;
@@ -31,7 +30,7 @@ $L__1:
 	add.s64 %rd8, %rd5, %rd7;
 	setp.ge.s64 %p1, %rd8, 300;
 	@%p1 bra $L__3;
-	ld.local.f32 %f1, [local_1];
+	mov.b32 %f1, %r2;
 	mul.lo.s64 %rd9, %rd4, 300;
 	add.s64 %rd10, %rd9, %rd5;
 	add.s64 %rd11, %rd10, %rd7;
@@ -39,12 +38,12 @@ $L__1:
 	add.s64 %rd13, %rd1, %rd12;
 	ld.global.f32 %f2, [%rd13];
 	add.rn.f32 %f3, %f1, %f2;
-	st.local.f32 [local_1], %f3;
+	mov.b32 %r2, %f3;
 $L__3:
 	add.s64 %rd6, %rd6, 1;
 	bra.uni $L__1;
 $L__2:
-	ld.local.f32 %f4, [local_1];
+	mov.b32 %f4, %r2;
 	mul.lo.s64 %rd14, %rd5, 4;
 	mov.u64 %rd15, shared_0;
 	add.s64 %rd16, %rd15, %rd14;

@@ -4,7 +4,7 @@
 //! where every tile index is a constant.
 
 use super::lanes::{GROUP_LANES, LaneCoordinate, LaneLayout, Role};
-use super::memory::Storage;
+use super::memory::{Place, Storage, place_in};
 use super::{CodegenError, Selector};
 use crate::ast::{
     Address, B64, BinaryOp, CvtMode, PtxType, Reg, Signedness, Space, Special, Value,
@@ -111,30 +111,31 @@ impl Selector<'_> {
         found.ok_or(CodegenError::Unsupported { op: "a fragment no mma uses" })
     }
 
-    /// The address of the lane's `element` of `fragment`'s tile.
+    /// Where the lane's `element` of `fragment`'s tile is.
     pub(super) fn slot(
         &mut self,
         fragment: FragmentTile,
         element: u64,
-    ) -> Result<(Space, Address), CodegenError> {
+    ) -> Result<Place, CodegenError> {
         let size = self.kernel.buffers()[fragment.buffer].dtype.element_size().get();
         let tile_bytes = signed(self.fragment(fragment.buffer)?.layout().elements() * size)?;
         let element_offset = signed(element * size)?;
-        let Some(Storage::Array { name, .. }) = self.storage.get(&fragment.buffer).cloned() else {
-            return Err(CodegenError::Unbound);
-        };
+        let storage = self.storage.get(&fragment.buffer).ok_or(CodegenError::Unbound)?;
         if let Expr::Const(tile) = self.kernel.exprs().get(fragment.tile) {
             let tile_offset = tile.checked_mul(tile_bytes).ok_or(CodegenError::TooLarge)?;
             let offset = tile_offset.checked_add(element_offset).ok_or(CodegenError::TooLarge)?;
-            return Ok((Space::Local, Address::Array { name, offset }));
+            return place_in(storage, offset);
         }
+        let Storage::Array { name, .. } = storage.clone() else {
+            return Err(CodegenError::Unsupported { op: "a computed index into registers" });
+        };
         let tile = self.index(fragment.tile)?;
         let signedness = Signedness::Signed;
         let scaled =
             self.builder.int(BinaryOp::Mul, signedness, tile.into(), Value::<B64>::int(tile_bytes));
         let base = self.builder.address_of(&name);
         let at = self.builder.int(BinaryOp::Add, signedness, base.into(), scaled.into());
-        Ok((Space::Local, Address::Reg { base: at.id(), offset: element_offset }))
+        Ok(Place::Memory(Space::Local, Address::Reg { base: at.id(), offset: element_offset }))
     }
 
     /// `coordinate` for this lane.
@@ -194,7 +195,7 @@ impl Selector<'_> {
         let dtype = self.kernel.buffers()[fragment.buffer].dtype;
         for element in 0..self.fragment(fragment.buffer)?.layout().elements() {
             let slot = self.slot(fragment, element)?;
-            self.store_at(dtype, slot, held);
+            self.store_at(dtype, &slot, held)?;
         }
         Ok(())
     }
@@ -211,10 +212,11 @@ impl Selector<'_> {
         for element in 0..layout.elements() {
             let place = self.lane_place(layout, element)?;
             let position = self.tile_position(at, place)?;
-            let address = self.address_at(source, position)?;
-            let value = self.load_at(self.kernel.buffers()[source].dtype, address);
+            let (space, addr) = self.address_at(source, position)?;
+            let value =
+                self.load_at(self.kernel.buffers()[source].dtype, &Place::Memory(space, addr))?;
             let slot = self.slot(fragment, element)?;
-            self.store_at(dtype, slot, value);
+            self.store_at(dtype, &slot, value)?;
         }
         Ok(())
     }
@@ -242,7 +244,7 @@ impl Selector<'_> {
             let _row = self.vars.insert(row, at_row);
             let _column = self.vars.insert(column, at_column);
             let slot = self.slot(fragment, element)?;
-            let value = self.load_at(dtype, slot);
+            let value = self.load_at(dtype, &slot)?;
             let _previous = self.elements.insert(fragment.buffer, value);
             let outer = self.known.clone();
             self.statement(body)?;

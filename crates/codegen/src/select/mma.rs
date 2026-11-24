@@ -83,8 +83,8 @@ impl Selector<'_> {
         let (_, addr) = self.address_at(source, position)?;
         let registers = self.builder.ld_matrix(order, layout.blocks(), addr);
         for (block, register) in (0..).zip(registers) {
-            let (space, addr) = self.slot(fragment, block * layout.run)?;
-            self.builder.store(space, PtxType::B32, addr, register.into());
+            let slot = self.slot(fragment, block * layout.run)?;
+            self.write(&slot, PtxType::B32, register)?;
         }
         Ok(())
     }
@@ -161,8 +161,8 @@ impl Selector<'_> {
         let layout = self.fragment(fragment.buffer)?.layout();
         (0..layout.blocks())
             .map(|block| {
-                let (space, addr) = self.slot(fragment, block * layout.run)?;
-                Ok(self.builder.load::<B32>(space, PtxType::B32, addr))
+                let slot = self.slot(fragment, block * layout.run)?;
+                self.read::<B32>(&slot, PtxType::B32)
             })
             .collect()
     }
@@ -181,10 +181,10 @@ impl Selector<'_> {
             .collect::<Result<Vec<_>, _>>()?;
         let ty = op.accumulator;
         let sums: Vec<Reg<C>> =
-            slots.iter().map(|(space, addr)| self.builder.load(*space, ty, addr.clone())).collect();
+            slots.iter().map(|slot| self.read(slot, ty)).collect::<Result<_, _>>()?;
         let results = self.builder.mma(op, multiplicands, &sums);
-        for ((space, addr), result) in slots.into_iter().zip(results) {
-            self.builder.store(space, ty, addr, result.into());
+        for (slot, result) in slots.iter().zip(results) {
+            self.write(slot, ty, result)?;
         }
         Ok(())
     }
