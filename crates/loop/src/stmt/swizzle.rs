@@ -19,6 +19,16 @@ pub struct Swizzle {
     shift: u32,
 }
 
+/// How a swizzle places `offset + constant`, from where it places `offset`:
+/// exclusive-or `xor`, then add `add`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Fold {
+    /// The constant's part below the swizzle's period, placed.
+    pub xor: u64,
+    /// The constant's whole periods.
+    pub add: i64,
+}
+
 /// The smallest unit a swizzle moves: 16 bytes, the widest copy and an
 /// `ldmatrix` row, so neither straddles two units.
 const MIN_UNIT: u32 = 4;
@@ -87,6 +97,27 @@ impl Swizzle {
         1 << (self.unit + self.bits)
     }
 
+    /// The bytes of the swizzle's period: adding a multiple of it to an
+    /// offset adds the same to where the offset is placed.
+    pub const fn period_bytes(self) -> u64 {
+        1 << (self.unit + self.shift + self.bits)
+    }
+
+    /// How to place `offset + constant` from where `offset` is placed, for
+    /// an `offset` that sets only bits among `possible`. If the constant's
+    /// part below the period sets none of them, adding that part is an
+    /// exclusive-or, which the swizzle keeps since it is linear over
+    /// exclusive-or, and the whole periods it moves unchanged. `None`
+    /// otherwise.
+    pub const fn fold(self, possible: u64, constant: i64) -> Option<Fold> {
+        let part = constant.rem_euclid(self.period_bytes().cast_signed());
+        let bits = part.cast_unsigned();
+        if possible & bits != 0 {
+            return None;
+        }
+        Some(Fold { xor: self.apply(bits), add: constant - part })
+    }
+
     /// The number of bits of a unit's place it changes.
     pub const fn bits(self) -> u32 {
         self.bits
@@ -108,6 +139,39 @@ mod tests {
     use super::Swizzle;
     use ptxc_core::Dim;
     use std::collections::HashSet;
+
+    /// Every value that sets only bits of `mask`.
+    fn within(mask: u64) -> Vec<u64> {
+        let mut values = vec![0];
+        let mut value = mask;
+        while value != 0 {
+            values.push(value);
+            value = (value - 1) & mask;
+        }
+        values
+    }
+
+    #[test]
+    fn a_constant_folds_in_exactly_when_its_part_below_the_period_misses_the_offsets_bits() {
+        let swizzle = Swizzle::new(3, 4, 3).unwrap();
+        // A row's units, the rows of a period, and rows of the next periods.
+        let masks = [0x70, 0x380, 0x1c00, 0x3f0];
+
+        for possible in masks {
+            for constant in -2048..2048 {
+                let fold = swizzle.fold(possible, constant);
+
+                let part = constant.rem_euclid(1024).cast_unsigned();
+                assert_eq!(fold.is_some(), possible & part == 0, "{possible:#x}, {constant}");
+                let Some(fold) = fold else { continue };
+                for offset in within(possible) {
+                    let Some(total) = offset.checked_add_signed(constant) else { continue };
+                    let folded = (swizzle.apply(offset) ^ fold.xor).wrapping_add_signed(fold.add);
+                    assert_eq!(folded, swizzle.apply(total), "{offset:#x} + {constant}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn a_swizzle_permutes_each_block_and_is_its_own_inverse() {
