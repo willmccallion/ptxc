@@ -1,11 +1,12 @@
-//! `MatMul` and `Gemm`, accumulating floats in f64 and integers in i64.
+//! `MatMul`, `MatMulInteger` and `Gemm`, accumulating floats in f64 and
+//! integers in i64.
 
 use crate::error::{InterpError, Malformed};
 use crate::extents::Extents;
 use crate::numeric::{Elements, int_to_f64, store_ints, store_wide, truncate, widen};
 use ptxc_core::float::Overflow;
-use ptxc_core::{HostTensor, TensorData};
-use ptxc_graph::{GemmAttrs, Orientation, TensorType};
+use ptxc_core::{DType, HostTensor, TensorData};
+use ptxc_graph::{GemmAttrs, MatMulIntegerAttrs, Orientation, TensorType, ZeroPoints};
 
 /// An operand in the domain it accumulates in.
 enum Values {
@@ -115,6 +116,39 @@ pub(super) fn matmul(
         }
         _ => Err(Malformed::DType(rhs.dtype()).into()),
     }
+}
+
+/// `MatMulInteger`: the product of the operands less their zero points,
+/// `a`'s varying by row and `b`'s by column, wrapped to 32 bits.
+pub(super) fn matmul_integer(
+    attrs: &MatMulIntegerAttrs,
+    operands: &[&HostTensor],
+) -> Result<TensorData, InterpError> {
+    let [lhs, rhs] = operands else { return Err(Malformed::Operands.into()) };
+    let batched = Batched::of(&Extents::of(lhs.shape())?, &Extents::of(rhs.shape())?);
+    let (Values::Int(left), Values::Int(right)) = (values(lhs)?, values(rhs)?) else {
+        return Err(Malformed::DType(lhs.dtype()).into());
+    };
+    let inner = lhs.shape().dims().last().map_or(1, |dim| dim.get());
+    let inner = usize::try_from(inner).map_err(|_| Malformed::Operands)?;
+    let left = less_zero_points(&left, &attrs.a, (inner, batched.rows));
+    let right = less_zero_points(&right, &attrs.b, (1, batched.columns));
+    let out = batched.products(&left, &right, 0, |x, y, acc| x * y + acc);
+    store_ints(&out, DType::I32)
+}
+
+/// `values` less their zero points; element `i` takes the one at index
+/// `(i / period) mod count` along the axis they vary along.
+fn less_zero_points(
+    values: &[i64],
+    points: &ZeroPoints,
+    (period, count): (usize, usize),
+) -> Vec<i64> {
+    let along = |position: usize| match points {
+        ZeroPoints::PerTensor(point) => i64::from(point.get()),
+        ZeroPoints::PerAxis { points, .. } => i64::from(points[position / period % count].get()),
+    };
+    values.iter().enumerate().map(|(position, value)| value - along(position)).collect()
 }
 
 /// A 2-D `Gemm` operand read in its orientation.

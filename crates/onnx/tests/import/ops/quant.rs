@@ -3,20 +3,11 @@
 
 use crate::builders::{
     FLOAT, assert_lines, f32_tensor, fixed, import, input_names, int, line, model, node, op_line,
+    typed,
 };
 use ptxc_onnx::Unsupported;
 use ptxc_onnx_proto::tensor_proto::DataType;
 use ptxc_onnx_proto::{AttributeProto, TensorProto};
-
-fn typed(name: &str, dtype: DataType, dims: &[i64], int32_data: &[i32]) -> TensorProto {
-    TensorProto {
-        name: Some(name.to_owned()),
-        data_type: Some(dtype as i32),
-        dims: dims.to_vec(),
-        int32_data: int32_data.to_vec(),
-        ..TensorProto::default()
-    }
-}
 
 fn quantize(params: Vec<TensorProto>, attrs: Vec<AttributeProto>) -> String {
     let names = input_names("x", &params);

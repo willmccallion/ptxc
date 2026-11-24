@@ -6,6 +6,7 @@ mod conv;
 mod elementwise;
 mod gather;
 mod matmul;
+mod matmul_integer;
 mod norm;
 mod pool;
 mod quant;
@@ -61,6 +62,7 @@ pub(crate) fn lower_node(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerErro
         Op::GatherNd(batch) => gather::gather_nd(cx, *batch),
         Op::MatMul => matmul::matmul(cx),
         Op::Gemm(attrs) => matmul::gemm(cx, *attrs),
+        Op::MatMulInteger(attrs) => matmul_integer::matmul_integer(cx, attrs),
         Op::Conv(attrs) => conv::conv(cx, attrs),
         Op::Pool(attrs) => pool::pool(cx, attrs),
         Op::GlobalPool(kind) => pool::global_pool(cx, *kind),

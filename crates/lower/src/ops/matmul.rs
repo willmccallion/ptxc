@@ -12,7 +12,7 @@ use ptxc_graph::{F32Attr, GemmAttrs, Orientation, ValueId};
 use ptxc_loop::{ExprId, IterVarId, ReduceOp, TensorExpr};
 
 /// The dims of `value`.
-fn dims(cx: &NodeContext<'_>, value: ValueId) -> Vec<Dim> {
+pub(super) fn dims(cx: &NodeContext<'_>, value: ValueId) -> Vec<Dim> {
     cx.graph.value(value).ty().shape().dims().to_vec()
 }
 
@@ -35,11 +35,13 @@ pub(super) fn matmul(cx: &NodeContext<'_>) -> Result<LoweredGroup, LowerError> {
 }
 
 /// A `MatMul`-shaped product's operands at one output element: each read
-/// along the contracted axis, and the output's row and column, which a
-/// vector operand does not have.
+/// along the contracted axis, its index on its other axes, and the
+/// output's row and column, which a vector operand does not have.
 pub(super) struct Product {
     pub(super) lhs: Operand,
     pub(super) rhs: Operand,
+    pub(super) lhs_outer: Vec<ExprId>,
+    pub(super) rhs_outer: Vec<ExprId>,
     pub(super) inner: IterVarId,
     pub(super) row: Option<ExprId>,
     pub(super) column: Option<ExprId>,
@@ -62,15 +64,25 @@ pub(super) fn product_reads(
     let row = has_rows.then(|| matrix[0]);
     let column = has_columns.then(|| matrix[matrix.len() - 1]);
     let (inner_axis, k) = stage.reduce_axis(inner);
-    let mut lhs_index = batch_index(stage, &lhs_dims, batch);
-    lhs_index.extend(row);
-    lhs_index.push(k);
-    let mut rhs_index = batch_index(stage, &rhs_dims, batch);
-    rhs_index.push(k);
-    rhs_index.extend(column);
-    let lhs = stage.load(Binding::Value(lhs), lhs_index);
-    let rhs = stage.load(Binding::Value(rhs), rhs_index);
-    Ok(Product { lhs, rhs, inner: inner_axis, row, column })
+    let mut lhs_outer = batch_index(stage, &lhs_dims, batch);
+    lhs_outer.extend(row);
+    let mut rhs_outer = batch_index(stage, &rhs_dims, batch);
+    rhs_outer.extend(column);
+    let lhs = stage.load(Binding::Value(lhs), with_inner(&lhs_outer, lhs_dims.len() - 1, k));
+    let rhs = stage.load(Binding::Value(rhs), with_inner(&rhs_outer, contracted(&rhs_dims), k));
+    Ok(Product { lhs, rhs, lhs_outer, rhs_outer, inner: inner_axis, row, column })
+}
+
+/// The contracted axis of a right operand: its rows, or a vector's one.
+pub(super) const fn contracted(dims: &[Dim]) -> usize {
+    dims.len().saturating_sub(2)
+}
+
+/// `outer` with `k` inserted at the contracted axis `axis`.
+pub(super) fn with_inner(outer: &[ExprId], axis: usize, k: ExprId) -> Vec<ExprId> {
+    let mut index = outer.to_vec();
+    index.insert(axis, k);
+    index
 }
 
 /// An operand's index along its batch axes, every axis but its last two

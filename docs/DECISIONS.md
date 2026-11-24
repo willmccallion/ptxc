@@ -1120,3 +1120,28 @@ the old one.
   kernel, and every kernel without `mma` keeps the bit-for-bit check. A
   wrong fragment layout, tile or step is far outside the tolerance, and
   the exact-sum tests still pin tensor-core codegen bit for bit.
+
+## D61. `MatMulInteger` subtracts its zero points through operand sums
+
+- **Context:** ONNX `MatMulInteger` multiplies 8-bit integer operands less
+  their zero points into `i32`. Subtracting the zero points inside the sum
+  makes each term a product of two differences, which no `mma` takes. Real
+  int8 GEMMs have nonzero activation zero points, so that would keep them
+  off tensor cores.
+- **Options:** sum `(a - za)(b - zb)` directly; or sum `ab` and correct
+  it, as int8 GEMM libraries do:
+  `sum((a - za)(b - zb)) = sum(ab) - zb sum(a) - za sum(b) + k za zb`.
+- **Choice:**
+  - The product stage sums `ab` in wrapping `i32`, which the default
+    schedule multiplies on tensor cores when both operands have one 8-bit
+    type.
+  - Stages of their own sum `a` along its rows and `b` along its columns,
+    only where the other operand's zero points are not all 0. The
+    product's epilogue subtracts them and adds `k za zb`.
+  - Zero points are attributes (D32): one per tensor, or one per row of
+    `a` or column of `b`, read from a table (D46). Zero points that also
+    vary over a batch are unsupported.
+- **Reason:** in wrapping `i32` the identity is exact, so the result is
+  ONNX's bit for bit, including where ONNX lets the sum overflow. The
+  sums cost one pass over each operand, against a product that reads each
+  of them once per tile of the other.

@@ -1,6 +1,6 @@
 use crate::elementwise::lowered;
-use ptxc_core::DType;
-use ptxc_graph::{F32Attr, GemmAttrs, Op, Orientation};
+use ptxc_core::{Axis, DType, ZeroPoint};
+use ptxc_graph::{F32Attr, GemmAttrs, MatMulIntegerAttrs, Op, Orientation, ZeroPoints};
 use ptxc_testkit::golden;
 
 #[test]
@@ -47,4 +47,31 @@ fn gemm_reads_its_operands_in_their_orientations_and_scales_around_the_sum() {
     ];
 
     golden::check("matmul/gemm.txt", &definitions.join("\n")).unwrap();
+}
+
+const fn per_tensor(point: i32) -> ZeroPoints {
+    ZeroPoints::PerTensor(ZeroPoint::new(point))
+}
+
+fn per_axis(axis: usize, points: &[i32]) -> ZeroPoints {
+    let points = points.iter().copied().map(ZeroPoint::new).collect();
+    ZeroPoints::PerAxis { axis: Axis::new(axis), points }
+}
+
+/// The definitions of `MatMulInteger` of `i8[2, 3]` by `u8[3, 2]` with
+/// zero points `a` and `b`.
+fn matmul_integer(a: ZeroPoints, b: ZeroPoints) -> String {
+    let operands: [(DType, &[u64]); 2] = [(DType::I8, &[2, 3]), (DType::U8, &[3, 2])];
+    lowered(Op::MatMulInteger(MatMulIntegerAttrs { a, b }), &operands)
+}
+
+#[test]
+fn matmul_integer_sums_each_operand_only_where_the_others_zero_points_need_it() {
+    let definitions = [
+        matmul_integer(per_tensor(0), per_axis(1, &[0, 0])),
+        matmul_integer(per_tensor(-3), per_tensor(0)),
+        matmul_integer(per_axis(0, &[1, 2]), per_axis(1, &[7, 0])),
+    ];
+
+    golden::check("matmul/matmul_integer.txt", &definitions.join("\n")).unwrap();
 }

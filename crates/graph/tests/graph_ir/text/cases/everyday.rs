@@ -3,15 +3,16 @@
 use super::{AWKWARD, f, window};
 use crate::common::{f32_type, shape, tensor_type};
 use ptxc_core::float::Overflow;
-use ptxc_core::{Axis, DType, Dim, Rank};
+use ptxc_core::{Axis, DType, Dim, Rank, ZeroPoint};
 use ptxc_graph::{
     Activation, ArgKind, ArgReduceAttrs, AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs,
     ConvAttrs, CumSumAttrs, DiagonalOffset, GeluApproximation, GemmAttrs, GlobalPoolKind, Groups,
-    Inclusion, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs, LayerNormKind, ModKind,
-    NormOutputs, Op, Orientation, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs, PoolAxis,
-    PoolKind, ReduceAttrs, ReduceOp, RepeatCount, Rounding, ScanDirection, SliceAttrs, SliceAxis,
-    SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, TensorType, TieBreak, TileAttrs,
-    TransposeAttrs, TriangularPart, TriluAttrs, UnaryOp, VariadicOp,
+    Inclusion, InfDetection, InstanceNormAttrs, KeepDims, LayerNormAttrs, LayerNormKind,
+    MatMulIntegerAttrs, ModKind, NormOutputs, Op, Orientation, PadAttrs, PadCounting, PadMode,
+    Padding, PoolAttrs, PoolAxis, PoolKind, ReduceAttrs, ReduceOp, RepeatCount, Rounding,
+    ScanDirection, SliceAttrs, SliceAxis, SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs,
+    StashType, TensorType, TieBreak, TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs,
+    UnaryOp, VariadicOp, ZeroPoints,
 };
 
 /// Every elementwise variant.
@@ -122,6 +123,16 @@ pub(in crate::text) fn compute() -> Vec<(Op, Vec<TensorType>)> {
     vec![
         (Op::MatMul, vec![f32_type(&[2, 3]), f32_type(&[3, 4])]),
         (Op::Gemm(gemm), vec![f32_type(&[3, 2]), f32_type(&[3, 4]), f32_type(&[4])]),
+        (
+            Op::MatMulInteger(MatMulIntegerAttrs {
+                a: ZeroPoints::PerTensor(ZeroPoint::new(-3)),
+                b: ZeroPoints::PerAxis {
+                    axis: Axis::new(1),
+                    points: [0, 7, 255, 1].map(ZeroPoint::new).to_vec(),
+                },
+            }),
+            vec![tensor_type(DType::I8, &[2, 3]), tensor_type(DType::U8, &[3, 4])],
+        ),
         (Op::Conv(conv), vec![f32_type(&[1, 4, 7, 7]), f32_type(&[6, 2, 3, 3]), f32_type(&[6])]),
         (
             Op::Pool(PoolAttrs {
