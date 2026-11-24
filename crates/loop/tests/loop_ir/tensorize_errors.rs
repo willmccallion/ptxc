@@ -5,13 +5,14 @@
 use crate::compute_build::shape;
 use crate::interp::target;
 use crate::schedule_support::open;
-use crate::tensorize::{ONE_TILE, Operands, instruction, product, product_reading, tensorized};
+use crate::tensorize::{instruction, product, product_reading, tensorized};
 use ptxc_core::{DType, Dim, Idx};
 use ptxc_loop::{
     BinaryOp, ComputeBuilder, ComputeDef, ComputeName, LoopId, Open, Primitive, ReduceOp, Schedule,
     ScheduleError, SplitFactor, TensorExpr, TensorName, TensorParamId, ThreadAxis, TileOrder,
     VarName,
 };
+use ptxc_testkit::tensorized::{Loads, ONE_TILE};
 use std::sync::Arc;
 
 fn split(schedule: &mut Schedule<Open>, loop_: LoopId, factor: u64) -> Vec<LoopId> {
@@ -110,10 +111,10 @@ fn a_tile_computes_a_product_of_staged_operands_of_the_mmas_types() {
 
 #[test]
 fn an_operands_tile_has_adjacent_elements_and_reads_only_its_own_loops() {
-    let shifted: Box<Operands> = Box::new(|compute, [a, b], [i, j, k]| {
+    let shifted: Box<Loads> = Box::new(|compute, [a, b], [i, j, k]| {
         [(a, vec![i, compute.exprs().add(k, j)]), (b, vec![k, j])]
     });
-    let sparse: Box<Operands> = Box::new(|compute, [a, b], [i, j, k]| {
+    let sparse: Box<Loads> = Box::new(|compute, [a, b], [i, j, k]| {
         let two = compute.exprs().constant(2);
         [(a, vec![compute.exprs().mul(i, two), compute.exprs().mul(k, two)]), (b, vec![k, j])]
     });
