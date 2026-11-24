@@ -1019,3 +1019,26 @@ the old one.
   recognition. Every output still sums its axis in order, so a tiled
   kernel matches the serial schedule bit for bit, which the tests check in
   the interpreter and on the GPU.
+
+## D57. An f32 sum of products is fused into multiply-adds
+
+- **Context:** CUDA-core kernels issued a multiply and an add for every
+  product they summed, keeping the GPU bit-exact with the loop
+  interpreter, which rounded each. An FFMA does both at the throughput of
+  one, and nvcc contracts `acc + a * b` into it by default.
+- **Options:**
+  - keep separate operations, and so half the arithmetic throughput;
+  - contract in codegen alone, so the GPU no longer matches the
+    interpreter bit for bit;
+  - contract in the loop IR, which both executors follow.
+- **Choice:** `ValueExpr::MulAdd` computes `lhs * rhs + addend` on f32,
+  rounded once. Lowering combines a reduction's f32 sum with a product
+  body into it. Codegen selects `fma.rn.f32`, and the interpreter uses
+  `f32::mul_add`, IEEE's fused operation, rather than its f64 arithmetic,
+  which would round twice. Other sums, and products outside a sum, keep
+  their separate operations.
+- **Reason:** both executors compute the same rounding, so the GPU still
+  matches the interpreter bit for bit, while the hot loop of every matrix
+  product, convolution and attention stage issues one instruction per
+  term. A fused sum is at least as accurate as a separate one, and the
+  reference comparisons already allow a sum's rounding.

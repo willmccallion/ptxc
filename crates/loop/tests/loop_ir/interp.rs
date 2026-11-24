@@ -17,7 +17,7 @@ pub(crate) fn tensor(dims: &[u64], data: impl Into<TensorData>) -> HostTensor {
     HostTensor::new(shape(dims), data.into()).unwrap()
 }
 
-fn floats(output: &HostTensor) -> Vec<f32> {
+pub(crate) fn floats(output: &HostTensor) -> Vec<f32> {
     let TensorData::F32(values) = output.data() else { panic!("{:?}", output.dtype()) };
     values.clone()
 }

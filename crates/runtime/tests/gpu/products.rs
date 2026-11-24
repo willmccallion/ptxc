@@ -78,3 +78,22 @@ fn a_transposed_scaled_gemm_with_a_bias_matches_bit_for_bit() {
 fn an_integer_matmul_matches_exactly() {
     matches_interpreter(Op::MatMul, &[integers(&[66, 17], 8), integers(&[17, 70], 9)]);
 }
+
+/// A dot product whose terms cancel below f32's precision: fused, the
+/// second term's product `1 - 2^-46` keeps its low bits and the sum is
+/// `-2^-46`; a separate multiply would round it to 1 and give 0.
+#[test]
+fn a_summed_product_rounds_once_on_the_gpu_as_in_the_interpreter() {
+    let epsilon = f32::EPSILON;
+    let x = HostTensor::new(shape(&[1, 2]), vec![1.0, 1.0 + epsilon].into()).unwrap();
+    let y = HostTensor::new(shape(&[2, 1]), vec![-1.0, 1.0 - epsilon].into()).unwrap();
+    let graph = single_node(Op::MatMul, &[x.clone(), y.clone()]);
+
+    let outputs = run_lowered(graph, &[x, y], |kernel, arguments| {
+        match_interpreter(kernel, arguments, "a cancelling dot product")
+    })
+    .unwrap();
+
+    let TensorData::F32(sum) = outputs[0].data() else { panic!("{:?}", outputs[0].dtype()) };
+    assert_eq!(sum, &[-(epsilon * epsilon)]);
+}
