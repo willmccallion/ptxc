@@ -12,6 +12,7 @@ mod simplify;
 
 pub use arena::ExprArena;
 pub use interval::{Interval, VarRanges};
+pub(crate) use linear::LinearSum;
 pub use simplify::Simplifier;
 
 ptxc_core::define_index!(

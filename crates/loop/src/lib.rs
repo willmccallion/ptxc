@@ -21,7 +21,7 @@ pub use compute::{
 pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 pub use interp::{RunError, run};
 pub use schedule::{
-    Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Open, Primitive, Schedule,
+    CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Open, Primitive, Schedule,
     ScheduleError, SplitFactor, ThreadAxis, Trace, Validated,
 };
 pub use stmt::{

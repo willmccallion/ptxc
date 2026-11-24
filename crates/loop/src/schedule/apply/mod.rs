@@ -1,7 +1,7 @@
 //! Applying each primitive to a loop tree.
 
 mod bind;
-mod cache;
+pub(super) mod cache;
 mod compute_at;
 mod fuse;
 mod layout;

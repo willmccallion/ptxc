@@ -1,0 +1,45 @@
+kernel matmul(%a: i32[2590] read, %b: i32[3150] read, %out: i32[1665] write)
+  grid(6, 5, 1) block(8, 8, 1) smem 1024
+  %i.0 = blockIdx.y
+  %i.1 = threadIdx.y
+  %j.0 = blockIdx.x
+  %j.1 = threadIdx.x
+  alloc %acc: i32[1] local {
+    %acc[0] = 0:i32
+    alloc %a_tile: i32[128] shared {
+      alloc %b_tile: i32[128] shared {
+        for %k.0 in 5 {
+          barrier
+          for %a_fill in 2 {
+            if %i.0 * 8 + %a_fill * 4 + floordiv(%i.1 * 8 + %j.1, 16) < 37 {
+              if %k.0 * 16 + floormod(%i.1 * 8 + %j.1, 16) < 70 {
+                %a_tile[%i.1 * 8 + %j.1 + %a_fill * 64] = %a[%i.0 * 560 + %k.0 * 16 + %a_fill * 280 + floordiv(%i.1 * 8 + %j.1, 16) * 70 + floormod(%i.1 * 8 + %j.1, 16)]
+              }
+            }
+          }
+          for %b_fill in 2 {
+            if %i.1 + %k.0 * 16 + %b_fill * 8 < 70 {
+              if %j.1 + %j.0 * 8 < 45 {
+                %b_tile[%i.1 * 8 + %j.1 + %b_fill * 64] = %b[%i.1 * 45 + %j.1 + %j.0 * 8 + %k.0 * 720 + %b_fill * 360]
+              }
+            }
+          }
+          barrier
+          for %k.1 in 16 {
+            if %i.1 + %i.0 * 8 < 37 {
+              if %j.1 + %j.0 * 8 < 45 {
+                if %k.1 + %k.0 * 16 < 70 {
+                  %acc[0] = add(%acc[0], mul(%a_tile[%i.1 * 16 + %k.1], %b_tile[%j.1 + %k.1 * 8]))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    if %i.1 + %i.0 * 8 < 37 {
+      if %j.1 + %j.0 * 8 < 45 {
+        %out[%i.1 * 45 + %i.0 * 360 + %j.1 + %j.0 * 8] = %acc[0]
+      }
+    }
+  }

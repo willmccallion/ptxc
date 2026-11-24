@@ -2,9 +2,9 @@
 
 use super::loop_tree::LoopId;
 use super::primitive::ThreadAxis;
-use crate::compute::VarName;
-use ptxc_core::Dim;
-use ptxc_target::ThreadsPerBlock;
+use crate::compute::{TensorName, TensorParamId, VarName};
+use ptxc_core::{ByteSize, Dim};
+use ptxc_target::{SmemBytes, ThreadsPerBlock};
 use thiserror::Error;
 
 /// A primitive the loop tree rejects. A rejected primitive changes nothing.
@@ -89,4 +89,51 @@ pub enum ScheduleError {
     /// A reduction loop vectorized.
     #[error("reduction loop {0} cannot be vectorized")]
     VectorizedReduce(VarName),
+    /// An input id the compute definition does not have.
+    #[error("the compute definition has no input {0:?}")]
+    UnknownTensor(TensorParamId),
+    /// An input staged twice.
+    #[error("input {0} is already staged in shared memory")]
+    AlreadyCached(TensorName),
+    /// A staged input no load reads: unread, or read only as a gather
+    /// index.
+    #[error("input {0} has no load to stage: it is unread or read only as a gather index")]
+    CacheUnread(TensorName),
+    /// A staged input read at more than one index.
+    #[error("input {0} is read at more than one index, so it has no one tile to stage")]
+    CacheLoads(TensorName),
+    /// A staged input read through a gather index, whose tile depends on
+    /// data.
+    #[error("input {0} is read through a gather index, so its tile depends on data")]
+    CacheGathered(TensorName),
+    /// An input staged at or inside the reduction's loops but also read
+    /// outside the reduction's body, where those loops do not run.
+    #[error("input {0} is staged inside the reduction's loops but also read outside its body")]
+    CacheOutsideReduction(TensorName),
+    /// A staged input whose index is not a sum of the loops its tile spans
+    /// with non-negative coefficients, so the tile is not a box from its
+    /// first point.
+    #[error("input {0}'s index does not grow affinely with the loops its tile spans")]
+    CacheNotAffine(TensorName),
+    /// A stage at a loop that is not a serial loop of the nest: bound or
+    /// annotated, or split or fused away after the stage.
+    #[error("input {tensor} is staged at loop {at}, which is not a serial loop of the nest")]
+    CacheNotSerial {
+        /// The input staged.
+        tensor: TensorName,
+        /// The loop it is staged at.
+        at: VarName,
+    },
+    /// A stage in a kernel whose reduction is shared between threads, which
+    /// lowering does not combine with one yet.
+    #[error("input {0} cannot be staged in a reduction shared between threads")]
+    CacheCrossThread(TensorName),
+    /// Tiles past the shared memory a block has.
+    #[error("the staged tiles take {bytes:?} of shared memory; a block has {limit:?}")]
+    SharedTooLarge {
+        /// The tiles' bytes.
+        bytes: ByteSize,
+        /// The block's shared memory.
+        limit: SmemBytes,
+    },
 }

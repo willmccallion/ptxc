@@ -1,17 +1,25 @@
 //! Checks an open schedule against a target: the launch fits, vector loops
-//! have a vector width, and a reduction shared between threads has the
-//! shape lowering builds a shared-memory tree for.
+//! have a vector width, a reduction shared between threads has the shape
+//! lowering builds a shared-memory tree for, and staged inputs sit where
+//! lowering can fill them.
 
 use super::error::ScheduleError;
 use super::loop_tree::{LoopAnnotation, LoopId, LoopKind, LoopTree};
 use super::primitive::ThreadAxis;
+use super::validate_caches::check_caches;
 use super::{Open, Schedule};
-use ptxc_target::Target;
-use std::marker::PhantomData;
+use ptxc_core::Dim;
+use ptxc_target::{Target, ThreadsPerBlock};
 
-/// A schedule checked against a target, ready to lower.
-#[derive(Clone, Copy, Debug)]
-pub struct Validated;
+/// A schedule checked against a target, ready to lower, with what the
+/// checks established that lowering builds on.
+#[derive(Clone, Debug)]
+pub struct Validated {
+    /// The threads in one block.
+    threads: ThreadsPerBlock,
+    /// Each cache's tile extents, per axis of its input.
+    tiles: Vec<Vec<Dim>>,
+}
 
 /// Every axis in `(grid x, y, z, block x, y, z)` order.
 const AXES: [ThreadAxis; 6] = [
@@ -26,15 +34,29 @@ const AXES: [ThreadAxis; 6] = [
 impl Schedule<Open> {
     /// The schedule, if `target` can run it and lowering supports its shape.
     pub fn validate(self, target: &Target) -> Result<Schedule<Validated>, ScheduleError> {
-        check_launch(&self.loops, target)?;
+        let threads = check_launch(&self.loops, target)?;
         check_vectors(&self.loops)?;
         check_cross_thread(&self.loops)?;
+        let tiles = check_caches(&self.compute, &self.loops, target)?;
         Ok(Schedule {
             compute: self.compute,
             loops: self.loops,
             trace: self.trace,
-            state: PhantomData,
+            state: Validated { threads, tiles },
         })
+    }
+}
+
+impl Schedule<Validated> {
+    /// The threads in one block.
+    pub(crate) const fn threads(&self) -> ThreadsPerBlock {
+        self.state.threads
+    }
+
+    /// Each cache's tile extents, per axis of its input, in the order the
+    /// caches were staged.
+    pub(crate) fn tiles(&self) -> &[Vec<Dim>] {
+        &self.state.tiles
     }
 }
 
@@ -56,7 +78,8 @@ impl LoopTree {
     }
 }
 
-fn check_launch(tree: &LoopTree, target: &Target) -> Result<(), ScheduleError> {
+/// The threads in one block, if every axis and the block fit `target`.
+fn check_launch(tree: &LoopTree, target: &Target) -> Result<ThreadsPerBlock, ScheduleError> {
     let limits = target.limits();
     for (slot, &axis) in AXES.iter().enumerate() {
         let limit = if slot < 3 {
@@ -74,10 +97,11 @@ fn check_launch(tree: &LoopTree, target: &Target) -> Result<(), ScheduleError> {
         }
     }
     let threads = tree.block_threads().unwrap_or(u64::MAX);
-    if threads > u64::from(limits.block.threads.get()) {
-        return Err(ScheduleError::TooManyThreads { threads, limit: limits.block.threads });
+    let limit = limits.block.threads;
+    match u32::try_from(threads) {
+        Ok(count) if count <= limit.get() => Ok(ThreadsPerBlock::new(count)),
+        _ => Err(ScheduleError::TooManyThreads { threads, limit }),
     }
-    Ok(())
 }
 
 /// A vectorized loop has 2 or 4 iterations, is the innermost serial loop,
