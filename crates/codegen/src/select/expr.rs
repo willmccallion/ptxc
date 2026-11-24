@@ -141,6 +141,9 @@ impl Selector<'_> {
         match expr {
             ValueExpr::Load { buffer, index } => self.load(*buffer, *index),
             ValueExpr::Const(scalar) => self.constant(*scalar),
+            ValueExpr::Element(_) => {
+                Err(CodegenError::Unsupported { op: "fragment statements, until #104" })
+            }
             ValueExpr::Index { index, dtype } => {
                 let position = self.index(*index)?;
                 Ok(self.integer_from_index(position, *dtype))

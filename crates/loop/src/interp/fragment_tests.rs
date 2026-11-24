@@ -6,14 +6,14 @@
 use super::tensors::{data, values};
 use super::value::Value;
 use super::{RunError, execute, run};
-use crate::compute::VarName;
+use crate::compute::{BinaryOp, VarName};
 use crate::compute::{Scalar, TensorName};
 use crate::expr::VarId;
 use crate::stmt::{
-    Access, Buffer, BufferId, FragmentShape, KernelParam, LoweredKernel, MemScope, Stmt,
-    TileAccess, TileOrder,
+    Access, Buffer, BufferId, FragmentShape, FragmentTile, KernelParam, KernelVar, LoweredKernel,
+    MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
-use crate::test_kernels::{mma_kernel, warp_kernel};
+use crate::test_kernels::{mma_kernel, mma_kernel_storing, warp_kernel};
 use crate::verify::VerifyError;
 use ptxc_core::convert::int_to_f64;
 use ptxc_core::{DType, Dim, ElementCount, HostTensor, Idx, Shape};
@@ -101,7 +101,9 @@ fn each_mma_instruction_multiplies_its_fragments_as_stored_or_transposed() {
 
 /// A one-warp kernel whose body is `body`, given a shared `tile` of 256
 /// f16s and an f16 `fragment` of 16 by 16, both allocated around it.
-fn with_fragment(body: impl FnOnce(&mut LoweredKernel, [BufferId; 2]) -> Stmt) -> LoweredKernel {
+fn with_fragment(
+    body: impl FnOnce(&mut LoweredKernel, BufferId, FragmentTile) -> Stmt,
+) -> LoweredKernel {
     let mut kernel = warp_kernel();
     let mut buffer = |name: &str, scope| {
         let (name, size) = (TensorName::new(name), ElementCount::new(256));
@@ -110,7 +112,8 @@ fn with_fragment(body: impl FnOnce(&mut LoweredKernel, [BufferId; 2]) -> Stmt) -
     let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
     let tile = buffer("tile", MemScope::Shared);
     let fragment = buffer("fragment", MemScope::Fragment(shape));
-    let inner = body(&mut kernel, [tile, fragment]);
+    let whole = FragmentTile { buffer: fragment, tile: kernel.exprs.constant(0) };
+    let inner = body(&mut kernel, tile, whole);
     let in_fragment = Stmt::Alloc { buffer: fragment, body: Box::new(inner) };
     kernel.body = Stmt::Alloc { buffer: tile, body: Box::new(in_fragment) };
     kernel
@@ -118,7 +121,7 @@ fn with_fragment(body: impl FnOnce(&mut LoweredKernel, [BufferId; 2]) -> Stmt) -
 
 #[test]
 fn a_fragment_statement_in_a_warp_the_block_does_not_fill_is_refused() {
-    let mut kernel = with_fragment(|_, [_, fragment]| Stmt::FragmentFill {
+    let mut kernel = with_fragment(|_, _, fragment| Stmt::FragmentFill {
         fragment,
         value: Scalar::zero(DType::F16),
     });
@@ -132,7 +135,7 @@ fn a_fragment_statement_in_a_warp_the_block_does_not_fill_is_refused() {
 
 #[test]
 fn lanes_that_disagree_on_where_a_tile_is_are_refused() {
-    let kernel = with_fragment(|kernel, [tile, fragment]| {
+    let kernel = with_fragment(|kernel, tile, fragment| {
         let lane = kernel.exprs.var(VarId::new(0));
         let at = TileAccess { origin: lane, stride: Dim::new(16), order: TileOrder::RowMajor };
         Stmt::FragmentLoad { fragment, source: tile, at }
@@ -195,9 +198,10 @@ fn two_warps() -> LoweredKernel {
             value: crate::stmt::ValueExpr::Load { buffer: x, index: element },
         }),
     };
+    let whole = FragmentTile { buffer: fragment, tile: kernel.exprs.constant(0) };
     let per_warp = Stmt::Seq(vec![
-        Stmt::FragmentLoad { fragment, source: tile, at },
-        Stmt::FragmentStore { fragment, target: y, at },
+        Stmt::FragmentLoad { fragment: whole, source: tile, at },
+        Stmt::FragmentStore { fragment: whole, target: y, at },
     ]);
     let body = Stmt::Seq(vec![
         copy,
@@ -220,4 +224,72 @@ fn each_warp_holds_its_own_fragments() {
     let outputs = run(&two_warps(), &[x]).unwrap();
 
     assert_eq!(values(outputs[0].data()), as_values(DType::F16, &entries));
+}
+
+#[test]
+fn an_epilogue_runs_once_for_each_element_of_the_accumulator() {
+    let instruction = instruction(INSTRUCTIONS[0]);
+    let kernel = mma_kernel_storing(instruction, TileOrder::RowMajor, |kernel, accumulator, c| {
+        let row = kernel.vars.push(KernelVar::Loop(VarName::new("row")));
+        let column = kernel.vars.push(KernelVar::Loop(VarName::new("column")));
+        let exprs = &mut kernel.exprs;
+        let (row_expr, column_expr, columns) =
+            (exprs.var(row), exprs.var(column), exprs.constant(8));
+        let scaled = exprs.mul(row_expr, columns);
+        let index = exprs.add(scaled, column_expr);
+        let one = ValueExpr::Const(Scalar::one(DType::F32));
+        let value = ValueExpr::Binary(
+            BinaryOp::Add,
+            Box::new(ValueExpr::Element(accumulator.buffer)),
+            Box::new(one),
+        );
+        let store = Stmt::Store { buffer: c, index, value };
+        Stmt::FragmentEach { fragment: accumulator, row, column, body: Box::new(store) }
+    });
+    let lhs = matrix(16, 16, |row, step| entry(DType::F16, row, step, 0));
+    let rhs = matrix(16, 8, |step, column| entry(DType::F16, step, column, 4));
+    let inputs = [tensor(DType::F16, [16, 16], &lhs), tensor(DType::F16, [16, 8], &rhs)];
+    let plus_one = matrix(16, 8, |row, column| {
+        1 + (0..16)
+            .map(|step| entry(DType::F16, row, step, 0) * entry(DType::F16, step, column, 4))
+            .sum::<i64>()
+    });
+
+    let outputs = run(&kernel, &inputs).unwrap();
+
+    assert_eq!(values(outputs[0].data()), as_values(DType::F32, &plus_one));
+}
+
+#[test]
+fn a_fragment_buffer_holds_one_tile_per_index() {
+    let mut kernel = warp_kernel();
+    let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(8) };
+    let size = ElementCount::new(2 * 128);
+    let pair = kernel.buffers.push(Buffer {
+        name: TensorName::new("pair"),
+        dtype: DType::F32,
+        scope: MemScope::Fragment(shape),
+        size,
+    });
+    let out = kernel.buffers.push(Buffer {
+        name: TensorName::new("out"),
+        dtype: DType::F32,
+        scope: MemScope::Global,
+        size: ElementCount::new(128),
+    });
+    kernel.params = vec![KernelParam { buffer: out, access: Access::Write }];
+    let (first, second) = (kernel.exprs.constant(0), kernel.exprs.constant(1));
+    let tile = |index| FragmentTile { buffer: pair, tile: index };
+    let at = TileAccess { origin: first, stride: Dim::new(8), order: TileOrder::RowMajor };
+    let fill = |value| Scalar::float(DType::F32, value).unwrap();
+    let body = Stmt::Seq(vec![
+        Stmt::FragmentFill { fragment: tile(first), value: fill(1.0) },
+        Stmt::FragmentFill { fragment: tile(second), value: fill(2.0) },
+        Stmt::FragmentStore { fragment: tile(second), target: out, at },
+    ]);
+    kernel.body = Stmt::Alloc { buffer: pair, body: Box::new(body) };
+
+    let outputs = run(&kernel, &[]).unwrap();
+
+    assert_eq!(values(outputs[0].data()), vec![Value::Float(2.0); 128]);
 }

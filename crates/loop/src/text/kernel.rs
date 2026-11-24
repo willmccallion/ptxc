@@ -5,11 +5,7 @@ use super::cast::cast_name;
 use super::index::write_index;
 use crate::compute::UnaryOp;
 use crate::expr::{ExprId, VarId};
-use crate::stmt::{
-    Access, BufferId, ForKind, KernelVar, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder,
-    ValueExpr,
-};
-use ptxc_target::MmaInstruction;
+use crate::stmt::{Access, BufferId, ForKind, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
 use std::fmt::Write;
 
 /// The text of `kernel`:
@@ -58,16 +54,16 @@ pub fn print_kernel(kernel: &LoweredKernel) -> String {
     out
 }
 
-struct KernelPrinter<'k> {
-    kernel: &'k LoweredKernel,
+pub(super) struct KernelPrinter<'k> {
+    pub(super) kernel: &'k LoweredKernel,
 }
 
 impl KernelPrinter<'_> {
-    fn name(&self, var: VarId) -> String {
+    pub(super) fn name(&self, var: VarId) -> String {
         self.kernel.vars()[var].name().to_string()
     }
 
-    fn index(&self, out: &mut String, index: ExprId) {
+    pub(super) fn index(&self, out: &mut String, index: ExprId) {
         write_index(out, self.kernel.exprs(), index, &|var| self.name(var));
     }
 
@@ -77,7 +73,7 @@ impl KernelPrinter<'_> {
         format!("%{}: {}[{}]", found.name, found.dtype.name(), found.size.get())
     }
 
-    fn access(&self, out: &mut String, buffer: BufferId, index: ExprId) {
+    pub(super) fn access(&self, out: &mut String, buffer: BufferId, index: ExprId) {
         let _infallible = write!(out, "%{}[", self.kernel.buffers()[buffer].name);
         self.index(out, index);
         out.push(']');
@@ -123,23 +119,18 @@ impl KernelPrinter<'_> {
             Stmt::Barrier => {
                 let _infallible = writeln!(out, "{pad}barrier");
             }
-            Stmt::FragmentFill { fragment, value } => {
-                let _infallible = writeln!(out, "{pad}{} = fill({value})", self.named(*fragment));
-            }
+            Stmt::FragmentFill { fragment, value } => self.fill(out, &pad, *fragment, *value),
             Stmt::FragmentLoad { fragment, source, at } => {
-                let _infallible = write!(out, "{pad}{} = tile ", self.named(*fragment));
-                self.tile(out, *source, *at);
-                out.push('\n');
+                self.load_tile(out, &pad, *fragment, (*source, *at));
             }
             Stmt::Mma { instruction, a, b, accumulator } => {
-                out.push_str(&pad);
-                self.mma(out, *instruction, [*a, *b, *accumulator]);
+                self.mma(out, &pad, *instruction, [*a, *b, *accumulator]);
             }
             Stmt::FragmentStore { fragment, target, at } => {
-                out.push_str(&pad);
-                out.push_str("tile ");
-                self.tile(out, *target, *at);
-                let _infallible = writeln!(out, " = {}", self.named(*fragment));
+                self.store_tile(out, &pad, *fragment, (*target, *at));
+            }
+            Stmt::FragmentEach { fragment, row, column, body } => {
+                self.each(out, depth, (*fragment, [*row, *column]), body);
             }
         }
     }
@@ -156,44 +147,8 @@ impl KernelPrinter<'_> {
         }
     }
 
-    /// `%c = mma.m16n8k16.f16.f32(%a, %b, %c)`.
-    fn mma(
-        &self,
-        out: &mut String,
-        instruction: MmaInstruction,
-        [a, b, accumulator]: [BufferId; 3],
-    ) {
-        let shape = instruction.shape;
-        let acc = self.named(accumulator);
-        let _infallible = writeln!(
-            out,
-            "{acc} = mma.m{}n{}k{}.{}.{}({}, {}, {acc})",
-            shape.m.get(),
-            shape.n.get(),
-            shape.k.get(),
-            instruction.multiplicands.name(),
-            instruction.accumulator.name(),
-            self.named(a),
-            self.named(b),
-        );
-    }
-
-    /// `%name`.
-    fn named(&self, buffer: BufferId) -> String {
-        format!("%{}", self.kernel.buffers()[buffer].name)
-    }
-
-    /// `%buffer[origin] stride s`, then ` transposed` for a transposed tile.
-    fn tile(&self, out: &mut String, buffer: BufferId, at: TileAccess) {
-        self.access(out, buffer, at.origin);
-        let _infallible = write!(out, " stride {}", at.stride.get());
-        if at.order == TileOrder::Transposed {
-            out.push_str(" transposed");
-        }
-    }
-
     /// Writes `body` one level in, then the closing brace.
-    fn close(&self, out: &mut String, body: &Stmt, depth: usize) {
+    pub(super) fn close(&self, out: &mut String, body: &Stmt, depth: usize) {
         self.write_stmt(out, body, depth + 1);
         let _infallible = writeln!(out, "{}}}", "  ".repeat(depth));
     }
@@ -201,6 +156,10 @@ impl KernelPrinter<'_> {
     fn value(&self, out: &mut String, value: &ValueExpr) {
         match value {
             ValueExpr::Load { buffer, index } => self.access(out, *buffer, *index),
+            ValueExpr::Element(fragment) => {
+                let _infallible =
+                    write!(out, "element(%{})", self.kernel.buffers()[*fragment].name);
+            }
             ValueExpr::Const(scalar) => {
                 let _infallible = write!(out, "{scalar}");
             }

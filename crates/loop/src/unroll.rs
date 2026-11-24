@@ -4,7 +4,9 @@
 //! sees constant offsets where only the loop made them vary.
 
 use crate::expr::{ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
-use crate::stmt::{Condition, ForKind, KernelVar, LoweredKernel, Stmt, TileAccess, ValueExpr};
+use crate::stmt::{
+    Condition, ForKind, FragmentTile, KernelVar, LoweredKernel, Stmt, TileAccess, ValueExpr,
+};
 use ptxc_core::Dim;
 
 /// `kernel` with every unrolled loop expanded, and every guard that the
@@ -64,15 +66,29 @@ impl Unroller {
                 Stmt::Store { buffer: *buffer, index: self.index(*index), value: self.value(value) }
             }
             Stmt::Barrier => Stmt::Barrier,
+            Stmt::FragmentFill { fragment, value } => {
+                Stmt::FragmentFill { fragment: self.tile(*fragment), value: *value }
+            }
             Stmt::FragmentLoad { fragment, source, at } => {
                 let at = TileAccess { origin: self.index(at.origin), ..*at };
-                Stmt::FragmentLoad { fragment: *fragment, source: *source, at }
+                Stmt::FragmentLoad { fragment: self.tile(*fragment), source: *source, at }
             }
+            Stmt::Mma { instruction, a, b, accumulator } => Stmt::Mma {
+                instruction: *instruction,
+                a: self.tile(*a),
+                b: self.tile(*b),
+                accumulator: self.tile(*accumulator),
+            },
             Stmt::FragmentStore { fragment, target, at } => {
                 let at = TileAccess { origin: self.index(at.origin), ..*at };
-                Stmt::FragmentStore { fragment: *fragment, target: *target, at }
+                Stmt::FragmentStore { fragment: self.tile(*fragment), target: *target, at }
             }
-            Stmt::FragmentFill { .. } | Stmt::Mma { .. } => stmt.clone(),
+            Stmt::FragmentEach { fragment, row, column, body } => Stmt::FragmentEach {
+                fragment: self.tile(*fragment),
+                row: *row,
+                column: *column,
+                body: Box::new(self.stmt(body)),
+            },
         }
     }
 
@@ -109,6 +125,11 @@ impl Unroller {
         Stmt::If { condition, then: Box::new(self.stmt(then)) }
     }
 
+    /// `fragment` with the current values substituted in its tile.
+    fn tile(&mut self, fragment: FragmentTile) -> FragmentTile {
+        FragmentTile { tile: self.index(fragment.tile), ..fragment }
+    }
+
     /// `value` with the current values substituted in its indices.
     fn value(&mut self, value: &ValueExpr) -> ValueExpr {
         let mut sub = |operand: &ValueExpr| Box::new(self.value(operand));
@@ -117,6 +138,7 @@ impl Unroller {
                 ValueExpr::Load { buffer: *buffer, index: self.index(*index) }
             }
             ValueExpr::Const(scalar) => ValueExpr::Const(*scalar),
+            ValueExpr::Element(fragment) => ValueExpr::Element(*fragment),
             ValueExpr::Index { index, dtype } => {
                 ValueExpr::Index { index: self.index(*index), dtype: *dtype }
             }
@@ -159,7 +181,8 @@ mod tests {
     use crate::compute::TensorName;
     use crate::expr::Expr;
     use crate::stmt::{
-        Buffer, ForKind, FragmentShape, KernelVar, MemScope, Stmt, TileAccess, TileOrder,
+        Buffer, ForKind, FragmentShape, FragmentTile, KernelVar, MemScope, Stmt, TileAccess,
+        TileOrder,
     };
     use crate::test_kernels::warp_kernel;
     use ptxc_core::{DType, Dim, ElementCount};
@@ -179,9 +202,10 @@ mod tests {
         let (step_expr, tile_size) = (kernel.exprs.var(step), kernel.exprs.constant(256));
         let origin = kernel.exprs.mul(step_expr, tile_size);
         let at = TileAccess { origin, stride: Dim::new(16), order: TileOrder::RowMajor };
+        let whole = FragmentTile { buffer: fragment, tile: kernel.exprs.constant(0) };
         let copy = Stmt::Seq(vec![
-            Stmt::FragmentLoad { fragment, source: tile, at },
-            Stmt::FragmentStore { fragment, target: staged, at },
+            Stmt::FragmentLoad { fragment: whole, source: tile, at },
+            Stmt::FragmentStore { fragment: whole, target: staged, at },
         ]);
         kernel.body = Stmt::For {
             var: step,

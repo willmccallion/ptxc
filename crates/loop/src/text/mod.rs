@@ -1,6 +1,7 @@
 //! A text format for loop IR, used by golden tests.
 
 mod cast;
+mod fragment;
 mod index;
 mod kernel;
 mod print;

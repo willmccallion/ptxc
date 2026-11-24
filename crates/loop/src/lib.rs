@@ -26,8 +26,8 @@ pub use schedule::{
     ScheduleError, SplitFactor, ThreadAxis, Trace, Validated,
 };
 pub use stmt::{
-    Access, Buffer, BufferId, Condition, ForKind, FragmentShape, KernelParam, KernelVar,
-    LaunchShape, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
+    Access, Buffer, BufferId, Condition, ForKind, FragmentShape, FragmentTile, KernelParam,
+    KernelVar, LaunchShape, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
 pub use text::{print_compute, print_kernel, print_schedule};
 pub use unroll::unrolled;

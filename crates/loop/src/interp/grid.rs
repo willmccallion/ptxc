@@ -33,6 +33,9 @@ pub(super) struct Block<'g, 'k> {
     shared: HashMap<BufferId, Memory>,
     /// Each warp's fragments, by warp and buffer.
     fragments: HashMap<(usize, BufferId), Memory>,
+    /// The element each enclosing `FragmentEach` is at: its fragment and
+    /// position, innermost last.
+    pub(super) elements: Vec<(BufferId, i64)>,
     phase: PhaseLog,
     first_thread: usize,
 }
@@ -56,6 +59,7 @@ impl Grid<'_> {
             threads,
             shared: HashMap::new(),
             fragments: HashMap::new(),
+            elements: Vec::new(),
             phase: PhaseLog::default(),
             first_thread: block * count,
         };
@@ -92,7 +96,7 @@ fn unflatten(flat: usize, dims: [usize; 3]) -> [usize; 3] {
 
 impl Block<'_, '_> {
     /// Runs `stmt` on the `active` threads, statement by statement.
-    fn exec(&mut self, stmt: &Stmt, active: &[usize]) -> Result<(), RunError> {
+    pub(super) fn exec(&mut self, stmt: &Stmt, active: &[usize]) -> Result<(), RunError> {
         match stmt {
             Stmt::Seq(stmts) => stmts.iter().try_for_each(|stmt| self.exec(stmt, active)),
             Stmt::For { var, extent, body, .. } => {
@@ -149,7 +153,15 @@ impl Block<'_, '_> {
             Stmt::FragmentStore { fragment, target, at } => {
                 self.copy_tile(Tile::Store { fragment: *fragment, other: *target, at: *at }, active)
             }
+            Stmt::FragmentEach { fragment, row, column, body } => {
+                self.each_element(*fragment, [*row, *column], body, active)
+            }
         }
+    }
+
+    /// Binds `var` to `value` in thread `thread`.
+    pub(super) fn set_var(&mut self, thread: usize, var: VarId, value: i64) {
+        let _previous = self.threads[thread].vars.insert(var, value);
     }
 
     /// Runs `body` with `buffer` allocated: once for the block if shared,
@@ -248,6 +260,7 @@ impl Block<'_, '_> {
                 self.load(*buffer, position, thread)?
             }
             ValueExpr::Const(scalar) => Value::of_scalar(*scalar),
+            ValueExpr::Element(fragment) => self.element(*fragment, thread)?,
             ValueExpr::Index { index, dtype } => {
                 wrap(i128::from(self.index(*index, thread)?), *dtype)
             }

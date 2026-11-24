@@ -6,8 +6,8 @@ use crate::compute::{
 use crate::expr::{ExprArena, VarId};
 use crate::schedule::{Primitive, Schedule, SplitFactor, ThreadAxis};
 use crate::stmt::{
-    Access, Buffer, BufferId, Condition, ForKind, FragmentShape, KernelParam, KernelVar,
-    LaunchShape, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
+    Access, Buffer, BufferId, Condition, ForKind, FragmentShape, FragmentTile, KernelParam,
+    KernelVar, LaunchShape, LoweredKernel, MemScope, Stmt, TileAccess, TileOrder, ValueExpr,
 };
 use ptxc_core::{DType, Dim, ElementCount, Idx, IndexVec, KernelName, Shape};
 use ptxc_target::{
@@ -53,6 +53,21 @@ fn kernel_with(outer: Option<ThreadAxis>) -> LoweredKernel {
 /// with zero, multiplies, and stores `c` (`m × n`, row-major). Buffers 0
 /// (`a`), 1 (`b`) and 2 (`c`) are its parameters.
 pub(crate) fn mma_kernel(instruction: MmaInstruction, b_order: TileOrder) -> LoweredKernel {
+    let row_major = TileOrder::RowMajor;
+    mma_kernel_storing(instruction, b_order, |kernel, accumulator, c| {
+        let origin = kernel.exprs.constant(0);
+        let at = TileAccess { origin, stride: instruction.shape.n, order: row_major };
+        Stmt::FragmentStore { fragment: accumulator, target: c, at }
+    })
+}
+
+/// As `mma_kernel`, with `store` making the statement that stores the
+/// accumulator's tile to `c`.
+pub(crate) fn mma_kernel_storing(
+    instruction: MmaInstruction,
+    b_order: TileOrder,
+    store: impl FnOnce(&mut LoweredKernel, FragmentTile, BufferId) -> Stmt,
+) -> LoweredKernel {
     let MmaShape { m, n, k } = instruction.shape;
     let (multiplicands, accumulator) = (instruction.multiplicands, instruction.accumulator);
     let mut kernel = warp_kernel();
@@ -77,13 +92,15 @@ pub(crate) fn mma_kernel(instruction: MmaInstruction, b_order: TileOrder) -> Low
     ];
     let zero = kernel.exprs.constant(0);
     let at = |stride: Dim, order| TileAccess { origin: zero, stride, order };
+    let [a_tile_0, b_tile_0, c_tile_0] =
+        [a_fragment, b_fragment, c_fragment].map(|buffer| FragmentTile { buffer, tile: zero });
     let b_stride = if b_order == TileOrder::Transposed { k } else { n };
     let fragments = Stmt::Seq(vec![
-        Stmt::FragmentLoad { fragment: a_fragment, source: a_tile, at: at(k, TileOrder::RowMajor) },
-        Stmt::FragmentLoad { fragment: b_fragment, source: b_tile, at: at(b_stride, b_order) },
-        Stmt::FragmentFill { fragment: c_fragment, value: Scalar::zero(accumulator) },
-        Stmt::Mma { instruction, a: a_fragment, b: b_fragment, accumulator: c_fragment },
-        Stmt::FragmentStore { fragment: c_fragment, target: c, at: at(n, TileOrder::RowMajor) },
+        Stmt::FragmentLoad { fragment: a_tile_0, source: a_tile, at: at(k, TileOrder::RowMajor) },
+        Stmt::FragmentLoad { fragment: b_tile_0, source: b_tile, at: at(b_stride, b_order) },
+        Stmt::FragmentFill { fragment: c_tile_0, value: Scalar::zero(accumulator) },
+        Stmt::Mma { instruction, a: a_tile_0, b: b_tile_0, accumulator: c_tile_0 },
+        store(&mut kernel, c_tile_0, c),
     ]);
     let staged = Stmt::Seq(vec![
         warp_copy(&mut kernel, a, a_tile, rows * depth),
