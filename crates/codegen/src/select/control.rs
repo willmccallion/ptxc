@@ -3,7 +3,7 @@
 use super::{CodegenError, Selector};
 use crate::ast::{B64, Compare, CvtMode, PtxType, Reg, Signedness, Special, Value};
 use ptxc_core::Dim;
-use ptxc_loop::{ForKind, Interval, KernelVar, Stmt, ThreadAxis, VarId};
+use ptxc_loop::{Condition, ForKind, Interval, KernelVar, Stmt, ThreadAxis, VarId};
 
 const fn special(axis: ThreadAxis) -> Special {
     match axis {
@@ -46,19 +46,7 @@ impl Selector<'_> {
                 Ok(())
             }
             Stmt::For { var, extent, body, .. } => self.for_loop(*var, *extent, body),
-            Stmt::If { condition, then } => {
-                let index = self.index(condition.index)?;
-                let bound = self.index_operand(condition.bound)?;
-                let outside =
-                    self.builder.compare_int(Compare::Ge, Signedness::Signed, index.into(), bound);
-                let skip = self.builder.label();
-                self.builder.branch(skip, Some((outside, true)));
-                let outer = self.known.clone();
-                self.statement(then)?;
-                self.builder.place(skip);
-                self.known.leave(outer);
-                Ok(())
-            }
+            Stmt::If { condition, then } => self.guarded(*condition, then),
             Stmt::Alloc { buffer, body } => {
                 self.declare(*buffer)?;
                 self.statement(body)
@@ -79,6 +67,18 @@ impl Selector<'_> {
                 self.known.forget_values();
                 Ok(())
             }
+            Stmt::AsyncCopy { target, target_index, source, source_index, run, bounds } => {
+                let ends = [(*target, *target_index), (*source, *source_index)];
+                self.async_copy(ends, (*run, bounds))
+            }
+            Stmt::AsyncCommit => {
+                self.builder.commit_copies();
+                Ok(())
+            }
+            Stmt::AsyncWait { pending } => {
+                self.wait_copies(*pending);
+                Ok(())
+            }
             Stmt::FragmentFill { fragment, value } => self.fill_fragment(*fragment, *value),
             Stmt::FragmentLoad { fragment, source, at } => {
                 self.load_fragment(*fragment, (*source, *at))
@@ -90,6 +90,21 @@ impl Selector<'_> {
                 self.each_element(*fragment, [*row, *column], body)
             }
         }
+    }
+
+    /// `then`, skipped where `condition` fails.
+    fn guarded(&mut self, condition: Condition, then: &Stmt) -> Result<(), CodegenError> {
+        let index = self.index(condition.index)?;
+        let bound = self.index_operand(condition.bound)?;
+        let outside =
+            self.builder.compare_int(Compare::Ge, Signedness::Signed, index.into(), bound);
+        let skip = self.builder.label();
+        self.builder.branch(skip, Some((outside, true)));
+        let outer = self.known.clone();
+        self.statement(then)?;
+        self.builder.place(skip);
+        self.known.leave(outer);
+        Ok(())
     }
 
     /// A counted loop over `body`, `var` from 0 to `extent - 1`.

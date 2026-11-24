@@ -45,7 +45,11 @@ fn statement_roots(stmt: &Stmt, roots: &mut Vec<ExprId>) {
             roots.push(*index);
             value_roots(value, roots);
         }
-        Stmt::Barrier => {}
+        Stmt::AsyncCopy { target_index, source_index, bounds, .. } => {
+            roots.extend([*target_index, *source_index]);
+            roots.extend(bounds.iter().flat_map(|bound| [bound.index, bound.bound]));
+        }
+        Stmt::Barrier | Stmt::AsyncCommit | Stmt::AsyncWait { .. } => {}
         Stmt::FragmentFill { fragment, .. } => roots.push(fragment.tile),
         Stmt::FragmentLoad { fragment, at: TileAccess { origin, .. }, .. } => {
             roots.extend([fragment.tile, *origin]);

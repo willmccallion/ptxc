@@ -88,7 +88,8 @@ impl Computed<'_> {
                     self.access(read, at);
                 }
             }
-            Stmt::Barrier => {}
+            Stmt::Barrier | Stmt::AsyncCopy { .. } | Stmt::AsyncCommit | Stmt::AsyncWait { .. } => {
+            }
             Stmt::FragmentFill { fragment, .. } | Stmt::FragmentLoad { fragment, .. } => {
                 self.tile(*fragment);
             }

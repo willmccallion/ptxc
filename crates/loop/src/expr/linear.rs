@@ -120,12 +120,50 @@ impl LinearSum {
 
 impl ExprArena {
     /// Whether every value of `id` is a multiple of `factor`: the constant
-    /// and every coefficient of its affine form are.
+    /// of its affine form is, and each term's coefficient or atom is. A
+    /// `floormod` is where both its sides are, and a product of two
+    /// non-constant factors where either is.
     pub(crate) fn is_multiple_of(&self, id: ExprId, factor: u64) -> bool {
-        let Ok(factor) = i64::try_from(factor) else { return false };
+        i64::try_from(factor).is_ok_and(|factor| self.multiple(id, factor))
+    }
+
+    fn multiple(&self, id: ExprId, factor: i64) -> bool {
         LinearSum::of(self, id).is_some_and(|sum| {
             sum.constant() % factor == 0
-                && sum.terms().all(|(_, coefficient)| coefficient % factor == 0)
+                && sum.terms().all(|(atom, coefficient)| {
+                    coefficient % factor == 0 || self.multiple_atom(atom, factor)
+                })
         })
+    }
+
+    fn multiple_atom(&self, atom: ExprId, factor: i64) -> bool {
+        match self.get(atom) {
+            Expr::FloorMod(a, b) => self.multiple(a, factor) && self.multiple(b, factor),
+            Expr::Mul(a, b) => self.multiple(a, factor) || self.multiple(b, factor),
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::expr::{ExprArena, VarId};
+    use ptxc_core::Idx;
+
+    #[test]
+    fn a_floormod_or_product_is_a_multiple_where_its_parts_make_it_one() {
+        let mut exprs = ExprArena::new();
+        let [i, j] = [0, 1].map(|var| exprs.var(VarId::new(var)));
+        let [four, six, eight] = [4, 6, 8].map(|value| exprs.constant(value));
+        let scaled = exprs.mul(i, four);
+        let wrapped = exprs.floor_mod(scaled, eight);
+        let wrapped_by_six = exprs.floor_mod(scaled, six);
+        let times_j = exprs.mul(scaled, j);
+        let bare = exprs.mul(i, j);
+
+        let multiples =
+            [wrapped, wrapped_by_six, times_j, bare].map(|id| exprs.is_multiple_of(id, 4));
+
+        assert_eq!(multiples, [true, false, true, false]);
     }
 }

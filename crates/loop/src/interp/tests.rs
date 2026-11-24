@@ -12,18 +12,18 @@ use crate::test_kernels::kernel;
 use ptxc_core::{ElementCount, Idx, TensorData};
 
 /// The output buffer of the test kernel.
-const Y: usize = 1;
+pub(super) const Y: usize = 1;
 
-fn input() -> HostTensor {
+pub(super) fn input() -> HostTensor {
     HostTensor::vector(vec![1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0].into())
 }
 
-fn with_body(base: &LoweredKernel, body: Stmt) -> LoweredKernel {
+pub(super) fn with_body(base: &LoweredKernel, body: Stmt) -> LoweredKernel {
     LoweredKernel { body, ..base.clone() }
 }
 
 /// `threadIdx.x`'s variable.
-fn thread(base: &mut LoweredKernel) -> ExprId {
+pub(super) fn thread(base: &mut LoweredKernel) -> ExprId {
     let (var, _) = base
         .vars
         .iter_enumerated()
@@ -37,7 +37,7 @@ fn thread(base: &mut LoweredKernel) -> ExprId {
     base.exprs.var(var)
 }
 
-fn shared(base: &mut LoweredKernel, size: u64) -> BufferId {
+pub(super) fn shared(base: &mut LoweredKernel, size: u64) -> BufferId {
     base.buffers.push(Buffer {
         name: TensorName::new("tile"),
         dtype: DType::F32,
@@ -46,7 +46,7 @@ fn shared(base: &mut LoweredKernel, size: u64) -> BufferId {
     })
 }
 
-fn float(value: f64) -> ValueExpr {
+pub(super) fn float(value: f64) -> ValueExpr {
     ValueExpr::Const(Scalar::float(DType::F32, value).unwrap())
 }
 

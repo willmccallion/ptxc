@@ -54,6 +54,18 @@ impl Unroller {
                 Stmt::Store { buffer: *buffer, index: self.index(*index), value: self.value(value) }
             }
             Stmt::Barrier => Stmt::Barrier,
+            Stmt::AsyncCopy { target, target_index, source, source_index, run, bounds } => {
+                Stmt::AsyncCopy {
+                    target: *target,
+                    target_index: self.index(*target_index),
+                    source: *source,
+                    source_index: self.index(*source_index),
+                    run: *run,
+                    bounds: bounds.iter().map(|&bound| self.condition(bound)).collect(),
+                }
+            }
+            Stmt::AsyncCommit => Stmt::AsyncCommit,
+            Stmt::AsyncWait { pending } => Stmt::AsyncWait { pending: *pending },
             Stmt::FragmentFill { fragment, value } => {
                 Stmt::FragmentFill { fragment: self.tile(*fragment), value: *value }
             }
@@ -94,8 +106,7 @@ impl Unroller {
     /// `then` alone where the ranges show the condition always holds, and
     /// nothing where they show it never does.
     fn guarded(&mut self, condition: Condition, then: &Stmt) -> Stmt {
-        let condition =
-            Condition { index: self.index(condition.index), bound: self.index(condition.bound) };
+        let condition = self.condition(condition);
         let index = self.exprs.bounds(condition.index, &self.ranges);
         let bound = self.exprs.bounds(condition.bound, &self.ranges);
         if let (Some(index), Some(bound)) = (index, bound) {
@@ -107,6 +118,11 @@ impl Unroller {
             }
         }
         Stmt::If { condition, then: Box::new(self.stmt(then)) }
+    }
+
+    /// `condition` with the current values substituted in both sides.
+    fn condition(&mut self, condition: Condition) -> Condition {
+        Condition { index: self.index(condition.index), bound: self.index(condition.bound) }
     }
 
     /// `fragment` with the current values substituted in its tile.
