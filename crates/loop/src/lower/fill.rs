@@ -1,7 +1,9 @@
 //! The block's threads filling a staged tile from its input, between two
 //! barriers: run `r` of the tile's adjacent elements by thread `r mod T` in
-//! round `r div T`. A run is 16 bytes where the tile and its input allow,
-//! copied by one vectorized loop, and one element otherwise.
+//! round `r div T`. A run is 16, 8 or 4 bytes where the tile and its input
+//! allow, started as one asynchronous copy that lands at a wait before the
+//! second barrier, zero outside the input (D63); and otherwise one element,
+//! loaded and stored.
 
 use super::cache::{Tile, tile_size};
 use super::context::Lowerer;
@@ -11,32 +13,52 @@ use crate::schedule::{LoopAnnotation, ThreadAxis};
 use crate::stmt::{BufferId, Condition, ForKind, KernelVar, Stmt, ValueExpr};
 use ptxc_core::{Dim, Idx};
 
-/// The bytes a thread copies at once where a tile allows: one 16-byte
-/// vector access, as CUTLASS's tile iterators make.
-const RUN_BYTES: u64 = 16;
+/// The runs a thread copies at once where a tile allows, longest first:
+/// the sizes of `cp.async`, whose 16-byte copies CUTLASS's tile iterators
+/// make.
+const RUN_BYTES: [u64; 3] = [16, 8, 4];
+
+/// How a thread copies its run: as one asynchronous copy, or, for one
+/// element shorter than any of `RUN_BYTES`, with a load and a store.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunCopy {
+    Async,
+    Direct,
+}
+
+/// The adjacent elements a thread copies at once, and how.
+#[derive(Clone, Copy)]
+struct Run {
+    length: u64,
+    copy: RunCopy,
+}
 
 impl Lowerer<'_> {
-    /// `body` after a barrier, the filling of `tiles`, and another barrier.
-    /// The first barrier keeps the fill from overwriting elements the
-    /// previous iteration's body may still be reading.
+    /// `body` after a barrier, the filling of `tiles`, a wait for their
+    /// asynchronous copies, and another barrier. The first barrier keeps
+    /// the fill from overwriting elements the previous iteration's body may
+    /// still be reading.
     pub(super) fn fill_before(&mut self, tiles: &[Tile], body: Stmt) -> Stmt {
         if tiles.is_empty() {
             return body;
         }
+        let runs: Vec<Run> = tiles.iter().map(|tile| self.run(tile)).collect();
         let mut steps = vec![Stmt::Barrier];
-        for tile in tiles {
-            steps.push(self.fill(tile));
+        for (tile, &run) in tiles.iter().zip(&runs) {
+            steps.push(self.fill(tile, run));
+        }
+        if runs.iter().any(|run| run.copy == RunCopy::Async) {
+            steps.extend([Stmt::AsyncCommit, Stmt::AsyncWait { pending: 0 }]);
         }
         steps.extend([Stmt::Barrier, body]);
         Stmt::Seq(steps)
     }
 
-    /// The block's threads copying `tile` from its input: run `r` by
-    /// thread `r mod T` in round `r div T`, for `T` threads. A tile no
-    /// larger than the block takes one round, with no loop.
-    fn fill(&mut self, tile: &Tile) -> Stmt {
-        let run = self.run_length(tile);
-        let runs = Dim::new(tile_size(&tile.extents) / run);
+    /// The block's threads copying `tile` from its input in runs of `run`:
+    /// run `r` by thread `r mod T` in round `r div T`, for `T` threads. A
+    /// tile no larger than the block takes one round, with no loop.
+    fn fill(&mut self, tile: &Tile, run: Run) -> Stmt {
+        let runs = Dim::new(tile_size(&tile.extents) / run.length);
         // Validation's thread count is at least 1: an empty loop cannot be bound.
         let rounds = Dim::new(runs.get().div_ceil(u64::from(tile.threads.get())));
         if rounds.get() == 1 {
@@ -48,47 +70,76 @@ impl Lowerer<'_> {
         Stmt::For { var: round_var, extent: rounds, kind: ForKind::Serial, body: Box::new(copy) }
     }
 
-    /// The adjacent elements a thread copies at once: a 16-byte run where
-    /// the tile's and its input's innermost extents and the tile's origin
-    /// along that axis are multiples of it, so a run lies in one row of
-    /// both, aligned; and one element otherwise.
-    fn run_length(&self, tile: &Tile) -> u64 {
+    /// How `tile` is copied: in the longest of `RUN_BYTES` whose length
+    /// divides the tile's and its input's innermost extents and the tile's
+    /// origin along that axis, so a run lies in one row of both, aligned;
+    /// and one element where none does.
+    fn run(&self, tile: &Tile) -> Run {
         let input = &self.compute.inputs()[tile.tensor];
-        let run = RUN_BYTES / input.dtype.element_size().get();
+        let element = input.dtype.element_size().get();
         let innermost = (tile.extents.last(), input.shape.dims().last(), tile.origin.last());
-        let (Some(tile_extent), Some(input_extent), Some(&origin)) = innermost else { return 1 };
-        let fits = tile_extent.get().is_multiple_of(run)
-            && input_extent.get().is_multiple_of(run)
-            && self.exprs.is_multiple_of(origin, run);
-        if fits { run } else { 1 }
+        let length = match innermost {
+            (Some(tile_extent), Some(input_extent), Some(&origin)) => {
+                let fits = |run: u64| {
+                    tile_extent.get().is_multiple_of(run)
+                        && input_extent.get().is_multiple_of(run)
+                        && self.exprs.is_multiple_of(origin, run)
+                };
+                RUN_BYTES.iter().map(|bytes| bytes / element).find(|&run| fits(run)).unwrap_or(1)
+            }
+            _ => 1,
+        };
+        let copy =
+            if RUN_BYTES.contains(&(length * element)) { RunCopy::Async } else { RunCopy::Direct };
+        Run { length, copy }
     }
 
-    /// Each thread's copy of its run of `tile` in `round` of `rounds`,
-    /// under the bounds the loops' ranges do not already prove. A run
-    /// starts at a multiple of its length in a row whose extent is one, so
-    /// its first element's bounds are all of its elements'. In a
-    /// tensorized nest the run is cleared first, so an `mma` over a tile
-    /// overhanging its input multiplies zeros there.
-    fn fill_round(&mut self, tile: &Tile, (round, rounds): (ExprId, Dim), run: u64) -> Stmt {
+    /// Each thread's copy of its run of `tile` in `round` of `rounds`. A
+    /// run starts at a multiple of its length in a row whose extent is one,
+    /// so its first element's bounds are all of its elements'.
+    fn fill_round(&mut self, tile: &Tile, (round, rounds): (ExprId, Dim), run: Run) -> Stmt {
         let index = self.tile_element(round, rounds);
-        let first = self.scaled(index, run);
+        let first = self.scaled(index, run.length);
         let coordinates = self.coordinates(first, tile);
         let dims = self.compute.inputs()[tile.tensor].shape.dims().to_vec();
         let position = self.linearize(&coordinates, &dims);
-        let source = Some((self.input_buffer(tile.tensor), position));
-        let copied = self.run_copy(tile, (first, source), run);
-        let in_input = coordinates
-            .iter()
-            .zip(&dims)
-            .rev()
-            .fold(copied, |body, (&index, &dim)| self.within(index, dim, body));
-        let copy = if self.tree.tensorized().is_some() {
-            let cleared = self.run_copy(tile, (first, None), run);
-            Stmt::Seq(vec![cleared, in_input])
-        } else {
-            in_input
+        let source = (self.input_buffer(tile.tensor), self.simplify(position));
+        let mut in_input = Vec::new();
+        for (&coordinate, &dim) in coordinates.iter().zip(&dims).rev() {
+            in_input.extend(self.open_bounds(coordinate, dim));
+        }
+        let copy = match run.copy {
+            RunCopy::Async => Stmt::AsyncCopy {
+                target: tile.buffer,
+                target_index: first,
+                source: source.0,
+                source_index: source.1,
+                run: Dim::new(run.length),
+                bounds: in_input,
+            },
+            RunCopy::Direct => self.element_copy(tile, (first, source), in_input),
         };
-        self.within(index, Dim::new(tile_size(&tile.extents) / run), copy)
+        self.within(index, Dim::new(tile_size(&tile.extents) / run.length), copy)
+    }
+
+    /// `tile`'s element `first` stored from `source`'s, where every one of
+    /// `in_input` holds. In a tensorized nest the element is cleared first,
+    /// so an `mma` over a tile overhanging its input multiplies zeros there.
+    fn element_copy(
+        &self,
+        tile: &Tile,
+        (first, (buffer, position)): (ExprId, (BufferId, ExprId)),
+        in_input: Vec<Condition>,
+    ) -> Stmt {
+        let value = ValueExpr::Load { buffer, index: position };
+        let copied = Stmt::Store { buffer: tile.buffer, index: first, value };
+        let guarded = guarded_by(in_input, copied);
+        if self.tree.tensorized().is_none() {
+            return guarded;
+        }
+        let zero = ValueExpr::Const(Scalar::zero(self.compute.inputs()[tile.tensor].dtype));
+        let cleared = Stmt::Store { buffer: tile.buffer, index: first, value: zero };
+        Stmt::Seq(vec![cleared, guarded])
     }
 
     /// `id * factor`, left unsimplified for `id`'s guard to bound it.
@@ -98,42 +149,6 @@ impl Lowerer<'_> {
         }
         let factor = self.extent(Dim::new(factor));
         self.exprs.mul(id, factor)
-    }
-
-    /// The `run` elements of `tile` from `first` set from `source`'s
-    /// buffer at its position onward, or cleared without one: a vectorized
-    /// loop, or one store for a run of one.
-    fn run_copy(
-        &mut self,
-        tile: &Tile,
-        (first, source): (ExprId, Option<(BufferId, ExprId)>),
-        run: u64,
-    ) -> Stmt {
-        let (store_at, step) = if run == 1 {
-            (first, None)
-        } else {
-            let role = if source.is_some() { "run" } else { "clear" };
-            let (var, element) = self.fill_var(tile.tensor, role, Dim::new(run));
-            // Unsimplified, so the guard on the run's index bounds the store.
-            (self.exprs.add(first, element), Some((var, element)))
-        };
-        let value = match source {
-            Some((buffer, position)) => {
-                let at = step.map_or(position, |(_, element)| self.exprs.add(position, element));
-                ValueExpr::Load { buffer, index: self.simplify(at) }
-            }
-            None => ValueExpr::Const(Scalar::zero(self.compute.inputs()[tile.tensor].dtype)),
-        };
-        let store = Stmt::Store { buffer: tile.buffer, index: store_at, value };
-        match step {
-            Some((var, _)) => Stmt::For {
-                var,
-                extent: Dim::new(run),
-                kind: ForKind::Vectorized,
-                body: Box::new(store),
-            },
-            None => store,
-        }
     }
 
     /// A new loop variable over `extent`, named for filling `tensor`'s
@@ -197,19 +212,30 @@ impl Lowerer<'_> {
     /// `body` under `0 <= index < bound`, checking only the sides the
     /// loops' ranges leave open.
     fn within(&mut self, index: ExprId, bound: Dim, body: Stmt) -> Stmt {
+        let open = self.open_bounds(index, bound);
+        guarded_by(open, body)
+    }
+
+    /// The conditions of `0 <= index < bound` the loops' ranges leave
+    /// open, the upper bound first.
+    fn open_bounds(&mut self, index: ExprId, bound: Dim) -> Vec<Condition> {
         let known = self.bounds(index);
-        let mut guarded = body;
+        let mut open = Vec::new();
         if known.is_none_or(|known| i128::from(known.max()) >= i128::from(bound.get())) {
-            let limit = self.extent(bound);
-            let condition = Condition { index, bound: limit };
-            guarded = Stmt::If { condition, then: Box::new(guarded) };
+            open.push(Condition { index, bound: self.extent(bound) });
         }
         if known.is_none_or(|known| known.min() < 0) {
             // `0 <= index` as `-index < 1`: an `If` compares only one way.
             let negated = self.negated(index);
-            let condition = Condition { index: self.simplify(negated), bound: self.constant(1) };
-            guarded = Stmt::If { condition, then: Box::new(guarded) };
+            open.push(Condition { index: self.simplify(negated), bound: self.constant(1) });
         }
-        guarded
+        open
     }
+}
+
+/// `body` inside an `If` for each of `conditions`, the first innermost.
+fn guarded_by(conditions: Vec<Condition>, body: Stmt) -> Stmt {
+    conditions
+        .into_iter()
+        .fold(body, |then, condition| Stmt::If { condition, then: Box::new(then) })
 }

@@ -1170,3 +1170,31 @@ the old one.
   under ptxc's control and independent of what else a kernel contains.
   Fragments are already accessed at constant indices for ptxas's sake, so
   the rule holds every fragment the default schedules make.
+
+## D63. Staged tiles fill with `cp.async`
+
+- **Context:** a staged fill loaded each run into registers and stored it
+  to shared memory, 16 bytes at a time where the tile allowed (#146) and
+  one element otherwise. Multi-stage pipelining (#109) needs copies that
+  land later than they are issued, which only `cp.async` gives on sm_80
+  and later.
+- **Options:** keep synchronous fills and add `cp.async` only with
+  pipelining; or fill with `cp.async` now, one stage deep, so the pipeline
+  only moves waits.
+- **Choice:**
+  - A fill copies each run of 16, 8 or 4 bytes with one `AsyncCopy`, the
+    longest the tile's rows allow. It then commits once and waits for
+    every group before its closing barrier.
+  - A copy carries its input bounds and copies zeros where they fail, so a
+    tensorized tile overhanging its input needs no separate clear.
+  - Tiles whose rows fit no such run, for example 8- or 16-bit elements at
+    an odd offset, still copy one element at a time.
+  - The interpreter lands a copy only at its wait and rejects any access
+    before it, so a missing or misplaced wait fails on the CPU.
+- **Reason:** this is the copy CUTLASS's Ampere GEMMs make, and a pipeline
+  then only reorders waits, which the interpreter checks. One stage deep,
+  it is 3 to 5% slower than loads and stores on large GEMMs whose tiles
+  fit (`.ca` instead of `.cg` changes nothing), and up to 1.8 times faster
+  where tiles overhang their input or the product is skinny. The f16 NN
+  sweep's shapes of at least 1024 go from 70% to 78% of cuBLAS. It
+  depends on codegen holding fragments in registers (D62).

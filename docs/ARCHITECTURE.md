@@ -339,7 +339,10 @@ pub enum Stmt {
     FragmentLoad { fragment: FragmentTile, source: BufferId, at: TileAccess }, // from shared memory
     Mma { instruction: MmaInstruction, a: FragmentTile, b: FragmentTile, accumulator: FragmentTile },
     FragmentEach { fragment: FragmentTile, row: VarId, column: VarId, body: Box<Stmt> }, // ValueExpr::Element
-    // M3: AsyncCopy, AsyncCommit, AsyncWait
+    AsyncCopy { target: BufferId, target_index: ExprId, source: BufferId, source_index: ExprId,
+                run: Dim, bounds: Vec<Condition> },                   // cp.async: global to shared, zero where a bound fails
+    AsyncCommit,                                                        // closes the thread's group of copies
+    AsyncWait { pending: u32 },                                         // lands all but the newest `pending` groups
 }
 ```
 
@@ -354,11 +357,13 @@ Arg-reductions combine (value, position) pairs by a rule that depends only
 on both, so any loop order or thread split gives the same position. A
 staged input's loop allocates its tile, and each iteration fills it between
 two barriers, the block's threads copying elements in rounds, before the
-loads read the tile instead of global memory. A thread copies a 16-byte
-run at a time, as a vectorized loop, where the tile's and its input's
-innermost extents and the tile's origin along that axis are multiples of
-the run, so a run lies in one row of both, aligned; the run's guards are
-its first element's. Otherwise it copies one element.
+loads read the tile instead of global memory. A thread copies the longest
+run of 16, 8 or 4 bytes whose length divides the tile's and its input's
+innermost extents and the tile's origin along that axis, so a run lies in
+one row of both, aligned, with one `AsyncCopy`: its bounds are its first
+element's, and it copies zeros where they fail. The fill commits its
+copies and waits for them before the second barrier (D63). A tile no such
+run fits copies one element at a time.
 
 `Tensorize` makes the innermost three loops of a product one `mma` tile per
 warp, the block's `threadIdx.x` its 32 lanes (D58). Validation checks the
@@ -372,13 +377,16 @@ fragment array over those tile loops, and each operand's fragments in an
 array over the tile loops its tile reads. Each step loads every distinct
 fragment once, then multiplies every pair of tiles. The result is stored
 through a `FragmentEach` that binds the tile's row and column loops, so the
-output's guards and epilogue apply unchanged. Staged tiles are cleared before they
-are filled, so a tile overhanging its input multiplies zeros there.
+output's guards and epilogue apply unchanged. Staged tiles hold zeros where
+they overhang their input, so an `mma` there multiplies zeros: copies
+zero-fill, and a tile copied element by element is cleared first.
 `verify` checks what code generation relies on: variables bound where read,
 buffers used as their scope and access allow, shared and local accesses
 provably in bounds (with `If` conditions narrowing ranges and capping the
 very index they compare), no barrier under
-a thread-dependent condition, and well-typed values.
+a thread-dependent condition, well-typed values, and asynchronous copies
+from a global input to shared memory of 4, 8 or 16 bytes, both runs
+starting at a multiple of their length.
 
 Index expressions (`Expr::{Var, Const, Add, Mul, FloorDiv, FloorMod, Min, Max}`)
 are hash-consed in an `ExprArena` and addressed by `ExprId`, so structural
@@ -398,7 +406,11 @@ to its element type at each operation, as a GPU computes it. Memory starts
 unset: reading an element no one stored, or leaving an output element
 unwritten, is an error. `race.rs` flags two threads touching one shared
 element between barriers (one of them writing) and two threads writing one
-global element. Fragment statements run once per warp on logical tiles,
+global element. An asynchronous copy reads its source when it starts and
+lands only at the wait that completes its group, as `cp.async` guarantees
+no sooner; touching its elements before, or freeing its tile with it in
+flight, is an error, so a missing wait fails on the CPU. Fragment
+statements run once per warp on logical tiles,
 `Mma` adding exact products in `k` order and rounding once (D58). A
 schedule is therefore checked with no GPU: most scheduling bugs (wrong
 tiling, a missing barrier, a bad swizzle, the wrong tile multiplied) are
@@ -479,6 +491,10 @@ and the GPU tests check them.
   to their type after every operation, D42), 8- and 32-bit integers in
   32-bit registers, wrapped after every operation, `i64` in 64-bit, and
   booleans as predicates. Index arithmetic is `s64`.
+- An `AsyncCopy` is one `cp.async`: `.cg` for 16 bytes, as CUTLASS's
+  copies are, and `.ca` for 4 and 8, with a `src-size` operand selecting 0
+  bytes where a bound fails. A wait forgets every value numbered before it,
+  as a barrier does.
 - A vectorized loop that copies or clears a run of 8 or 16 bytes, both
   indices stepping by one and starting aligned to the run, is one
   `ld.v2`/`ld.v4.b32` and `st.v2`/`st.v4.b32`; every buffer starts 256-byte
