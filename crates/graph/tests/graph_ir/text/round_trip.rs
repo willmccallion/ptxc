@@ -71,4 +71,4 @@ fn the_cases_cover_every_op_variant() {
 }
 
 /// The number of `Op` variants; update with the enum.
-const VARIANT_COUNT: usize = 38;
+const VARIANT_COUNT: usize = 39;

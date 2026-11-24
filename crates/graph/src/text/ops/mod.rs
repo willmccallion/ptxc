@@ -52,6 +52,7 @@ pub(super) fn encode(op: &Op) -> OpText {
         Op::PRelu => OpText::plain("prelu"),
         Op::MatMul => OpText::plain("matmul"),
         Op::Gemm(attrs) => matmul::encode_gemm(*attrs),
+        Op::MatMulInteger(attrs) => matmul::encode_matmul_integer(attrs),
         Op::Conv(attrs) => window::encode_conv(attrs),
         Op::Pool(attrs) => window::encode_pool(attrs),
         Op::GlobalPool(kind) => window::encode_global_pool(*kind),

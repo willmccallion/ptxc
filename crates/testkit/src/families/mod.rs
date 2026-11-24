@@ -89,6 +89,7 @@ pub fn all() -> Vec<Family> {
         of_cases("gather_elements", g::gather_elements_cases()),
         of_cases("gather_nd", g::gather_nd_cases()),
         of_cases("matmul", m::matmul_cases()),
+        of_cases("matmul_integer", m::matmul_integer_cases()),
         of_cases("gemm", m::gemm_cases()),
         of_cases("pool", w::pool_cases()),
         of_cases("global_pool", w::global_pool_cases()),

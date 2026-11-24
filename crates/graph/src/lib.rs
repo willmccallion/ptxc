@@ -21,13 +21,13 @@ pub use ops::{
     AxisPadding, BatchNormAttrs, BinaryOp, CastAttrs, Causality, ConvAttrs, CoordinateTransform,
     CumSumAttrs, DequantizeAttrs, DiagonalOffset, Dilation, F32Attr, GeluApproximation, GemmAttrs,
     GlobalPoolKind, Groups, HeadCount, Inclusion, InfDetection, InstanceNormAttrs, KeepDims,
-    LayerNormAttrs, LayerNormKind, ModKind, NearestRounding, NormOutputs, Op, OperandCount,
-    Orientation, OutsideWeights, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs, PoolAxis,
-    PoolKind, Presence, QConvAttrs, QMatMulAttrs, QkOutput, QuantizeAttrs, ReduceAttrs, ReduceOp,
-    RepeatCount, ResizeAttrs, ResizeAxis, ResizeMode, Rounding, ScanDirection, SliceAttrs,
-    SliceAxis, SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, Stride, TieBreak,
-    TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp,
-    VariadicOp, WindowAxis,
+    LayerNormAttrs, LayerNormKind, MatMulIntegerAttrs, ModKind, NearestRounding, NormOutputs, Op,
+    OperandCount, Orientation, OutsideWeights, PadAttrs, PadCounting, PadMode, Padding, PoolAttrs,
+    PoolAxis, PoolKind, Presence, QConvAttrs, QMatMulAttrs, QkOutput, QuantizeAttrs, ReduceAttrs,
+    ReduceOp, RepeatCount, ResizeAttrs, ResizeAxis, ResizeMode, Rounding, ScanDirection,
+    SliceAttrs, SliceAxis, SliceStep, SoftmaxAttrs, SoftmaxKind, SplitAttrs, StashType, Stride,
+    TieBreak, TileAttrs, TransposeAttrs, TriangularPart, TriluAttrs, TypeError, TypeRule, UnaryOp,
+    VariadicOp, WindowAxis, ZeroPoints,
 };
 pub use partition::{FusedGroup, GroupId, GroupKind, Partitioned};
 pub use rewrite::{RewriteError, Rewriter};

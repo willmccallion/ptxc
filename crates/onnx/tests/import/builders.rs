@@ -102,6 +102,18 @@ pub(crate) fn i64_tensor(name: &str, dims: &[i64], values: &[i64]) -> TensorProt
     }
 }
 
+/// A tensor of `dtype` stored in `int32_data`, as ONNX stores 8-, 16- and
+/// 32-bit integers.
+pub(crate) fn typed(name: &str, dtype: DataType, dims: &[i64], int32_data: &[i32]) -> TensorProto {
+    TensorProto {
+        name: Some(name.to_owned()),
+        data_type: Some(dtype as i32),
+        dims: dims.to_vec(),
+        int32_data: int32_data.to_vec(),
+        ..TensorProto::default()
+    }
+}
+
 pub(crate) fn f32_tensor(name: &str, dims: &[i64], values: &[f32]) -> TensorProto {
     TensorProto {
         name: Some(name.to_owned()),

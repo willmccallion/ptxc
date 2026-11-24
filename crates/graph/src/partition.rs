@@ -36,7 +36,9 @@ impl GroupKind {
     pub const fn of(op: &Op) -> Self {
         match op {
             Op::Reshape(_) => Self::View,
-            Op::MatMul | Op::Gemm(_) | Op::QMatMul(_) => Self::MatMulEpilogue,
+            Op::MatMul | Op::Gemm(_) | Op::MatMulInteger(_) | Op::QMatMul(_) => {
+                Self::MatMulEpilogue
+            }
             Op::Conv(_) | Op::QConv(_) => Self::ConvEpilogue,
             Op::Attention(_) => Self::Attention,
             Op::Pool(_)

@@ -39,7 +39,12 @@ impl<'g> GroupBuilder<'g> {
 
     /// A new f32 intermediate of `shape`: statistics stay in f32.
     pub(crate) fn intermediate(&mut self, shape: &Shape) -> IntermediateId {
-        let ty = TensorType::new(DType::F32, shape.clone(), Layout::RowMajor);
+        self.intermediate_of(DType::F32, shape)
+    }
+
+    /// A new intermediate of `dtype` and `shape`.
+    pub(crate) fn intermediate_of(&mut self, dtype: DType, shape: &Shape) -> IntermediateId {
+        let ty = TensorType::new(dtype, shape.clone(), Layout::RowMajor);
         self.locals.intermediates.push(ty)
     }
 

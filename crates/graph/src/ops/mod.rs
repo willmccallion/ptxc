@@ -27,7 +27,7 @@ pub use attention::{
 pub use attr::F32Attr;
 pub use conv::{ConvAttrs, Groups};
 pub use elementwise::{BinaryOp, CastAttrs, InfDetection, ModKind, UnaryOp, VariadicOp};
-pub use matmul::{GemmAttrs, Orientation};
+pub use matmul::{GemmAttrs, MatMulIntegerAttrs, Orientation, ZeroPoints};
 pub use norm::{
     BatchNormAttrs, InstanceNormAttrs, LayerNormAttrs, LayerNormKind, NormOutputs, SoftmaxAttrs,
     SoftmaxKind, StashType,
@@ -77,6 +77,8 @@ pub enum Op {
     MatMul,
     /// `alpha * A' * B' + beta * C` on matrices.
     Gemm(GemmAttrs),
+    /// The `i32` matrix product of 8-bit integers less their zero points.
+    MatMulInteger(MatMulIntegerAttrs),
     /// Grouped N-d convolution with an optional bias.
     Conv(ConvAttrs),
     /// Max or average pooling over sliding windows.
@@ -154,6 +156,7 @@ impl TypeRule for Op {
             Self::Clip => activation::infer_clip(operands),
             Self::PRelu => activation::infer_prelu(operands),
             Self::MatMul => matmul::infer_matmul(operands),
+            Self::MatMulInteger(attrs) => attrs.infer(operands),
             Self::Gemm(attrs) => attrs.infer(operands),
             Self::Conv(attrs) => attrs.infer(operands),
             Self::Pool(attrs) => attrs.infer(operands),

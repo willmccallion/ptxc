@@ -1,6 +1,9 @@
 use crate::common::{f32_type, shape, tensor_type};
-use ptxc_core::{DType, Dim, Rank};
-use ptxc_graph::{F32Attr, GemmAttrs, Op, Orientation, TensorType, TypeError, TypeRule};
+use ptxc_core::{Axis, DType, Dim, Rank, ZeroPoint};
+use ptxc_graph::{
+    F32Attr, GemmAttrs, MatMulIntegerAttrs, Op, Orientation, TensorType, TypeError, TypeRule,
+    ZeroPoints,
+};
 
 fn matmul(a: &[u64], b: &[u64]) -> Result<Vec<TensorType>, TypeError> {
     Op::MatMul.infer(&[&f32_type(a), &f32_type(b)])
@@ -126,4 +129,53 @@ fn gemm_takes_two_or_three_operands() {
             "{error}"
         );
     }
+}
+
+const fn per_tensor(point: i32) -> ZeroPoints {
+    ZeroPoints::PerTensor(ZeroPoint::new(point))
+}
+
+fn per_axis(axis: usize, points: &[i32]) -> ZeroPoints {
+    let points = points.iter().copied().map(ZeroPoint::new).collect();
+    ZeroPoints::PerAxis { axis: Axis::new(axis), points }
+}
+
+fn matmul_integer(
+    (a, b): (ZeroPoints, ZeroPoints),
+    [lhs, rhs]: &[TensorType; 2],
+) -> Result<Vec<TensorType>, TypeError> {
+    Op::MatMulInteger(MatMulIntegerAttrs { a, b }).infer(&[lhs, rhs])
+}
+
+#[test]
+fn matmul_integer_gives_i32_products_of_either_8_bit_type() {
+    let points = || (per_axis(1, &[0, 1, 2]), per_axis(1, &[255, 0]));
+    let batched = [tensor_type(DType::I8, &[2, 3, 4]), tensor_type(DType::U8, &[4, 2])];
+    let vectors = [tensor_type(DType::U8, &[4]), tensor_type(DType::I8, &[4])];
+
+    let product = matmul_integer(points(), &batched);
+    let dot = matmul_integer((per_tensor(3), per_tensor(-5)), &vectors);
+
+    assert_eq!(product, Ok(vec![tensor_type(DType::I32, &[2, 3, 2])]));
+    assert_eq!(dot, Ok(vec![tensor_type(DType::I32, &[])]));
+}
+
+#[test]
+fn matmul_integer_zero_points_vary_by_rows_of_a_and_columns_of_b_in_range() {
+    let operands = || [tensor_type(DType::I8, &[3, 4]), tensor_type(DType::U8, &[4, 2])];
+    let along_depth = matmul_integer((per_axis(1, &[0; 4]), per_tensor(0)), &operands());
+    let too_few = matmul_integer((per_tensor(0), per_axis(1, &[1])), &operands());
+    let negative_u8 = matmul_integer((per_tensor(0), per_tensor(-1)), &operands());
+    let too_big_i8 = matmul_integer((per_tensor(128), per_tensor(0)), &operands());
+    let floats =
+        matmul_integer((per_tensor(0), per_tensor(0)), &[f32_type(&[3, 4]), f32_type(&[4, 2])]);
+
+    assert_eq!(along_depth, Err(TypeError::QuantAxis(Axis::new(1))));
+    let (axis, dim) = (Axis::new(1), Dim::new(2));
+    assert_eq!(too_few, Err(TypeError::QuantMapCount { axis, dim, maps: 1 }));
+    let range =
+        |point, dtype| Err(TypeError::ZeroPointRange { zero_point: ZeroPoint::new(point), dtype });
+    assert_eq!(negative_u8, range(-1, DType::U8));
+    assert_eq!(too_big_i8, range(128, DType::I8));
+    assert_eq!(floats, Err(TypeError::UnsupportedDType(DType::F32)));
 }

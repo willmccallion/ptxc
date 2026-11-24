@@ -2,7 +2,7 @@
 
 use super::attention::HeadCount;
 use super::conv::Groups;
-use ptxc_core::{Axis, DType, Dim, Rank, Shape, ShapeError};
+use ptxc_core::{Axis, DType, Dim, Rank, Shape, ShapeError, ZeroPoint};
 use thiserror::Error;
 
 /// A number of operands.
@@ -123,6 +123,14 @@ pub enum TypeError {
         dim: Dim,
         /// The number of maps.
         maps: usize,
+    },
+    /// A zero point outside its operand's element type.
+    #[error("zero point {} is outside {dtype:?}", .zero_point.get())]
+    ZeroPointRange {
+        /// The zero point.
+        zero_point: ZeroPoint,
+        /// The operand's element type.
+        dtype: DType,
     },
     /// Quantization maps that vary along an axis where the op allows only
     /// one map: an axis its arithmetic sums over, or a result's.
