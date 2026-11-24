@@ -269,3 +269,26 @@ fn an_unrolled_tile_of_accumulators_matches_bit_for_bit() {
 
     let _outputs = match_interpreter(&kernel, &inputs, "").unwrap();
 }
+
+/// `floordiv(i - 9, d)` and `floormod(i - 9, d)` for powers of two `d` and
+/// for 3, over operands from -9 to 10, as index values.
+#[test]
+fn floored_division_and_modulo_match_on_negative_operands() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("floored"));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(20));
+    let exprs = compute.exprs();
+    let offset = exprs.constant(-9);
+    let shifted = exprs.add(i, offset);
+    let mut outputs = Vec::new();
+    for divisor in [1, 3, 4, 8] {
+        let divisor = exprs.constant(divisor);
+        outputs.push(exprs.floor_div(shifted, divisor));
+        outputs.push(exprs.floor_mod(shifted, divisor));
+    }
+    for (n, index) in outputs.into_iter().enumerate() {
+        let value = TensorExpr::Index { index, dtype: DType::I64 };
+        compute.output(TensorName::new(format!("y{n}")), value);
+    }
+
+    check_against_interpreter(compute.finish().unwrap(), &[]);
+}

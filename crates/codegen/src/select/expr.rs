@@ -51,15 +51,42 @@ impl Selector<'_> {
                 let (a, b) = pair(self, a, b)?;
                 self.builder.int(BinaryOp::Max, signed, a, b)
             }
-            Expr::FloorDiv(a, b) => {
-                let (a, b) = pair(self, a, b)?;
-                self.floored(a, b).0
-            }
-            Expr::FloorMod(a, b) => {
-                let (a, b) = pair(self, a, b)?;
-                self.floored(a, b).1
-            }
+            Expr::FloorDiv(a, b) => self.floor_div(a, b)?,
+            Expr::FloorMod(a, b) => self.floor_mod(a, b)?,
         })
+    }
+
+    /// `a` divided by `b`, floored: an arithmetic shift right where `b` is
+    /// a power of two.
+    fn floor_div(&mut self, a: ExprId, b: ExprId) -> Result<Reg<B64>, CodegenError> {
+        let dividend = self.index_operand(a)?;
+        if let Some(divisor) = self.power_of_two(b) {
+            let shift = Value::<B64>::int(i64::from(divisor.trailing_zeros()));
+            return Ok(self.builder.int(BinaryOp::Shr, Signedness::Signed, dividend, shift));
+        }
+        let divisor = self.index_operand(b)?;
+        Ok(self.floored(dividend, divisor).0)
+    }
+
+    /// The remainder of `a` by `b` with `b`'s sign: a mask where `b` is a
+    /// power of two.
+    fn floor_mod(&mut self, a: ExprId, b: ExprId) -> Result<Reg<B64>, CodegenError> {
+        let dividend = self.index_operand(a)?;
+        if let Some(divisor) = self.power_of_two(b) {
+            let mask = Value::<B64>::int(divisor - 1);
+            return Ok(self.builder.int(BinaryOp::And, Signedness::Bits, dividend, mask));
+        }
+        let divisor = self.index_operand(b)?;
+        Ok(self.floored(dividend, divisor).1)
+    }
+
+    /// `id`'s value if it is a constant positive power of two. Floored
+    /// division by one is an arithmetic shift right and floored modulo a
+    /// mask, negative operands included, where `div` and `rem` would be
+    /// emulated in software.
+    fn power_of_two(&self, id: ExprId) -> Option<i64> {
+        let Expr::Const(divisor) = self.kernel.exprs().get(id) else { return None };
+        u64::try_from(divisor).is_ok_and(u64::is_power_of_two).then_some(divisor)
     }
 
     /// `a` divided by `b`, floored, and the remainder with `b`'s sign:

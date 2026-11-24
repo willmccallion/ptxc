@@ -1,5 +1,7 @@
 //! Unrolled loops expanded before selection, so a scratch array they index
-//! takes constant offsets, which ptxas keeps in registers.
+//! takes constant offsets, which ptxas keeps in registers. Whether ptxas
+//! would unroll a rolled loop itself is its own heuristic, so only the
+//! offsets ptxc emits are compared.
 
 use crate::target;
 use ptxc_codegen::generate;
@@ -10,12 +12,12 @@ use ptxc_loop::{
 };
 use std::sync::Arc;
 
-/// The stack frame of a 256 by 256 by 256 f32 matmul scheduled as the SIMT
+/// The PTX of a 256 by 256 by 256 f32 matmul scheduled as the SIMT
 /// rule schedules one: the block rows and columns fused onto `blockIdx.x`,
 /// blocks of 16 by 16 threads each accumulating a 4 by 4 tile, and the
 /// reduction in steps of 8 with both operands staged in shared memory; the
 /// step's depth and the tile unrolled if `unrolled`.
-fn stack_frame(unrolled: bool) -> ByteSize {
+fn module(unrolled: bool) -> String {
     let shape = |dims: [u64; 2]| Shape::new(dims.map(Dim::new).to_vec()).unwrap();
     let mut compute = ComputeBuilder::new(ComputeName::new("matmul"));
     let lhs = compute.input(TensorName::new("a"), DType::F32, shape([256, 256]));
@@ -55,12 +57,24 @@ fn stack_frame(unrolled: bool) -> ByteSize {
         }
     }
     let kernel = schedule.validate(&target()).unwrap().lower();
-    let module = generate(&kernel, &target()).unwrap();
-    ptxc_testkit::ptxas::stack_frame(&module.to_string(), &target().sm().to_string()).unwrap()
+    generate(&kernel, &target()).unwrap().to_string()
+}
+
+/// Whether every local-memory access in `module` is at a constant offset
+/// into its array rather than through a computed address.
+fn local_offsets_are_constant(module: &str) -> bool {
+    let local =
+        module.lines().filter(|line| line.contains("ld.local") || line.contains("st.local"));
+    local.into_iter().all(|line| line.contains("[local_"))
 }
 
 #[test]
 fn an_accumulator_indexed_by_an_unrolled_loop_needs_no_stack_frame() {
-    assert_eq!(stack_frame(true), ByteSize::new(0));
-    assert!(stack_frame(false).get() > 0);
+    let (unrolled, rolled) = (module(true), module(false));
+
+    let frame = ptxc_testkit::ptxas::stack_frame(&unrolled, &target().sm().to_string()).unwrap();
+
+    assert!(local_offsets_are_constant(&unrolled));
+    assert!(!local_offsets_are_constant(&rolled));
+    assert_eq!(frame, ByteSize::new(0));
 }
