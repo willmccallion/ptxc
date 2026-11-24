@@ -4,7 +4,7 @@ use crate::ast::{
     Address, Array, BinaryOp, Compare, CvtMode, Function, Instr, Label, MatrixOrder, MmaOp,
     Operand, PtxModule, PtxType, RegClass, RegId, Space, UnaryOp,
 };
-use std::fmt::{self, Write};
+use std::fmt;
 
 impl fmt::Display for PtxModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -178,63 +178,65 @@ const fn cvt_mode(mode: CvtMode) -> &'static str {
 }
 
 fn write_instr(f: &mut fmt::Formatter<'_>, instr: &Instr) -> fmt::Result {
-    let mut line = String::new();
-    let _infallible = match instr {
-        Instr::Label(at) => return writeln!(f, "{}:", label(*at)),
+    let text = instr_text(instr);
+    if matches!(instr, Instr::Label(_)) { writeln!(f, "{text}") } else { writeln!(f, "\t{text};") }
+}
+
+/// `instr` as PTX, without the indent and semicolon an instruction takes.
+fn instr_text(instr: &Instr) -> String {
+    match instr {
+        Instr::Label(at) => format!("{}:", label(*at)),
         Instr::Mov { ty, dst, src } => {
-            write!(line, "mov{} {}, {}", ty.suffix(), reg(*dst), operand(*src))
+            format!("mov{} {}, {}", ty.suffix(), reg(*dst), operand(*src))
         }
         Instr::Special { dst, special } => {
-            write!(line, "mov.u32 {}, {}", reg(*dst), special.name())
+            format!("mov.u32 {}, {}", reg(*dst), special.name())
         }
         Instr::Binary { op, ty, dst, a, b } => {
             let (a, b) = (operand(*a), operand(*b));
-            write!(line, "{}{} {}, {a}, {b}", binary_name(*op, *ty), ty.suffix(), reg(*dst))
+            format!("{}{} {}, {a}, {b}", binary_name(*op, *ty), ty.suffix(), reg(*dst))
         }
         Instr::Fma { dst, a, b, c } => {
             let (a, b, c) = (operand(*a), operand(*b), operand(*c));
-            write!(line, "fma.rn.f32 {}, {a}, {b}, {c}", reg(*dst))
+            format!("fma.rn.f32 {}, {a}, {b}, {c}", reg(*dst))
         }
         Instr::Unary { op, ty, dst, a } => {
-            write!(line, "{}{} {}, {}", unary_name(*op), ty.suffix(), reg(*dst), operand(*a))
+            format!("{}{} {}, {}", unary_name(*op), ty.suffix(), reg(*dst), operand(*a))
         }
         Instr::Setp { cmp, ty, dst, a, b } => {
             let (a, b) = (operand(*a), operand(*b));
-            write!(line, "setp.{}{} {}, {a}, {b}", compare_name(*cmp), ty.suffix(), reg(*dst))
+            format!("setp.{}{} {}, {a}, {b}", compare_name(*cmp), ty.suffix(), reg(*dst))
         }
         Instr::Selp { ty, dst, a, b, pred } => {
             let (a, b) = (operand(*a), operand(*b));
-            write!(line, "selp{} {}, {a}, {b}, {}", ty.suffix(), reg(*dst), reg(*pred))
+            format!("selp{} {}, {a}, {b}, {}", ty.suffix(), reg(*dst), reg(*pred))
         }
         Instr::Cvt { mode, to, from, dst, src } => {
             let sources: Vec<String> = src.iter().map(|&s| operand(s)).collect();
             let (mode, to, from) = (cvt_mode(*mode), to.suffix(), from.suffix());
-            write!(line, "cvt{mode}{to}{from} {}, {}", reg(*dst), sources.join(", "))
+            format!("cvt{mode}{to}{from} {}, {}", reg(*dst), sources.join(", "))
         }
         Instr::Ld { space: at, ty, dst, addr } => {
-            write!(line, "ld{}{} {}, {}", space(*at), ty.suffix(), reg(*dst), address(addr))
+            format!("ld{}{} {}, {}", space(*at), ty.suffix(), reg(*dst), address(addr))
         }
         Instr::St { space: at, ty, addr, src } => {
-            write!(line, "st{}{} {}, {}", space(*at), ty.suffix(), address(addr), operand(*src))
+            format!("st{}{} {}, {}", space(*at), ty.suffix(), address(addr), operand(*src))
         }
-        Instr::Bra { target, guard: None } => write!(line, "bra.uni {}", label(*target)),
+        Instr::Bra { target, guard: None } => format!("bra.uni {}", label(*target)),
         Instr::Bra { target, guard: Some((pred, value)) } => {
             let negation = if *value { "" } else { "!" };
-            write!(line, "@{negation}{} bra {}", reg(*pred), label(*target))
+            format!("@{negation}{} bra {}", reg(*pred), label(*target))
         }
         Instr::ToGlobal { dst, src } => {
-            write!(line, "cvta.to.global.u64 {}, {}", reg(*dst), reg(*src))
+            format!("cvta.to.global.u64 {}, {}", reg(*dst), reg(*src))
         }
-        Instr::AddressOf { dst, name } => write!(line, "mov.u64 {}, {name}", reg(*dst)),
-        Instr::Increment { dst } => write!(line, "add.s64 {0}, {0}, 1", reg(*dst)),
-        Instr::BarSync => write!(line, "bar.sync 0"),
-        Instr::LdVector { space: at, dst, addr } => write!(line, "{}", vector_load(*at, dst, addr)),
-        Instr::StVector { space: at, src, addr } => {
-            write!(line, "{}", vector_store(*at, src, addr))
-        }
-        Instr::LdMatrix { order, dst, addr } => write!(line, "{}", ld_matrix(*order, dst, addr)),
-        Instr::Mma { op, d, a, b, c } => write!(line, "{}", mma(*op, [d, a, b, c])),
-        Instr::Ret => write!(line, "ret"),
-    };
-    writeln!(f, "\t{line};")
+        Instr::AddressOf { dst, name } => format!("mov.u64 {}, {name}", reg(*dst)),
+        Instr::Increment { dst } => format!("add.s64 {0}, {0}, 1", reg(*dst)),
+        Instr::BarSync => "bar.sync 0".to_owned(),
+        Instr::LdVector { space: at, dst, addr } => vector_load(*at, dst, addr),
+        Instr::StVector { space: at, src, addr } => vector_store(*at, src, addr),
+        Instr::LdMatrix { order, dst, addr } => ld_matrix(*order, dst, addr),
+        Instr::Mma { op, d, a, b, c } => mma(*op, [d, a, b, c]),
+        Instr::Ret => "ret".to_owned(),
+    }
 }
