@@ -228,6 +228,18 @@ pub(crate) enum Instr {
         guard: Option<(RegId, bool)>,
     },
     BarSync,
+    /// A load of `dst.len()` adjacent 32-bit words, 2 or 4, as one vector.
+    LdVector {
+        space: Space,
+        dst: Vec<RegId>,
+        addr: Address,
+    },
+    /// A store of `src.len()` adjacent 32-bit words, 2 or 4, as one vector.
+    StVector {
+        space: Space,
+        src: Vec<RegId>,
+        addr: Address,
+    },
     /// `ldmatrix`: one 8 by 8 matrix of 16-bit elements into each of
     /// `dst`, the warp's lanes giving the rows' addresses.
     LdMatrix {

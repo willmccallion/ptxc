@@ -44,12 +44,8 @@ impl Facts {
     }
 
     /// Bounds of `index`'s value over the variables' ranges, within any cap
-    /// a condition puts on `index` itself.
+    /// a condition puts on `index` or a sub-expression of it.
     pub(super) fn bounds(&self, exprs: &ExprArena, index: ExprId) -> Option<Interval> {
-        let bounds = exprs.bounds(index, &self.ranges)?;
-        match self.caps.get(&index) {
-            Some(&cap) => Interval::new(bounds.min(), bounds.max().min(cap)),
-            None => Some(bounds),
-        }
+        exprs.capped_bounds(index, &self.ranges, &|id| self.caps.get(&id).copied())
     }
 }

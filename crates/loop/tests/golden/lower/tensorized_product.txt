@@ -16,13 +16,19 @@ kernel product(%a: f16[512] read, %b: f16[256] read, %out: f32[128] write)
           alloc %b_tile: f16[128] shared {
             for %k.0 in 2 {
               barrier
-              for %a_fill in 8 {
-                %a_tile[%i.1 * 32 + %a_fill * 32 + %lane] = 0.0:f16
-                %a_tile[%i.1 * 32 + %a_fill * 32 + %lane] = %a[%i.1 * 64 + %i.0 * 512 + %k.0 * 16 + %a_fill * 64 + floordiv(%lane, 16) * 32 + floormod(%lane, 16)]
+              for %a_clear in 8 vectorize {
+                %a_tile[(%i.1 * 32 + %lane) * 8 + %a_clear] = 0.0:f16
               }
-              for %b_fill in 4 {
-                %b_tile[%i.1 * 32 + %lane + %b_fill * 32] = 0.0:f16
-                %b_tile[%i.1 * 32 + %lane + %b_fill * 32] = %b[%i.1 * 32 + %j.0 * 8 + %k.0 * 128 + %lane + %b_fill * 32]
+              for %a_run in 8 vectorize {
+                %a_tile[(%i.1 * 32 + %lane) * 8 + %a_run] = %a[%i.0 * 512 + %k.0 * 16 + floordiv(%lane * 8, 16) * 32 + floormod(%lane * 8, 16) + %a_run]
+              }
+              if %i.1 * 32 + %lane < 16 {
+                for %b_clear in 8 vectorize {
+                  %b_tile[(%i.1 * 32 + %lane) * 8 + %b_clear] = 0.0:f16
+                }
+                for %b_run in 8 vectorize {
+                  %b_tile[(%i.1 * 32 + %lane) * 8 + %b_run] = %b[%j.0 * 8 + %k.0 * 128 + floormod(%lane, 16) * 8 + %b_run]
+                }
               }
               barrier
               for %i.2 in 1 {

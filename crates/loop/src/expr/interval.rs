@@ -91,14 +91,34 @@ impl ExprArena {
     /// Bounds of `id`'s value when each variable lies in its range, or
     /// `None` if a variable it reads has no range or a bound overflows.
     pub fn bounds(&self, id: ExprId, ranges: &VarRanges) -> Option<Interval> {
-        bounds(self, ranges, id)
+        bounds(self, (ranges, &|_| None), id)
+    }
+
+    /// As `bounds`, with every sub-expression `e` of `id`, `id` included,
+    /// at most `cap(e)` where that is known, as a condition on `e` makes it.
+    pub(crate) fn capped_bounds(
+        &self,
+        id: ExprId,
+        ranges: &VarRanges,
+        cap: &dyn Fn(ExprId) -> Option<i64>,
+    ) -> Option<Interval> {
+        bounds(self, (ranges, cap), id)
     }
 }
 
-/// Bounds of `id`'s value over its variables' ranges, or `None` if some
-/// variable is unbounded or a bound overflows `i64`.
-fn bounds(arena: &ExprArena, ranges: &VarRanges, id: ExprId) -> Option<Interval> {
-    let of = |operand| bounds(arena, ranges, operand);
+/// The ranges of variables and the caps on sub-expressions bounds use.
+type Known<'a> = (&'a VarRanges, &'a dyn Fn(ExprId) -> Option<i64>);
+
+/// Bounds of `id`'s value over its variables' ranges, within any cap on it,
+/// or `None` if some variable is unbounded or a bound overflows `i64`.
+fn bounds(arena: &ExprArena, known: Known<'_>, id: ExprId) -> Option<Interval> {
+    let found = uncapped_bounds(arena, known, id)?;
+    known.1(id).map_or(Some(found), |cap| Interval::new(found.min, found.max.min(cap)))
+}
+
+fn uncapped_bounds(arena: &ExprArena, known: Known<'_>, id: ExprId) -> Option<Interval> {
+    let ranges = known.0;
+    let of = |operand| bounds(arena, known, operand);
     match arena.get(id) {
         Expr::Var(var) => ranges.get(var),
         Expr::Const(value) => Some(Interval::point(value)),
@@ -149,8 +169,8 @@ pub(super) fn sum_bounds(
 ) -> Option<Interval> {
     let mut total = Interval::point(sum.constant());
     for (atom, coefficient) in sum.terms() {
-        let term =
-            bounds(arena, ranges, atom)?.corners(Interval::point(coefficient), i64::checked_mul)?;
+        let term = arena.bounds(atom, ranges)?;
+        let term = term.corners(Interval::point(coefficient), i64::checked_mul)?;
         total = total.plus(term)?;
     }
     Some(total)

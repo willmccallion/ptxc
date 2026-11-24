@@ -9,7 +9,7 @@ use crate::ast::{
     B32, B64, BinaryOp, Class, F32, MatrixOrder, MmaOp, PtxType, Reg, Signedness, Space, Value,
 };
 use ptxc_core::DType;
-use ptxc_loop::{BufferId, Expr, ExprId, FragmentTile, TileAccess, TileOrder};
+use ptxc_loop::{BufferId, FragmentTile, TileAccess, TileOrder};
 use ptxc_target::MmaInstruction;
 
 /// The bytes of one row of an `ldmatrix` matrix, to which each row's
@@ -18,9 +18,6 @@ const MATRIX_ROW_BYTES: u64 = 16;
 
 /// The lanes giving the row addresses of one `ldmatrix` matrix.
 const MATRIX_LANES: u64 = 8;
-
-/// The most factors of two `twos` counts, past any an index can hold.
-const MAX_TWOS: u32 = 63;
 
 impl Selector<'_> {
     /// Loads `fragment`'s tile from `source`, where `at` places it.
@@ -59,23 +56,14 @@ impl Selector<'_> {
         let shared =
             matches!(self.storage.get(&source), Some(Storage::Array { space: Space::Shared, .. }));
         let aligned = (at.stride.get() * size).is_multiple_of(MATRIX_ROW_BYTES)
-            && self.twos(at.origin) + size.trailing_zeros() >= MATRIX_ROW_BYTES.trailing_zeros();
+            && self.twos(at.origin, None) + size.trailing_zeros()
+                >= MATRIX_ROW_BYTES.trailing_zeros();
         let usable = fragment.role != Role::Accumulator
             && shared
             && aligned
             && layout.group_blocks.is_power_of_two()
             && layout.blocks().is_power_of_two();
         usable.then_some(order)
-    }
-
-    /// The most factors of two every value of index `id` is sure to have.
-    fn twos(&self, id: ExprId) -> u32 {
-        match self.kernel.exprs().get(id) {
-            Expr::Const(value) => value.trailing_zeros().min(MAX_TWOS),
-            Expr::Var(_) | Expr::FloorDiv(..) | Expr::FloorMod(..) => 0,
-            Expr::Add(a, b) | Expr::Min(a, b) | Expr::Max(a, b) => self.twos(a).min(self.twos(b)),
-            Expr::Mul(a, b) => (self.twos(a) + self.twos(b)).min(MAX_TWOS),
-        }
     }
 
     /// Loads `fragment`'s tile with one `ldmatrix`, a matrix per block.

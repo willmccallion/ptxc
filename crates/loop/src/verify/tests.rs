@@ -124,6 +124,37 @@ fn a_condition_on_a_variable_tightens_its_range() {
 }
 
 #[test]
+fn a_condition_on_an_expression_bounds_larger_indices_built_on_it() {
+    let mut base = kernel();
+    let shared = scratch(&mut base, MemScope::Shared, DType::F32, 8);
+    let thread = thread_var(&base);
+    let run = base.vars.push(KernelVar::Loop(crate::compute::VarName::new("run")));
+    let (two, three) = (base.exprs.constant(2), base.exprs.constant(3));
+    let scaled = base.exprs.mul(thread, three);
+    let first = base.exprs.mul(scaled, two);
+    let step = base.exprs.var(run);
+    let index = base.exprs.add(first, step);
+    let store = Stmt::Store { buffer: shared, index, value: float(0.0) };
+    let copy = Stmt::For {
+        var: run,
+        extent: Dim::new(2),
+        kind: crate::stmt::ForKind::Vectorized,
+        body: Box::new(store),
+    };
+    let mut guarded = |bound| {
+        let bound = base.exprs.constant(bound);
+        let condition = Condition { index: scaled, bound };
+        let body = Stmt::If { condition, then: Box::new(copy.clone()) };
+        with_body(&base, Stmt::Alloc { buffer: shared, body: Box::new(body) })
+    };
+
+    let (within, past) = (guarded(4), guarded(5));
+
+    assert_eq!(verify(&within), Ok(()));
+    assert_eq!(verify(&past), Err(VerifyError::OutOfBounds(TensorName::new("scratch"))));
+}
+
+#[test]
 fn a_variable_is_read_only_where_it_is_bound() {
     let mut base = kernel();
     let stray = base.vars.push(KernelVar::Loop(VarName::new("stray")));
