@@ -33,7 +33,13 @@ impl Selector<'_> {
     /// scope.
     pub(super) fn declare(&mut self, buffer: BufferId) -> Result<(), CodegenError> {
         let found = &self.kernel.buffers()[buffer];
-        let space = if found.scope == MemScope::Shared { Space::Shared } else { Space::Local };
+        let space = match found.scope {
+            MemScope::Shared => Space::Shared,
+            MemScope::Local | MemScope::Global => Space::Local,
+            MemScope::Fragment(_) => {
+                return Err(CodegenError::Unsupported { op: "fragment statements, until #104" });
+            }
+        };
         let bytes = found.size.in_bytes(found.dtype).map_err(|_| CodegenError::TooLarge)?.get();
         let stem = if space == Space::Shared { "shared" } else { "local" };
         let name = self.builder.array(space, stem, bytes);

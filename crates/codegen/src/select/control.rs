@@ -2,7 +2,8 @@
 
 use super::{CodegenError, Selector};
 use crate::ast::{B64, Compare, CvtMode, PtxType, Reg, Signedness, Special, Value};
-use ptxc_loop::{KernelVar, Stmt, ThreadAxis};
+use ptxc_core::Dim;
+use ptxc_loop::{KernelVar, Stmt, ThreadAxis, VarId};
 
 const fn special(axis: ThreadAxis) -> Special {
     match axis {
@@ -39,31 +40,7 @@ impl Selector<'_> {
     pub(super) fn statement(&mut self, stmt: &Stmt) -> Result<(), CodegenError> {
         match stmt {
             Stmt::Seq(stmts) => stmts.iter().try_for_each(|stmt| self.statement(stmt)),
-            Stmt::For { var, extent, body, .. } => {
-                // NOTE: a vectorized loop runs as a serial one until
-                // vector loads and stores come (#111). Unrolled loops never
-                // reach here: `generate` expands them first.
-                let extent = i64::try_from(extent.get()).map_err(|_| CodegenError::TooLarge)?;
-                let counter = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
-                let _previous = self.vars.insert(*var, counter);
-                let outer = self.known.clone();
-                self.known.forget_values();
-                let (top, exit) = (self.builder.label(), self.builder.label());
-                self.builder.place(top);
-                let done = self.builder.compare_int(
-                    Compare::Ge,
-                    Signedness::Signed,
-                    counter.into(),
-                    Value::<B64>::int(extent),
-                );
-                self.builder.branch(exit, Some((done, true)));
-                self.statement(body)?;
-                self.builder.increment(counter);
-                self.builder.branch(top, None);
-                self.builder.place(exit);
-                self.known.leave(outer);
-                Ok(())
-            }
+            Stmt::For { var, extent, body, .. } => self.for_loop(*var, *extent, body),
             Stmt::If { condition, then } => {
                 let index = self.index(condition.index)?;
                 let bound = self.index_operand(condition.bound)?;
@@ -97,6 +74,39 @@ impl Selector<'_> {
                 self.known.forget_values();
                 Ok(())
             }
+            Stmt::FragmentFill { .. }
+            | Stmt::FragmentLoad { .. }
+            | Stmt::Mma { .. }
+            | Stmt::FragmentStore { .. } => {
+                Err(CodegenError::Unsupported { op: "fragment statements, until #104" })
+            }
         }
+    }
+
+    /// A counted loop over `body`, `var` from 0 to `extent - 1`.
+    fn for_loop(&mut self, var: VarId, extent: Dim, body: &Stmt) -> Result<(), CodegenError> {
+        // NOTE: a vectorized loop runs as a serial one until vector loads
+        // and stores come (#111). Unrolled loops never reach here:
+        // `generate` expands them first.
+        let extent = i64::try_from(extent.get()).map_err(|_| CodegenError::TooLarge)?;
+        let counter = self.builder.mov(PtxType::S64, Value::<B64>::int(0));
+        let _previous = self.vars.insert(var, counter);
+        let outer = self.known.clone();
+        self.known.forget_values();
+        let (top, exit) = (self.builder.label(), self.builder.label());
+        self.builder.place(top);
+        let done = self.builder.compare_int(
+            Compare::Ge,
+            Signedness::Signed,
+            counter.into(),
+            Value::<B64>::int(extent),
+        );
+        self.builder.branch(exit, Some((done, true)));
+        self.statement(body)?;
+        self.builder.increment(counter);
+        self.builder.branch(top, None);
+        self.builder.place(exit);
+        self.known.leave(outer);
+        Ok(())
     }
 }

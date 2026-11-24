@@ -1,53 +1,17 @@
-//! Verifies lowered kernels: bounds, scopes and barrier placement.
+//! Verifies lowered kernels: bounds, scopes, barrier placement and the
+//! fragment statements.
 
-use crate::compute::{TensorName, VarName, types};
+use crate::compute::{VarName, types};
 use crate::expr::{ExprId, Interval, VarId};
 use crate::stmt::{Access, BufferId, KernelVar, LoweredKernel, MemScope, Stmt, ValueExpr};
+pub use error::VerifyError;
 use facts::Facts;
 use ptxc_core::DType;
 use std::collections::HashSet;
-use thiserror::Error;
 
+mod error;
 mod facts;
-
-/// A lowered kernel that breaks a rule codegen relies on.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum VerifyError {
-    /// A variable read where nothing binds it.
-    #[error("{0} is read where it is not bound")]
-    UnboundVar(VarName),
-    /// A store to a buffer the kernel only reads.
-    #[error("{0} is an input, but is stored to")]
-    StoreToInput(TensorName),
-    /// A load from a buffer the kernel only writes.
-    #[error("{0} is an output, but is loaded from")]
-    LoadFromOutput(TensorName),
-    /// A shared or local buffer used outside its `Alloc`.
-    #[error("{0} is used outside its allocation")]
-    NotAllocated(TensorName),
-    /// An `Alloc` of a global buffer.
-    #[error("{0} is global, so it is a parameter, not allocated")]
-    GlobalAllocated(TensorName),
-    /// A shared or local access not provably within the buffer.
-    #[error("an access to {0} may leave the buffer")]
-    OutOfBounds(TensorName),
-    /// A barrier some threads of a block may not reach.
-    #[error("a barrier is under a condition that depends on the thread")]
-    DivergentBarrier,
-    /// A value of the wrong type for where it goes.
-    #[error("{place} takes {expected:?}, but is given {actual:?}")]
-    WrongType {
-        /// The store, index load or condition.
-        place: String,
-        /// The type it takes.
-        expected: DType,
-        /// The type given.
-        actual: DType,
-    },
-    /// An operation on types it does not take.
-    #[error(transparent)]
-    Operation(#[from] crate::compute::ComputeError),
-}
+mod fragment;
 
 /// Checks the rules code generation relies on in `kernel`.
 ///
@@ -106,21 +70,14 @@ impl Scope<'_> {
                 inner.facts.refine(self.kernel.exprs(), *condition);
                 inner.stmt(then)
             }
-            Stmt::Alloc { buffer, body } => {
-                let found = &self.kernel.buffers()[*buffer];
-                if found.scope == MemScope::Global {
-                    return Err(VerifyError::GlobalAllocated(found.name.clone()));
-                }
-                let mut inner = self.clone();
-                let _new = inner.allocated.insert(*buffer);
-                inner.stmt(body)
-            }
+            Stmt::Alloc { buffer, body } => self.alloc(*buffer, body),
             Stmt::LoadIndex { var, buffer, index, body } => {
                 self.load(*buffer, *index)?;
                 let dtype = self.kernel.buffers()[*buffer].dtype;
                 if !matches!(dtype, DType::I32 | DType::I64) {
+                    let place = "an index load".to_owned();
                     return Err(VerifyError::WrongType {
-                        place: "an index load".to_owned(),
+                        place,
                         expected: DType::I64,
                         actual: dtype,
                     });
@@ -137,7 +94,32 @@ impl Scope<'_> {
                     Ok(())
                 }
             }
+            Stmt::FragmentFill { fragment, value } => self.fill(*fragment, *value),
+            Stmt::FragmentLoad { fragment, source, at } => self.tile_load(*fragment, *source, *at),
+            Stmt::Mma { instruction, a, b, accumulator } => {
+                self.mma(*instruction, [*a, *b, *accumulator])
+            }
+            Stmt::FragmentStore { fragment, target, at } => {
+                self.tile_store(*fragment, *target, *at)
+            }
         }
+    }
+
+    /// `body` with `buffer` allocated: a scratch buffer, and a fragment
+    /// with room for its tile.
+    fn alloc(&self, buffer: BufferId, body: &Stmt) -> Result<(), VerifyError> {
+        let found = &self.kernel.buffers()[buffer];
+        if found.scope == MemScope::Global {
+            return Err(VerifyError::GlobalAllocated(found.name.clone()));
+        }
+        if let MemScope::Fragment(shape) = found.scope
+            && found.size.get() < shape.rows.get().saturating_mul(shape.columns.get())
+        {
+            return Err(VerifyError::FragmentSize(found.name.clone()));
+        }
+        let mut inner = self.clone();
+        let _new = inner.allocated.insert(buffer);
+        inner.stmt(body)
     }
 
     fn store(&self, buffer: BufferId, index: ExprId, value: &ValueExpr) -> Result<(), VerifyError> {
@@ -182,6 +164,9 @@ impl Scope<'_> {
         let found = &self.kernel.buffers()[buffer];
         if found.scope == MemScope::Global {
             return Ok(());
+        }
+        if let MemScope::Fragment(_) = found.scope {
+            return Err(VerifyError::FragmentAccess(found.name.clone()));
         }
         if !self.allocated.contains(&buffer) {
             return Err(VerifyError::NotAllocated(found.name.clone()));
@@ -266,5 +251,7 @@ impl Scope<'_> {
     }
 }
 
+#[cfg(test)]
+mod fragment_tests;
 #[cfg(test)]
 mod tests;

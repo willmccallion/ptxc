@@ -13,6 +13,7 @@ mod ops;
 mod race;
 mod tensors;
 mod value;
+mod warp;
 
 use crate::compute::TensorName;
 use crate::stmt::{Access, BufferId, LoweredKernel};
@@ -80,6 +81,13 @@ pub enum RunError {
         /// The element.
         index: i64,
     },
+    /// A fragment statement some lanes of a warp did not reach, or a warp
+    /// the block's threads do not fill.
+    #[error("a fragment statement is reached by only some lanes of a warp")]
+    PartialWarp,
+    /// Lanes of one warp that put a fragment's tile at different places.
+    #[error("the lanes of a warp disagree on where a fragment's tile is")]
+    WarpDisagrees,
     /// A barrier some threads of the block did not reach.
     #[error("a barrier is reached by only some threads of a block")]
     DivergentBarrier,
@@ -98,6 +106,11 @@ pub enum RunError {
 /// each output as a flat tensor of its buffer's size.
 pub fn run(kernel: &LoweredKernel, inputs: &[HostTensor]) -> Result<Vec<HostTensor>, RunError> {
     verify(kernel)?;
+    execute(kernel, inputs)
+}
+
+/// `kernel`'s outputs for `inputs`, the kernel trusted to verify.
+fn execute(kernel: &LoweredKernel, inputs: &[HostTensor]) -> Result<Vec<HostTensor>, RunError> {
     let mut globals = HashMap::new();
     let input_params: Vec<_> =
         kernel.params().iter().filter(|param| param.access == Access::Read).collect();
@@ -145,6 +158,8 @@ fn outputs(
     Ok(outputs)
 }
 
+#[cfg(test)]
+mod fragment_tests;
 #[cfg(test)]
 mod semantics;
 #[cfg(test)]

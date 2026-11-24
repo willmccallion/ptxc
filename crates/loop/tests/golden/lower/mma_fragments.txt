@@ -1,0 +1,29 @@
+kernel warp(%a: f16[256] read, %b: f16[128] read, %c: f32[128] write)
+  grid(1, 1, 1) block(32, 1, 1) smem 0
+  %lane = threadIdx.x
+  alloc %a_tile: f16[256] shared {
+    alloc %b_tile: f16[128] shared {
+      for %round in 8 {
+        if %round * 32 + %lane < 256 {
+          %a_tile[%round * 32 + %lane] = %a[%round * 32 + %lane]
+        }
+      }
+      for %round in 4 {
+        if %round * 32 + %lane < 128 {
+          %b_tile[%round * 32 + %lane] = %b[%round * 32 + %lane]
+        }
+      }
+      barrier
+      alloc %a_fragment: f16[256] fragment<16x16> {
+        alloc %b_fragment: f16[128] fragment<16x8> {
+          alloc %c_fragment: f32[128] fragment<16x8> {
+            %a_fragment = tile %a_tile[0] stride 16
+            %b_fragment = tile %b_tile[0] stride 16 transposed
+            %c_fragment = fill(0.0:f32)
+            %c_fragment = mma.m16n8k16.f16.f32(%a_fragment, %b_fragment, %c_fragment)
+            tile %c[0] stride 8 = %c_fragment
+          }
+        }
+      }
+    }
+  }

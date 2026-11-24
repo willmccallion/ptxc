@@ -1,7 +1,7 @@
-//! `Buffer` and `MemScope` (global, shared, local).
+//! `Buffer` and `MemScope` (global, shared, local, fragment).
 
 use crate::compute::TensorName;
-use ptxc_core::{DType, ElementCount};
+use ptxc_core::{DType, Dim, ElementCount};
 
 ptxc_core::define_index!(
     /// A buffer of a lowered kernel.
@@ -17,6 +17,19 @@ pub enum MemScope {
     Shared,
     /// Private to a thread, allocated by an `Alloc`.
     Local,
+    /// A logical tile one warp holds, its elements spread over the warp's
+    /// registers in a layout only code generation knows, allocated by an
+    /// `Alloc` and touched only by the fragment statements.
+    Fragment(FragmentShape),
+}
+
+/// The rows and columns of a fragment's logical tile, row-major.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct FragmentShape {
+    /// Rows.
+    pub rows: Dim,
+    /// Columns.
+    pub columns: Dim,
 }
 
 /// How a kernel uses a global buffer.

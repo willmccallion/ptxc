@@ -4,7 +4,7 @@
 //! sees constant offsets where only the loop made them vary.
 
 use crate::expr::{ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
-use crate::stmt::{Condition, ForKind, KernelVar, LoweredKernel, Stmt, ValueExpr};
+use crate::stmt::{Condition, ForKind, KernelVar, LoweredKernel, Stmt, TileAccess, ValueExpr};
 use ptxc_core::Dim;
 
 /// `kernel` with every unrolled loop expanded, and every guard that the
@@ -64,6 +64,15 @@ impl Unroller {
                 Stmt::Store { buffer: *buffer, index: self.index(*index), value: self.value(value) }
             }
             Stmt::Barrier => Stmt::Barrier,
+            Stmt::FragmentLoad { fragment, source, at } => {
+                let at = TileAccess { origin: self.index(at.origin), ..*at };
+                Stmt::FragmentLoad { fragment: *fragment, source: *source, at }
+            }
+            Stmt::FragmentStore { fragment, target, at } => {
+                let at = TileAccess { origin: self.index(at.origin), ..*at };
+                Stmt::FragmentStore { fragment: *fragment, target: *target, at }
+            }
+            Stmt::FragmentFill { .. } | Stmt::Mma { .. } => stmt.clone(),
         }
     }
 
@@ -141,5 +150,62 @@ impl Unroller {
             return id;
         }
         Simplifier::new(&self.ranges).simplify(&mut self.exprs, substituted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unrolled;
+    use crate::compute::TensorName;
+    use crate::expr::Expr;
+    use crate::stmt::{
+        Buffer, ForKind, FragmentShape, KernelVar, MemScope, Stmt, TileAccess, TileOrder,
+    };
+    use crate::test_kernels::warp_kernel;
+    use ptxc_core::{DType, Dim, ElementCount};
+
+    #[test]
+    fn an_unrolled_loop_puts_each_copy_of_a_tile_load_and_store_at_its_own_origin() {
+        let mut kernel = warp_kernel();
+        let mut buffer = |name: &str, scope| {
+            let (name, size) = (TensorName::new(name), ElementCount::new(512));
+            kernel.buffers.push(Buffer { name, dtype: DType::F16, scope, size })
+        };
+        let tile = buffer("tile", MemScope::Shared);
+        let staged = buffer("staged", MemScope::Shared);
+        let shape = FragmentShape { rows: Dim::new(16), columns: Dim::new(16) };
+        let fragment = buffer("fragment", MemScope::Fragment(shape));
+        let step = kernel.vars.push(KernelVar::Loop(crate::compute::VarName::new("step")));
+        let (step_expr, tile_size) = (kernel.exprs.var(step), kernel.exprs.constant(256));
+        let origin = kernel.exprs.mul(step_expr, tile_size);
+        let at = TileAccess { origin, stride: Dim::new(16), order: TileOrder::RowMajor };
+        let copy = Stmt::Seq(vec![
+            Stmt::FragmentLoad { fragment, source: tile, at },
+            Stmt::FragmentStore { fragment, target: staged, at },
+        ]);
+        kernel.body = Stmt::For {
+            var: step,
+            extent: Dim::new(2),
+            kind: ForKind::Unrolled,
+            body: Box::new(copy),
+        };
+
+        let expanded = unrolled(&kernel);
+
+        let Stmt::Seq(copies) = expanded.body() else { panic!("{:?}", expanded.body()) };
+        let origins: Vec<[Expr; 2]> = copies
+            .iter()
+            .map(|copy| match copy {
+                Stmt::Seq(pair) => match pair.as_slice() {
+                    [
+                        Stmt::FragmentLoad { at: load, .. },
+                        Stmt::FragmentStore { at: store, .. },
+                    ] => [load.origin, store.origin].map(|origin| expanded.exprs().get(origin)),
+                    other => panic!("{other:?}"),
+                },
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(origins, [[Expr::Const(0); 2], [Expr::Const(256); 2]]);
     }
 }
