@@ -138,6 +138,26 @@ fn a_staged_tile_holds_zero_padding_copied_or_other_padding_stored() {
 }
 
 #[test]
+fn a_staged_tile_of_an_empty_input_holds_only_its_padding() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("empty"));
+    let x = compute.input(TensorName::new("x"), DType::I32, shape(&[0]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(4));
+    let read = shifted(&mut compute, x, i, Scalar::int(DType::I32, 5).unwrap());
+    compute.output(TensorName::new("out"), read);
+    let compute = Arc::new(compute.finish().unwrap());
+    let (mut schedule, nest) = open(&compute);
+    let parts = schedule.split(nest[0], vec![SplitFactor::new(2).unwrap()]).unwrap();
+    schedule.apply(Primitive::Bind { loop_: parts[1], axis: ThreadAxis::ThreadX }).unwrap();
+    schedule.apply(Primitive::CacheRead { tensor: x, at: parts[0] }).unwrap();
+
+    let kernel = lower(schedule);
+
+    let out = run(&kernel, &[tensor(&[0], Vec::<i32>::new())]).unwrap();
+    assert_eq!(ints(&out[0]), [5, 5, 5, 5]);
+    assert!(!print_kernel(&kernel).contains("%x["), "{}", print_kernel(&kernel));
+}
+
+#[test]
 fn a_tensor_read_with_two_paddings_has_no_one_tile() {
     let mut compute = ComputeBuilder::new(ComputeName::new("two"));
     let x = compute.input(TensorName::new("x"), DType::I32, shape(&[3]));
