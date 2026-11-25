@@ -8,7 +8,7 @@
 
 use super::SweepError;
 use super::problems::id;
-use crate::host::{data, values};
+use crate::host::{data, salt_of, values, whole_value};
 use crate::problem::{GemmProblem, GemmShape, GemmType};
 use ptxc_core::{Dim, ElementCount, HostTensor, Shape, TensorData};
 use ptxc_testkit::compare::{Tolerance, compare};
@@ -20,10 +20,6 @@ const SAMPLES: u64 = 256;
 const A_SALT: u64 = 1;
 const B_SALT: u64 = 2;
 
-/// FNV-1a's 64-bit offset basis and prime, which hash a problem's id.
-const FNV_OFFSET: u64 = 0xCBF2_9CE4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01B3;
-
 /// A and B as stored, on the host.
 #[derive(Clone, Debug)]
 pub(super) struct Inputs {
@@ -33,10 +29,7 @@ pub(super) struct Inputs {
 
 /// The value at row-major position `index` of the operand salted `salt`.
 fn value(index: u64, salt: u64, dtype: GemmType) -> f64 {
-    let mixed = index.wrapping_add(salt.wrapping_mul(0x5851_F42D_4C95_7F2D));
-    // The top five bits, below 32, so the low byte holds them exactly.
-    let bucket = (mixed.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 59).to_le_bytes()[0];
-    let whole = f64::from(bucket % 17) - 8.0;
+    let whole = whole_value(index, salt);
     if dtype == GemmType::I8 { whole } else { whole / 8.0 }
 }
 
@@ -50,9 +43,7 @@ struct OperandValues {
 
 impl OperandValues {
     fn new(problem: GemmProblem) -> Self {
-        let hash = id(problem)
-            .bytes()
-            .fold(FNV_OFFSET, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(FNV_PRIME));
+        let hash = salt_of(&id(problem));
         Self { problem, a_salt: hash ^ A_SALT, b_salt: hash ^ B_SALT }
     }
 

@@ -6,16 +6,16 @@ mod data;
 mod frameworks;
 mod problems;
 
-use crate::clocks::{ClockError, GpuIdentity, GpuState, ensure_idle};
+use super::Timing;
+use crate::clocks::{ClockError, GpuIdentity, ensure_idle};
 use crate::cublas::{CublasError, GemmError, Handle, LtHandle, lt};
 use crate::host::HostError;
 use crate::problem::GemmProblem;
 use crate::results::{Case, Framework, Results, ResultsError};
-use crate::timing::{Series, time};
 use data::{Inputs, check};
 use frameworks::{Default, Operands, enqueue_candidate};
 use problems::{GemmParams, id, params, problems};
-use ptxc_cuda::{Context, CudaError, Device, DeviceBuffer, DeviceOrdinal, Driver, Stream};
+use ptxc_cuda::{CudaError, Device, DeviceBuffer, DeviceOrdinal, Driver, Stream};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -178,13 +178,6 @@ fn checked_run(
     Ok(check(problem, &operands.c(problem)?))
 }
 
-/// The context and stream a series is timed on.
-#[derive(Clone, Copy)]
-struct Timing<'a> {
-    context: &'a Context,
-    stream: &'a Stream,
-}
-
 impl Timing<'_> {
     /// The case for `problem` and cuBLASLt's `algorithm`, timed with
     /// `enqueue` if `checked` passed; a failed check is recorded in
@@ -194,18 +187,13 @@ impl Timing<'_> {
         (problem, algorithm): (GemmProblem, Option<u8>),
         checked: Result<(), String>,
         collected: &mut Collected,
-        mut enqueue: impl FnMut() -> Result<(), SweepError>,
+        enqueue: impl FnMut() -> Result<(), SweepError>,
     ) -> Result<Option<Case<GemmParams>>, SweepError> {
         if let Err(message) = checked {
             collected.failed.push(format!("{} {algorithm:?}: {message}", id(problem)));
             return Ok(None);
         }
-        let before = GpuState::read()?;
-        let series: Series = time(self.context, self.stream, &mut enqueue)?;
-        let after = GpuState::read()?;
-        let case =
-            Case::new(id(problem), params(problem, algorithm), true, (before, after), &series)?;
-        Ok(Some(case))
+        self.case((id(problem), params(problem, algorithm)), enqueue).map(Some)
     }
 }
 

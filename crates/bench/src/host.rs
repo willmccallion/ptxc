@@ -1,4 +1,5 @@
-//! Host values in each type a GEMM reads or writes, and back.
+//! Host values in each type a GEMM or convolution reads or writes, and
+//! back, and the values a problem's inputs hold.
 
 use ptxc_core::convert::{f64_to_f32, truncate};
 use ptxc_core::float::{Bf16, F8E4M3Fn, F16, Overflow};
@@ -43,6 +44,25 @@ pub(crate) fn values(data: &TensorData) -> Result<Vec<f64>, HostError> {
     })
 }
 
+/// FNV-1a's 64-bit offset basis and prime, which hash a problem's id.
+const FNV_OFFSET: u64 = 0xCBF2_9CE4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01B3;
+
+/// The salt of the problem named `id`: its hash, so no two problems'
+/// inputs share their values.
+pub(crate) fn salt_of(id: &str) -> u64 {
+    id.bytes().fold(FNV_OFFSET, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(FNV_PRIME))
+}
+
+/// The value at row-major position `index` of the input salted `salt`: a
+/// whole number in [-8, 8], spread by a hash of both.
+pub(crate) fn whole_value(index: u64, salt: u64) -> f64 {
+    let mixed = index.wrapping_add(salt.wrapping_mul(0x5851_F42D_4C95_7F2D));
+    // The top five bits, below 32, so the low byte holds them exactly.
+    let bucket = (mixed.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 59).to_le_bytes()[0];
+    f64::from(bucket % 17) - 8.0
+}
+
 /// `value` as the integer type `T`, if it is one of its integers.
 fn integer<T: TryFrom<i64>>(value: f64, dtype: DType) -> Result<T, HostError> {
     let fail = || HostError::Integer { value, dtype };
@@ -55,7 +75,7 @@ fn integer<T: TryFrom<i64>>(value: f64, dtype: DType) -> Result<T, HostError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod tests {
-    use super::{HostError, data, values};
+    use super::{HostError, data, salt_of, values};
     use ptxc_core::DType;
 
     #[test]
@@ -68,6 +88,13 @@ mod tests {
         for dtype in [DType::I8, DType::I32] {
             assert_eq!(values(&data(dtype, &integers).unwrap()).unwrap(), integers, "{dtype:?}");
         }
+    }
+
+    #[test]
+    fn a_problems_salt_is_the_fnv_1a_hash_of_its_name() {
+        // FNV-1a's 64-bit test vectors: the empty string and "a".
+        assert_eq!(salt_of(""), 0xCBF2_9CE4_8422_2325);
+        assert_eq!(salt_of("a"), 0xAF63_DC4C_8601_EC8C);
     }
 
     #[test]

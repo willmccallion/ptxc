@@ -1,0 +1,30 @@
+{
+  "description": "ResNet-50 v1.5's distinct convolution layers at a 224 by 224 input, NCHW, and the batch sizes each runs at (BENCHMARKING.md). ptxc-bench conv and the PyTorch baseline both read this file.",
+  "dtype": "f16",
+  "batches": [1, 8, 32],
+  "layers": [
+    { "name": "stem", "channels": 3, "features": 64, "size": 224, "kernel": 7, "stride": 2, "pad": 3 },
+    { "name": "layer1-reduce", "channels": 64, "features": 64, "size": 56, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer1-3x3", "channels": 64, "features": 64, "size": 56, "kernel": 3, "stride": 1, "pad": 1 },
+    { "name": "layer1-expand", "channels": 64, "features": 256, "size": 56, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer1-reduce-256", "channels": 256, "features": 64, "size": 56, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer2-reduce-first", "channels": 256, "features": 128, "size": 56, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer2-3x3-strided", "channels": 128, "features": 128, "size": 56, "kernel": 3, "stride": 2, "pad": 1 },
+    { "name": "layer2-expand", "channels": 128, "features": 512, "size": 28, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer2-reduce", "channels": 512, "features": 128, "size": 28, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer2-3x3", "channels": 128, "features": 128, "size": 28, "kernel": 3, "stride": 1, "pad": 1 },
+    { "name": "layer2-projection", "channels": 256, "features": 512, "size": 56, "kernel": 1, "stride": 2, "pad": 0 },
+    { "name": "layer3-reduce-first", "channels": 512, "features": 256, "size": 28, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer3-3x3-strided", "channels": 256, "features": 256, "size": 28, "kernel": 3, "stride": 2, "pad": 1 },
+    { "name": "layer3-expand", "channels": 256, "features": 1024, "size": 14, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer3-reduce", "channels": 1024, "features": 256, "size": 14, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer3-3x3", "channels": 256, "features": 256, "size": 14, "kernel": 3, "stride": 1, "pad": 1 },
+    { "name": "layer3-projection", "channels": 512, "features": 1024, "size": 28, "kernel": 1, "stride": 2, "pad": 0 },
+    { "name": "layer4-reduce-first", "channels": 1024, "features": 512, "size": 14, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer4-3x3-strided", "channels": 512, "features": 512, "size": 14, "kernel": 3, "stride": 2, "pad": 1 },
+    { "name": "layer4-expand", "channels": 512, "features": 2048, "size": 7, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer4-reduce", "channels": 2048, "features": 512, "size": 7, "kernel": 1, "stride": 1, "pad": 0 },
+    { "name": "layer4-3x3", "channels": 512, "features": 512, "size": 7, "kernel": 3, "stride": 1, "pad": 1 },
+    { "name": "layer4-projection", "channels": 1024, "features": 2048, "size": 14, "kernel": 1, "stride": 2, "pad": 0 }
+  ]
+}
