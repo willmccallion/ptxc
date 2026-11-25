@@ -1,0 +1,29 @@
+kernel conv(%x: i32[128] read, %w: i32[144] read, %out: i32[128] write)
+  grid(1, 8, 1) block(4, 4, 1) smem 128
+  %n_p_q.0 = blockIdx.y
+  %n_p_q.1 = threadIdx.y
+  %m.0 = blockIdx.x
+  %m.1 = threadIdx.x
+  alloc %acc: i32[1] local {
+    %acc[0] = 0:i32
+    alloc %x_tile: i32[16] shared {
+      alloc %w_tile: i32[16] shared {
+        for %r_s_c.0 in 9 {
+          barrier
+          if %n_p_q.1 * 4 + %m.1 < 4 {
+            %x_tile[(%n_p_q.1 * 4 + %m.1) * 4] <- async %x[floordiv(%n_p_q.0 * 4 + %m.1, 16) * 64 + min(3, max(0, floormod(%n_p_q.0, 4) + floordiv(%r_s_c.0 * 4, 12) + -1)) * 16 + min(3, max(0, %m.1 + floormod(%r_s_c.0, 3) + -1)) * 4] run 4
+          }
+          if %n_p_q.1 * 4 + %m.1 < 4 {
+            %w_tile[(%n_p_q.1 * 4 + %m.1) * 4] <- async %w[%m.1 * 36 + floormod(%r_s_c.0, 3) * 4 + floordiv(%r_s_c.0 * 4, 12) * 12] run 4
+          }
+          async commit
+          async wait 0
+          barrier
+          for %r_s_c.1 in 4 {
+            %acc[0] = add(%acc[0], select(and(and(ge(index<i64>(floormod(%n_p_q.0, 4) * 1 + floordiv(%r_s_c.1 + %r_s_c.0 * 4, 12) * 1 + -1), 0:i64), lt(index<i64>(floormod(%n_p_q.0, 4) * 1 + floordiv(%r_s_c.1 + %r_s_c.0 * 4, 12) * 1 + -1), 4:i64)), and(ge(index<i64>(%n_p_q.1 * 1 + floormod(%r_s_c.0, 3) * 1 + -1), 0:i64), lt(index<i64>(%n_p_q.1 * 1 + floormod(%r_s_c.0, 3) * 1 + -1), 4:i64))), mul(%x_tile[%n_p_q.1 * 4 + %r_s_c.1], %w_tile[%m.1 * 4 + %r_s_c.1]), 0:i32))
+          }
+        }
+      }
+    }
+    %out[%n_p_q.1 * 4 + floordiv(%n_p_q.1 + %n_p_q.0 * 4, 16) * 64 + floormod(%n_p_q.0, 4) * 16 + %m.1 + %m.0 * 4] = %acc[0]
+  }

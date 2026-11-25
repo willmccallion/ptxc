@@ -16,22 +16,22 @@ use crate::stmt::{
 use ptxc_core::{DType, Dim, Idx};
 use ptxc_target::{MmaShape, ThreadsPerBlock};
 
-/// How the staged tile of `cache` holds an operand read at `index`, its
-/// rows stepping with `rows` and its columns with `columns`: the order and
-/// the distance between rows as stored. `None` if it reads `other`, the
-/// tile's third loop, or if neither its rows nor its columns are adjacent.
-/// A staged index is affine in the tile's loops, so one step of each from
-/// the tile's origin gives the layout of the whole tile.
+/// How the staged tile of `cache` holds the operand it stages, its rows
+/// stepping with `rows` and its columns with `columns`: the order and the
+/// distance between rows as stored. `None` if it reads `other`, the tile's
+/// third loop, or if neither its rows nor its columns are adjacent. A
+/// tile's coordinates are affine in the tile's loops, so one step of each
+/// from the tile's origin gives the layout of the whole tile.
 pub(crate) fn operand_layout(
     compute: &ComputeDef,
     tree: &LoopTree,
     (extents, threads): (&[Vec<Dim>], ThreadsPerBlock),
-    (cache, index): (CacheId, &[ExprId]),
+    cache: CacheId,
     [rows, columns, other]: [VarId; 3],
 ) -> Option<(TileOrder, Dim)> {
     let mut lowerer = Lowerer::new(compute, tree);
     lowerer.stage(extents, threads);
-    let position = lowerer.tile_position(cache, index);
+    let position = lowerer.tile_position(cache);
     if lowerer.exprs.vars(position).contains(&other) {
         return None;
     }
@@ -98,7 +98,7 @@ impl Lowerer<'_> {
 
     /// The loops of `tiles` whose variables `operand`'s tile reads.
     fn operand_loops(&mut self, operand: &Operand, tiles: &[LoopId]) -> Vec<LoopId> {
-        let position = self.tile_position(operand.cache, &operand.index);
+        let position = self.tile_position(operand.cache);
         let read = self.exprs.vars(position);
         tiles.iter().copied().filter(|&id| read.contains(&VarId::new(id.index()))).collect()
     }
@@ -166,7 +166,7 @@ impl Lowerer<'_> {
     /// `operand`'s staged tile and where the fragment's tile starts in it,
     /// its rows stepping with `vars[0]` and its columns with `vars[1]`.
     fn operand_access(&mut self, operand: &Operand, vars: [VarId; 2]) -> (BufferId, TileAccess) {
-        let position = self.tile_position(operand.cache, &operand.index);
+        let position = self.tile_position(operand.cache);
         let origin = self.at(position, vars, [0, 0]);
         let buffer = self.tiles[operand.cache].buffer;
         (buffer, TileAccess { origin, stride: operand.stride, order: operand.order })

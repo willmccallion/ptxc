@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc dd6a731c8e9020901128133a4a1a4cfc84fbc962af6dd0b64777c2fdab6a7abe # shrinks to shape = Conv { batch: 1, size: 3, channels: 2, features: 1, kernel: 3, stride: 1, dilation: 1, pad: 0 }, channels_last = false, tiling = (1, 1, 2), stages = 1

@@ -298,6 +298,7 @@ pub enum Primitive {                                    // compute-at and layout
     Tensorize { m: LoopId, n: LoopId, k: LoopId, instruction: MmaInstruction }, // one mma per warp
     Pipeline { loop_: LoopId, stages: StageCount },     // the tiles staged at `loop_` filled `stages - 1` ahead
     Swizzle { tensor: TensorParamId, swizzle: Swizzle }, // the staged tile's bytes XOR-permuted
+    Reindex { tensor: TensorParamId, groups: Vec<Vec<IterVarId>> }, // the tile a box in the iteration space (D70)
 }
 ```
 
@@ -316,6 +317,10 @@ Its loads must share one index without gathers. The tile spans the serial
 loops inside `at` and every loop bound to a thread, since the block shares
 it; along each input axis it is a box, so validation refuses an index that
 does not grow affinely, with non-negative coefficients, over those loops.
+`Reindex` makes the tile a box in the iteration space instead, as
+MetaSchedule's `ReIndex` does: one coordinate per group of axes, fused
+row-major, so a convolution's input stages as the matrix of an implicit
+GEMM (D70).
 
 **3. Lowered kernel: an explicit loop nest.** This is a tree of owned
 statements, as in TVM's TIR. Index arithmetic and data arithmetic are

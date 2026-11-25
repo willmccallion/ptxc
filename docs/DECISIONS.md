@@ -1433,3 +1433,49 @@ the old one.
 - **Reason:** these are the standard passes for this shape of loop. ptxas
   does not reassociate a sum by loop depth or hoist out of a branch, so
   codegen does both.
+
+## D70. A convolution is an implicit GEMM by its schedule, its tiles reindexed
+
+- **Context:** a convolution is a sum over taps and input channels of an
+  input element times a weight. On a GPU it runs fastest as an implicit
+  GEMM, as cuDNN's and CUTLASS's kernels run it: output positions `n·p·q`
+  are the rows, output channels the columns and `r·s·c` the depth, and
+  each step stages a rows-by-depth slice of the input.
+  - That slice is not a box of the input: a row's window moves with `p`
+    and `q`, and a step's depth crosses taps and channels. `CacheRead`
+    stages a box per input axis, so it cannot stage it.
+  - A compute definition rewritten as the GEMM, its axes the fused ones,
+    would make the interpreter, the default rules and every other
+    schedule see that layout, and the output's shape its own.
+- **Choice:**
+  - The compute definition stays the direct convolution. A schedule fuses
+    `(n, p, q)` and `(r, s, c)` with `Fuse` and tiles the result as a GEMM,
+    as TVM's convolution schedules do.
+  - `Reindex` makes a staged tile a box in the iteration space, as
+    MetaSchedule's `ReIndex` stages a block's read: each coordinate is a
+    group of axes fused row-major. The input reindexed by
+    `[n, p, q] [r, s, c]` stages as the GEMM's left matrix, the weights by
+    `[m] [r, s, c]` as its right.
+  - The loop tree carries each reindexed coordinate through later fuses
+    and splits, as it carries axis indices, so a group fused into one loop
+    stays that loop's index and the tile stays affine in the loops it
+    spans. Reindexing comes before the groups' loops are fused and split,
+    as MetaSchedule reindexes before tiling: rebuilding the coordinate
+    from its axes after a split needs a canonical form for fused and split
+    iterators (TVM's `IterMapDetector`) that the simplifier does not have.
+  - The fill places each element by splitting its coordinates back into
+    their axes and evaluating the input's index there. A run of elements
+    copies as one `cp.async` where the innermost group's innermost axis
+    steps the input's innermost index by one, as channels do in NHWC; the
+    copy checks each coordinate against its group's extent and the index
+    against the input.
+  - Validation refuses a reindexed tile whose coordinates miss an axis
+    the input's index reads and the tile spans.
+- **Result:** a padded, strided, dilated convolution in NHWC or NCHW,
+  staged both ways and pipelined, matches the default schedule in the
+  loop interpreter. In NHWC, with four 32-bit channels, both tiles copy
+  16 bytes at a time; in NCHW, element by element.
+- **Reason:** the convolution's meaning stays in one place, the compute
+  definition, and implicit GEMM is a schedule like any tiling, open to
+  the tuner. MetaSchedule reaches tensor cores on convolutions the same
+  way.

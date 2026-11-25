@@ -116,6 +116,13 @@ impl ComputeDef {
         }
     }
 
+    /// The index variable standing for `axis`, which the builder made with
+    /// it.
+    pub(crate) fn axis_var(&self, axis: IterVarId) -> Option<VarId> {
+        let mut vars = self.vars.iter_enumerated();
+        vars.find(|(_, var)| **var == IndexVar::Iter(axis)).map(|(id, _)| id)
+    }
+
     /// The name index variable `var` prints with.
     pub fn var_name(&self, var: VarId) -> &VarName {
         match &self.vars[var] {

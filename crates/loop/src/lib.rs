@@ -22,8 +22,8 @@ pub use compute::{
 pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 pub use interp::{RunError, run};
 pub use schedule::{
-    CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Open, Primitive, Schedule,
-    ScheduleError, SplitFactor, StageCount, Tensorized, ThreadAxis, Trace, Validated,
+    CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Open, Primitive, Reindexed,
+    Schedule, ScheduleError, SplitFactor, StageCount, Tensorized, ThreadAxis, Trace, Validated,
 };
 pub use stmt::{
     Access, Buffer, BufferId, Condition, Fold, ForKind, FragmentShape, FragmentTile, KernelParam,

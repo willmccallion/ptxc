@@ -29,8 +29,6 @@ pub(crate) struct TensorizedProduct {
 pub(crate) struct Operand {
     /// The stage of the input it reads.
     pub(crate) cache: CacheId,
-    /// Its compute-level index in the product.
-    pub(crate) index: Vec<ExprId>,
     /// How the staged tile holds the operand's rows and columns.
     pub(crate) order: TileOrder,
     /// The staged tile's distance between the operand's rows, as stored.
@@ -58,10 +56,10 @@ pub(super) fn check_tensorized(
         if reads(compute, tree, &first.index, m) { (first, second) } else { (second, first) };
     let layout = |load: Load, vars: [VarId; 3]| {
         let cache = staged(compute, tree, load.tensor, tile.loops[0])?;
-        let found = operand_layout(compute, tree, (extents, threads), (cache, &load.index), vars);
+        let found = operand_layout(compute, tree, (extents, threads), cache, vars);
         let name = || ScheduleError::TensorizeIndex(compute.inputs()[load.tensor].name.clone());
         let (order, stride) = found.ok_or_else(name)?;
-        Ok(Operand { cache, index: load.index, order, stride })
+        Ok(Operand { cache, order, stride })
     };
     let lhs = layout(lhs, [m, k, n])?;
     let rhs = layout(rhs, [k, n, m])?;

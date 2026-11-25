@@ -12,7 +12,7 @@ mod validate_tensorize;
 pub use error::ScheduleError;
 pub(crate) use loop_tree::CacheId;
 pub use loop_tree::{
-    CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Tensorized,
+    CacheRead, Guard, Loop, LoopAnnotation, LoopId, LoopKind, LoopTree, Reindexed, Tensorized,
 };
 pub use primitive::{Primitive, SplitFactor, StageCount, ThreadAxis};
 pub use trace::Trace;
@@ -72,6 +72,10 @@ impl Schedule<Open> {
             Primitive::CacheRead { tensor, at } => {
                 let compute = Arc::clone(&self.compute);
                 self.record(step, |tree| tree.cache_read(&compute, tensor, at))
+            }
+            Primitive::Reindex { tensor, ref groups } => {
+                let compute = Arc::clone(&self.compute);
+                self.record(step.clone(), |tree| tree.reindex(&compute, tensor, groups))
             }
             Primitive::Swizzle { tensor, swizzle } => {
                 let compute = Arc::clone(&self.compute);
