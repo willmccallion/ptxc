@@ -2,7 +2,7 @@
 //! indices, loads and values become kernel-level ones.
 
 use super::cache::{Tile, allocate_tiles};
-use crate::compute::{ComputeDef, IndexVar, TensorExpr, TensorParamId, VarName};
+use crate::compute::{ComputeDef, IndexVar, IterVarId, TensorExpr, TensorParamId, VarName};
 use crate::expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 use crate::schedule::{
     CacheId, Guard, LoopAnnotation, LoopId, LoopKind, LoopTree, ThreadAxis, WARP_LANES,
@@ -158,10 +158,23 @@ impl<'s> Lowerer<'s> {
     /// The kernel expression for compute index expression `id`: axes become
     /// their indices over the loops, and loaded indices kernel variables.
     pub(super) fn translate(&mut self, id: ExprId) -> ExprId {
-        let pair = |this: &mut Self, a, b| (this.translate(a), this.translate(b));
+        self.translate_with(id, &HashMap::new())
+    }
+
+    /// `id` translated with the axes `axes` holds at the values it gives
+    /// them instead.
+    pub(super) fn translate_with(
+        &mut self,
+        id: ExprId,
+        axes: &HashMap<IterVarId, ExprId>,
+    ) -> ExprId {
+        let pair =
+            |this: &mut Self, a, b| (this.translate_with(a, axes), this.translate_with(b, axes));
         match self.compute.exprs().get(id) {
             Expr::Var(var) => match &self.compute.vars()[var] {
-                IndexVar::Iter(axis) => self.tree.axis_index(*axis),
+                IndexVar::Iter(axis) => {
+                    axes.get(axis).copied().unwrap_or_else(|| self.tree.axis_index(*axis))
+                }
                 IndexVar::Loaded { .. } => {
                     let kernel_var = self.loaded_var(var);
                     self.exprs.var(kernel_var)
@@ -222,6 +235,29 @@ impl<'s> Lowerer<'s> {
         self.simplify(flat)
     }
 
+    /// The row-major coordinates in `dims` of flat position `flat`, each
+    /// `floormod(floordiv(flat, inner), dim)` for the product `inner` of
+    /// the dims inside it, as `fuse` recovers its loops.
+    pub(super) fn delinearize(&mut self, flat: ExprId, dims: &[Dim]) -> Vec<ExprId> {
+        let mut inner: Vec<u64> = dims
+            .iter()
+            .rev()
+            .scan(1_u64, |product, dim| {
+                let inside = *product;
+                *product = product.saturating_mul(dim.get());
+                Some(inside)
+            })
+            .collect();
+        inner.reverse();
+        let mut coordinates = Vec::new();
+        for (&dim, inside) in dims.iter().zip(inner) {
+            let (divisor, modulus) = (self.extent(Dim::new(inside)), self.extent(dim));
+            let quotient = self.exprs.floor_div(flat, divisor);
+            coordinates.push(self.exprs.floor_mod(quotient, modulus));
+        }
+        coordinates
+    }
+
     /// The flat position in `tensor` of the compute-level `index`.
     fn input_position(&mut self, tensor: TensorParamId, index: &[ExprId]) -> ExprId {
         let translated: Vec<ExprId> = index.iter().map(|&id| self.translate(id)).collect();
@@ -249,7 +285,7 @@ impl<'s> Lowerer<'s> {
         let sub = |this: &mut Self, operand: &TensorExpr| Box::new(this.value(operand, reduced));
         match expr {
             TensorExpr::Load { tensor, index } => {
-                if let Some(tile) = self.tile_load(*tensor, index) {
+                if let Some(tile) = self.tile_load(*tensor) {
                     return tile;
                 }
                 let index = self.input_position(*tensor, index);

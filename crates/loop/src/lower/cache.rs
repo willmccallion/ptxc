@@ -1,12 +1,15 @@
 //! Lowers the inputs staged in shared memory, as TVM's `cache_read` with
-//! `compute_at`. A tile is a box per input axis: its origin is the staged
-//! index at the first point of the loops it spans, its extent one more
-//! than the index's growth over them. The loop it is staged at fills it
-//! with the block's threads between two barriers, and the input's loads
-//! read it instead.
+//! `compute_at`. A tile is a box over its coordinates: the input's index,
+//! one per input axis, or, reindexed, the fused groups of axes, one per
+//! group, as MetaSchedule's `ReIndex` stages a read. Its origin is the
+//! coordinates at the first point of the loops it spans, its extent one
+//! more than their growth over them. The loop it is staged at fills it with
+//! the block's threads between two barriers, and the input's loads read it
+//! instead.
 
 use super::context::Lowerer;
-use crate::compute::{ComputeDef, TensorName, TensorParamId};
+use super::reindex::TileSpace;
+use crate::compute::{ComputeDef, IterVarId, TensorName, TensorParamId};
 use crate::expr::{Expr, ExprId, LinearSum, VarId};
 use crate::schedule::{CacheId, CacheRead, LoopAnnotation, LoopId, LoopTree, ScheduleError};
 use crate::stmt::{BufferId, MemScope, Stmt, ValueExpr};
@@ -19,7 +22,12 @@ pub(super) struct Tile {
     pub(super) tensor: TensorParamId,
     pub(super) at: LoopId,
     pub(super) buffer: BufferId,
-    /// The input's index of the tile's first element, per axis.
+    /// The space the tile is a box in.
+    pub(super) space: TileSpace,
+    /// The coordinates of the element a load reads, over the kernel's
+    /// loops.
+    pub(super) coordinates: Vec<ExprId>,
+    /// The coordinates of the tile's first element.
     pub(super) origin: Vec<ExprId>,
     pub(super) extents: Vec<Dim>,
     /// The iterations of `at` whose tiles the buffer holds at once, one
@@ -70,16 +78,28 @@ impl Lowerer<'_> {
         let (compute, tree) = (self.compute, self.tree);
         for (cache, extents) in tree.caches().iter().zip(extents) {
             let spanned = self.spanned(cache.at);
-            let index = self.kernel_index(cache);
-            let origin = index.into_iter().map(|axis| self.first_point(axis, &spanned)).collect();
+            let (space, coordinates) = self.tile_space(cache);
+            let origin = coordinates
+                .iter()
+                .map(|&coordinate| self.first_point(coordinate, &spanned))
+                .collect();
             let input = &compute.inputs()[cache.tensor];
             let name = format!("{}_tile", input.name);
             let slots = slots_at(tree, cache.at);
             let size = slots.get() * tile_size(extents);
             let scope = MemScope::Shared { swizzle: cache.swizzle };
             let buffer = self.scratch(&name, input.dtype, scope, size);
-            let (tensor, at, extents) = (cache.tensor, cache.at, extents.clone());
-            let tile = Tile { tensor, at, buffer, origin, extents, slots, threads };
+            let tile = Tile {
+                tensor: cache.tensor,
+                at: cache.at,
+                buffer,
+                space,
+                coordinates,
+                origin,
+                extents: extents.clone(),
+                slots,
+                threads,
+            };
             let _stage: CacheId = self.tiles.push(tile);
         }
     }
@@ -103,25 +123,40 @@ impl Lowerer<'_> {
             .collect()
     }
 
-    /// `cache`'s index over the kernel's loops, simplified.
-    fn kernel_index(&mut self, cache: &CacheRead) -> Vec<ExprId> {
-        cache
+    /// The space `cache`'s tile is a box in, and its coordinates over the
+    /// kernel's loops: the input's index, simplified, or the reindexed
+    /// groups' coordinates.
+    fn tile_space(&mut self, cache: &CacheRead) -> (TileSpace, Vec<ExprId>) {
+        let tree = self.tree;
+        if let Some(found) = tree.reindexed().iter().find(|found| found.tensor == cache.tensor) {
+            let space =
+                TileSpace::Iteration { groups: found.groups.clone(), index: cache.index.clone() };
+            return (space, found.coordinates.clone());
+        }
+        let index = cache
             .index
             .iter()
             .map(|&id| {
                 let translated = self.translate(id);
                 self.simplify(translated)
             })
-            .collect()
+            .collect();
+        (TileSpace::Input, index)
     }
 
-    /// The tile's extent along each axis of `cache`'s input.
+    /// The extents of `axes`.
+    pub(super) fn axis_extents(&self, axes: &[IterVarId]) -> Vec<Dim> {
+        axes.iter().map(|&axis| self.compute.iter_vars()[axis].extent).collect()
+    }
+
+    /// The tile's extent along each of `cache`'s coordinates.
     fn tile_extents(&mut self, cache: &CacheRead) -> Result<Vec<Dim>, ScheduleError> {
         let compute = self.compute;
         let name = &compute.inputs()[cache.tensor].name;
         let spanned = self.spanned(cache.at);
-        let index = self.kernel_index(cache);
-        index.into_iter().map(|axis| self.tile_extent(axis, &spanned, name)).collect()
+        let (space, coordinates) = self.tile_space(cache);
+        self.check_covered(cache.tensor, &space, &spanned)?;
+        coordinates.into_iter().map(|axis| self.tile_extent(axis, &spanned, name)).collect()
     }
 
     /// One more than `axis`'s growth over the `spanned` loops, each of which
@@ -164,27 +199,21 @@ impl Lowerer<'_> {
         self.simplify(first)
     }
 
-    /// A load of `tensor` at compute-level `index` from its tile, if it is
-    /// staged.
-    pub(super) fn tile_load(
-        &mut self,
-        tensor: TensorParamId,
-        index: &[ExprId],
-    ) -> Option<ValueExpr> {
+    /// A load of `tensor` from its tile, if it is staged.
+    pub(super) fn tile_load(&mut self, tensor: TensorParamId) -> Option<ValueExpr> {
         let (cache, tile) = self.tiles.iter_enumerated().find(|(_, tile)| tile.tensor == tensor)?;
         let buffer = tile.buffer;
-        Some(ValueExpr::Load { buffer, index: self.tile_position(cache, index) })
+        Some(ValueExpr::Load { buffer, index: self.tile_position(cache) })
     }
 
-    /// The position in stage `cache`'s tile of its input's element at
-    /// compute-level `index`.
-    pub(super) fn tile_position(&mut self, cache: CacheId, index: &[ExprId]) -> ExprId {
+    /// The position in stage `cache`'s tile of the element a load of its
+    /// input reads.
+    pub(super) fn tile_position(&mut self, cache: CacheId) -> ExprId {
         let tile = self.tiles[cache].clone();
         let mut offsets = Vec::new();
-        for (&axis, &origin) in index.iter().zip(&tile.origin) {
-            let translated = self.translate(axis);
+        for (&coordinate, &origin) in tile.coordinates.iter().zip(&tile.origin) {
             let negated = self.negated(origin);
-            let offset = self.exprs.add(translated, negated);
+            let offset = self.exprs.add(coordinate, negated);
             offsets.push(self.simplify(offset));
         }
         let position = self.linearize(&offsets, &tile.extents);

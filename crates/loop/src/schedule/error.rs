@@ -128,6 +128,27 @@ pub enum ScheduleError {
     /// lowering does not combine with one yet.
     #[error("input {0} cannot be staged in a reduction shared between threads")]
     CacheCrossThread(TensorName),
+    /// A reindexed input that is not staged, so has no tile to reindex.
+    #[error("input {0} is reindexed but not staged in shared memory")]
+    ReindexUnstaged(TensorName),
+    /// A second reindex of one input's tile.
+    #[error("input {0}'s tile is already reindexed")]
+    AlreadyReindexed(TensorName),
+    /// Tile coordinates that are not nonempty groups of the definition's
+    /// nonempty axes, each axis in one.
+    #[error("input {0}'s tile coordinates are not nonempty groups of distinct, nonempty axes")]
+    ReindexAxes(TensorName),
+    /// A reindexed tile missing an axis that the input's index reads and
+    /// that varies across the tile, so its elements do not place the loads.
+    #[error(
+        "input {tensor}'s index reads axis {axis}, which varies across its tile but is in none of its coordinates"
+    )]
+    ReindexUncovered {
+        /// The input staged.
+        tensor: TensorName,
+        /// The axis.
+        axis: VarName,
+    },
     /// A swizzle of an input that is not staged.
     #[error("input {0} is not staged in shared memory, so it has no tile to swizzle")]
     SwizzleUnstaged(TensorName),

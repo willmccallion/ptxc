@@ -86,6 +86,21 @@ pub struct CacheRead {
     pub swizzle: Option<Swizzle>,
 }
 
+/// An input whose staged tile is a box in the iteration space
+/// (`Primitive::Reindex`): a coordinate per group of axes, fused
+/// row-major.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Reindexed {
+    /// The input.
+    pub tensor: TensorParamId,
+    /// The groups, outermost first, each its axes outermost first.
+    pub groups: Vec<Vec<IterVarId>>,
+    /// Each group's coordinate over the nest's loop variables, carried
+    /// through each later split and fuse as an axis index is, so a group
+    /// fused into one loop stays that loop's index.
+    pub coordinates: Vec<ExprId>,
+}
+
 ptxc_core::define_index!(
     /// A staged input of a loop tree, numbered in the order it was staged.
     pub(crate) CacheId
@@ -114,6 +129,7 @@ pub struct LoopTree {
     pub(super) axes: IndexVec<IterVarId, ExprId>,
     pub(super) guards: Vec<Guard>,
     pub(super) caches: Vec<CacheRead>,
+    pub(super) reindexed: Vec<Reindexed>,
     pub(super) tensorized: Option<Tensorized>,
 }
 
@@ -128,6 +144,7 @@ impl LoopTree {
             axes: IndexVec::new(),
             guards: Vec::new(),
             caches: Vec::new(),
+            reindexed: Vec::new(),
             tensorized: None,
         };
         let mut reductions = Vec::new();
@@ -190,6 +207,12 @@ impl LoopTree {
         &self.caches
     }
 
+    /// The inputs whose tiles are boxes in the iteration space, in the
+    /// order they were reindexed.
+    pub fn reindexed(&self) -> &[Reindexed] {
+        &self.reindexed
+    }
+
     /// Each current loop's variable ranges over `[0, extent)`.
     pub fn ranges(&self) -> VarRanges {
         let mut ranges = VarRanges::new();
@@ -248,21 +271,27 @@ impl LoopTree {
         Simplifier::new(&ranges).simplify(&mut self.exprs, id)
     }
 
-    /// Replaces `old`'s variable by `value` in every axis index and guard,
-    /// after `old` has left the nest, then simplifies them over the new
-    /// loops' ranges. Substitution keeps the values an index takes, so a
-    /// guard stays exactly as necessary as it was.
+    /// Replaces `old`'s variable by `value` in every axis index, guard and
+    /// reindexed coordinate, after `old` has left the nest, then simplifies
+    /// them over the new loops' ranges. Substitution keeps the values an
+    /// index takes, so a guard stays exactly as necessary as it was.
     pub(super) fn replace_var(&mut self, old: LoopId, value: ExprId) {
         let ranges = self.ranges();
         let mut simplifier = Simplifier::new(&ranges);
         let var = Self::var_of(old);
+        let mut replace = |exprs: &mut ExprArena, id: &mut ExprId| {
+            let substituted = exprs.substitute(*id, var, value);
+            *id = simplifier.simplify(exprs, substituted);
+        };
         for axis in self.axes.ids() {
-            let substituted = self.exprs.substitute(self.axes[axis], var, value);
-            self.axes[axis] = simplifier.simplify(&mut self.exprs, substituted);
+            replace(&mut self.exprs, &mut self.axes[axis]);
         }
         for guard in &mut self.guards {
-            let substituted = self.exprs.substitute(guard.index, var, value);
-            guard.index = simplifier.simplify(&mut self.exprs, substituted);
+            replace(&mut self.exprs, &mut guard.index);
+        }
+        let coordinates = self.reindexed.iter_mut().flat_map(|found| &mut found.coordinates);
+        for coordinate in coordinates {
+            replace(&mut self.exprs, coordinate);
         }
     }
 }

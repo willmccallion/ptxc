@@ -2,7 +2,7 @@
 //! not sums or constant multiples. Folding a sum through this form combines
 //! like terms and puts it in one canonical order.
 
-use super::{Expr, ExprArena, ExprId};
+use super::{Expr, ExprArena, ExprId, VarId};
 use std::collections::BTreeMap;
 
 /// An affine combination of atoms. Arithmetic on it is checked: `None`
@@ -136,6 +136,23 @@ impl ExprArena {
         })
     }
 
+    /// Whether `id` is `var` plus terms that read no `var` and whose every
+    /// value is a multiple of `factor`, so `factor` adjacent values of
+    /// `var` from a multiple of `factor` give as many adjacent values of
+    /// `id` from one.
+    pub(crate) fn steps_with(&self, id: ExprId, var: VarId, factor: u64) -> bool {
+        let Ok(factor) = i64::try_from(factor) else { return false };
+        let Some(atom) = self.find(Expr::Var(var)) else { return false };
+        LinearSum::of(self, id).is_some_and(|sum| {
+            sum.coefficient(atom) == 1
+                && sum.constant() % factor == 0
+                && sum.terms().filter(|&(term, _)| term != atom).all(|(term, coefficient)| {
+                    !self.vars(term).contains(&var)
+                        && (coefficient % factor == 0 || self.multiple_atom(term, factor))
+                })
+        })
+    }
+
     fn multiple_atom(&self, atom: ExprId, factor: i64) -> bool {
         match self.get(atom) {
             Expr::FloorMod(a, b) => self.multiple(a, factor) && self.multiple(b, factor),
@@ -147,7 +164,7 @@ impl ExprArena {
 
 #[cfg(test)]
 mod tests {
-    use crate::expr::{ExprArena, VarId};
+    use crate::expr::{ExprArena, ExprId, VarId};
     use ptxc_core::Idx;
 
     #[test]
@@ -165,5 +182,45 @@ mod tests {
             [wrapped, wrapped_by_six, times_j, bare].map(|id| exprs.is_multiple_of(id, 4));
 
         assert_eq!(multiples, [true, false, true, false]);
+    }
+
+    #[test]
+    fn an_index_steps_with_a_variable_added_once_to_whole_multiples() {
+        // `c` steps `c + 8i + 4` and `c + floormod(4j, 8)` four at a time.
+        let mut exprs = ExprArena::new();
+        let [c, i, j] = [0, 1, 2].map(|var| exprs.var(VarId::new(var)));
+        let [four, eight] = [4, 8].map(|value| exprs.constant(value));
+        let sum = |exprs: &mut ExprArena, terms: &[ExprId]| {
+            terms.iter().copied().reduce(|total, term| exprs.add(total, term)).unwrap()
+        };
+        let eight_i = exprs.mul(i, eight);
+        let four_j = exprs.mul(j, four);
+        let wrapped = exprs.floor_mod(four_j, eight);
+        let stepping = [sum(&mut exprs, &[c, eight_i, four]), sum(&mut exprs, &[c, wrapped])];
+
+        let steps = stepping.map(|id| exprs.steps_with(id, VarId::new(0), 4));
+
+        assert_eq!(steps, [true, true]);
+    }
+
+    #[test]
+    fn an_index_does_not_step_with_a_variable_scaled_offset_or_read_twice() {
+        let mut exprs = ExprArena::new();
+        let [c, i] = [0, 1].map(|var| exprs.var(VarId::new(var)));
+        let [two, four] = [2, 4].map(|value| exprs.constant(value));
+        let two_c = exprs.mul(c, two);
+        let plus_two = exprs.add(c, two);
+        let two_i = exprs.mul(i, two);
+        let plus_two_i = exprs.add(c, two_i);
+        let quarter = exprs.floor_div(c, four);
+        let four_quarters = exprs.mul(quarter, four);
+        let read_twice = exprs.add(c, four_quarters);
+
+        let steps = [c, two_c, plus_two, plus_two_i, read_twice, i]
+            .map(|id| exprs.steps_with(id, VarId::new(0), 4));
+
+        assert_eq!(steps, [true, false, false, false, false, false]);
+        assert!(!exprs.steps_with(c, VarId::new(0), u64::MAX));
+        assert!(!exprs.steps_with(c, VarId::new(7), 4));
     }
 }

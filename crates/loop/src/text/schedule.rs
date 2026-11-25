@@ -2,7 +2,7 @@
 //! trace.
 
 use super::index::write_index;
-use crate::compute::ComputeDef;
+use crate::compute::{ComputeDef, IterVarId};
 use crate::schedule::{LoopAnnotation, LoopId, LoopKind, LoopTree, Primitive, Schedule};
 use ptxc_core::Idx;
 use std::fmt::Write;
@@ -103,6 +103,15 @@ fn write_step(out: &mut String, (compute, loops): (&ComputeDef, &LoopTree), step
         }
         Primitive::CacheRead { tensor, at } => {
             write!(out, "cache_read {} {}", compute.inputs()[*tensor].name, name(*at))
+        }
+        Primitive::Reindex { tensor, groups } => {
+            let axes = |group: &[IterVarId]| {
+                let names: Vec<String> =
+                    group.iter().map(|&axis| compute.iter_vars()[axis].name.to_string()).collect();
+                format!("[{}]", names.join(", "))
+            };
+            let groups: Vec<String> = groups.iter().map(|group| axes(group)).collect();
+            write!(out, "reindex {} {}", compute.inputs()[*tensor].name, groups.join(" "))
         }
         Primitive::Swizzle { tensor, swizzle } => {
             let name = &compute.inputs()[*tensor].name;

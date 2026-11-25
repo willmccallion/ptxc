@@ -1,7 +1,7 @@
 //! `Primitive`: one schedule step.
 
 use super::loop_tree::LoopId;
-use crate::compute::TensorParamId;
+use crate::compute::{IterVarId, TensorParamId};
 use crate::stmt::Swizzle;
 use ptxc_target::MmaInstruction;
 
@@ -134,6 +134,20 @@ pub enum Primitive {
         tensor: TensorParamId,
         /// The loop whose every iteration fills the tile.
         at: LoopId,
+    },
+    /// Makes an input's staged tile a box in the definition's iteration
+    /// space rather than the input's, as MetaSchedule's `ReIndex` stages a
+    /// read: each coordinate of the tile is a group of axes fused
+    /// row-major, outermost first. Grouping a convolution's output
+    /// positions and its taps stages its input as a matrix, the left
+    /// operand of an implicit GEMM, which no box of the input is. Applied
+    /// before the groups' loops are fused and split, as MetaSchedule
+    /// reindexes before tiling, each coordinate stays affine in the loops.
+    Reindex {
+        /// The input, staged before validation.
+        tensor: TensorParamId,
+        /// The tile's coordinates, outermost first, each a group of axes.
+        groups: Vec<Vec<IterVarId>>,
     },
     /// Places the bytes of an input's staged tile by an XOR swizzle, as
     /// CUTLASS's shared-memory layouts do, so the rows an `ldmatrix` or a

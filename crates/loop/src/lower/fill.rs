@@ -72,19 +72,18 @@ impl Lowerer<'_> {
     }
 
     /// How `tile` is copied: in the longest of `RUN_BYTES` whose length
-    /// divides the tile's and its input's innermost extents and the tile's
-    /// origin along that axis, so a run lies in one row of both, aligned;
-    /// and one element where none does.
+    /// divides the tile's innermost extent and its origin's innermost
+    /// coordinate, so a run lies in one row of the tile, aligned, and whose
+    /// elements are adjacent in one row of the input, aligned; and one
+    /// element where none is.
     pub(super) fn run(&self, tile: &Tile) -> Run {
-        let input = &self.compute.inputs()[tile.tensor];
-        let element = input.dtype.element_size().get();
-        let innermost = (tile.extents.last(), input.shape.dims().last(), tile.origin.last());
-        let length = match innermost {
-            (Some(tile_extent), Some(input_extent), Some(&origin)) => {
+        let element = self.compute.inputs()[tile.tensor].dtype.element_size().get();
+        let length = match (tile.extents.last(), tile.origin.last()) {
+            (Some(extent), Some(&origin)) => {
                 let fits = |run: u64| {
-                    tile_extent.get().is_multiple_of(run)
-                        && input_extent.get().is_multiple_of(run)
+                    extent.get().is_multiple_of(run)
                         && self.exprs.is_multiple_of(origin, run)
+                        && self.runs_in_input(tile, run)
                 };
                 RUN_BYTES.iter().map(|bytes| bytes / element).find(|&run| fits(run)).unwrap_or(1)
             }
@@ -97,8 +96,8 @@ impl Lowerer<'_> {
 
     /// Each thread's copy of its run of `tile` in `round` of `rounds`, into
     /// the buffer from `start`. A run starts at a multiple of its length in
-    /// a row whose extent is one, so its first element's bounds are all of
-    /// its elements'.
+    /// rows of the tile and the input whose extents are multiples of it, so
+    /// its first element's bounds are all of its elements'.
     fn fill_round(
         &mut self,
         tile: &Tile,
@@ -108,12 +107,13 @@ impl Lowerer<'_> {
         let index = self.tile_element(round, rounds);
         let first = self.scaled(index, run.length);
         let coordinates = self.coordinates(first, tile);
+        let read = self.tile_read(tile, &coordinates);
         let dims = self.compute.inputs()[tile.tensor].shape.dims().to_vec();
-        let position = self.linearize(&coordinates, &dims);
+        let position = self.linearize(&read, &dims);
         let source = (self.input_buffer(tile.tensor), self.simplify(position));
         let mut in_input = Vec::new();
-        for (&coordinate, &dim) in coordinates.iter().zip(&dims).rev() {
-            in_input.extend(self.open_bounds(coordinate, dim));
+        for (value, bound) in self.read_ranges(tile, &coordinates, &read).into_iter().rev() {
+            in_input.extend(self.open_bounds(value, bound));
         }
         // Unsimplified, so the guard on the run's index bounds the copy.
         let target_index = start.map_or(first, |start| self.exprs.add(start, first));
@@ -202,21 +202,18 @@ impl Lowerer<'_> {
         }
     }
 
-    /// The input index of tile element `element`, per axis: its row-major
-    /// coordinates in the tile, offset by the tile's origin.
+    /// The coordinates of tile element `element`: its row-major place in
+    /// the tile, offset by the tile's origin.
     fn coordinates(&mut self, element: ExprId, tile: &Tile) -> Vec<ExprId> {
-        let mut stride = tile_size(&tile.extents);
-        let mut coordinates = Vec::new();
-        for (&origin, &extent) in tile.origin.iter().zip(&tile.extents) {
-            // Tile extents are at least 1, so the stride stays exact.
-            stride /= extent.get();
-            let (stride_expr, extent_expr) = (self.extent(Dim::new(stride)), self.extent(extent));
-            let quotient = self.exprs.floor_div(element, stride_expr);
-            let local = self.exprs.floor_mod(quotient, extent_expr);
-            let index = self.exprs.add(origin, local);
-            coordinates.push(self.simplify(index));
-        }
-        coordinates
+        let locals = self.delinearize(element, &tile.extents);
+        tile.origin
+            .iter()
+            .zip(locals)
+            .map(|(&origin, local)| {
+                let coordinate = self.exprs.add(origin, local);
+                self.simplify(coordinate)
+            })
+            .collect()
     }
 
     /// `body` under `0 <= index < bound`, checking only the sides the

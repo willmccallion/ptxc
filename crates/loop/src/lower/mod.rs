@@ -8,6 +8,7 @@ mod elementwise;
 mod fill;
 mod pipeline;
 mod reduction;
+mod reindex;
 mod tensorize;
 
 use crate::schedule::{LoopAnnotation, LoopKind, Schedule, Validated};

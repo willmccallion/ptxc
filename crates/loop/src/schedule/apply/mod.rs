@@ -6,6 +6,7 @@ mod compute_at;
 mod fuse;
 mod layout;
 mod pipeline;
+mod reindex;
 mod reorder;
 mod split;
 mod tensorize;

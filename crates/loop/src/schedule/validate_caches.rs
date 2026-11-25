@@ -1,7 +1,7 @@
 //! Checks the inputs staged in shared memory against the final nest and
 //! the target: where each stage sits, that each pipelined loop has tiles to
-//! fill ahead, that each swizzle permutes bytes only within its tile, and
-//! that the tiles fit.
+//! fill ahead, that each reindexed input is staged, that each swizzle
+//! permutes bytes only within its tile, and that the tiles fit.
 
 use super::apply::cache::{LoadSite, loads_of};
 use super::error::ScheduleError;
@@ -22,6 +22,7 @@ pub(super) fn check_caches(
         check_placement(compute, tree, cache)?;
     }
     check_pipelines(tree)?;
+    check_reindexed(compute, tree)?;
     let tiles = tile_extents(compute, tree)?;
     check_swizzles(compute, tree, &tiles)?;
     check_shared_memory(compute, tree, &tiles, target)?;
@@ -65,6 +66,18 @@ fn check_pipelines(tree: &LoopTree) -> Result<(), ScheduleError> {
         let pipelined = matches!(found.annotation, LoopAnnotation::Pipelined(_));
         if pipelined && !tree.caches().iter().any(|cache| cache.at == id) {
             return Err(ScheduleError::PipelineUnstaged(found.name.clone()));
+        }
+    }
+    Ok(())
+}
+
+/// Every reindexed input is staged.
+fn check_reindexed(compute: &ComputeDef, tree: &LoopTree) -> Result<(), ScheduleError> {
+    for found in tree.reindexed() {
+        if !tree.caches().iter().any(|cache| cache.tensor == found.tensor) {
+            return Err(ScheduleError::ReindexUnstaged(
+                compute.inputs()[found.tensor].name.clone(),
+            ));
         }
     }
     Ok(())
