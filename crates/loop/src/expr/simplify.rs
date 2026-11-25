@@ -219,11 +219,24 @@ fn fuse_once(arena: &ExprArena, sum: &LinearSum) -> Option<LinearSum> {
         if factor == 0 {
             return None;
         }
-        let quotient = arena.find(Expr::FloorDiv(x, divisor))?;
+        let quotient =
+            arena.find(Expr::FloorDiv(x, divisor)).or_else(|| merged_quotient(arena, x, factor))?;
         if sum.coefficient(quotient) != coefficient.checked_mul(factor)? {
             return None;
         }
         let rest = sum.clone().without(atom).without(quotient);
         rest.plus(&LinearSum::of(arena, x)?.scaled(coefficient)?)
     })
+}
+
+/// `floordiv(x, factor)` where `x` is `floordiv(y, d)`, in the form
+/// `nested_floor_div` merges it into, `floordiv(y, d·factor)`, if the arena
+/// holds it. The merge needs positive divisors. Three or more fused axes
+/// recombine through it: the middle axis's `floormod(floordiv(y, d), f)`
+/// pairs with the outer axis's `floordiv(y, d·f)`.
+fn merged_quotient(arena: &ExprArena, x: ExprId, factor: i64) -> Option<ExprId> {
+    let Expr::FloorDiv(y, inner) = arena.get(x) else { return None };
+    let product = positive_constant(arena, inner)?.checked_mul(factor).filter(|_| factor > 0)?;
+    let divisor = arena.find(Expr::Const(product))?;
+    arena.find(Expr::FloorDiv(y, divisor))
 }

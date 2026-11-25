@@ -254,3 +254,21 @@ fn a_remainder_by_zero_never_fuses() {
     terms.sort();
     assert_eq!(f.arena.get(simplified), ptxc_loop::Expr::Add(terms[0], terms[1]));
 }
+
+#[test]
+fn three_fused_axes_recombine_into_the_index_they_were_fused_from() {
+    // `x` fused from axes of extents 2, 3 and 5, as `fuse` recovers them:
+    // `floordiv(x, 15)`, `floormod(floordiv(x, 5), 3)` and `floormod(x, 5)`.
+    let mut f = fixture();
+    let (three, five, fifteen) = (f.c(3), f.c(5), f.c(15));
+    let outer = f.arena.floor_div(f.x, fifteen);
+    let by_five = f.arena.floor_div(f.x, five);
+    let middle = f.arena.floor_mod(by_five, three);
+    let inner = f.arena.floor_mod(f.x, five);
+    let outer_scaled = f.arena.mul(outer, fifteen);
+    let middle_scaled = f.arena.mul(middle, five);
+    let outer_and_middle = f.arena.add(outer_scaled, middle_scaled);
+    let fused = f.arena.add(outer_and_middle, inner);
+
+    assert_eq!(f.simplify(fused), f.x);
+}
