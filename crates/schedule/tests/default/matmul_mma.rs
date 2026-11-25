@@ -41,14 +41,14 @@ fn an_f16_product_gives_blocks_of_four_warps_a_64_by_64_tile_each() {
 
 #[test]
 fn a_product_with_a_grid_of_32_large_tiles_takes_them_and_a_smaller_one_does_not() {
-    let large = product(DType::F16, [16, 4, 136, 16], PLAIN);
+    let large = product(DType::F16, [32, 128, 128, 16], PLAIN);
     let square = product(DType::F16, [1, 1024, 512, 16], PLAIN);
     let small = product(DType::F16, [1, 1024, 384, 32], PLAIN);
     let kernels = [&large, &small]
         .map(|compute| default_schedule(Arc::clone(compute), &target()).unwrap().lower());
 
     let [(_, large_launch), (_, square_launch), (_, small_launch)] =
-        [large.clone(), square, small].map(scheduled);
+        [large, square, small].map(scheduled);
 
     assert_eq!(launch_dims(large_launch), ([32, 1, 1], [32, 2, 2]));
     assert_eq!(launch_dims(square_launch), ([32, 1, 1], [32, 2, 2]));
@@ -65,7 +65,26 @@ fn a_product_with_a_grid_of_32_large_tiles_takes_them_and_a_smaller_one_does_not
     assert!(small_text.contains("%b_tile: f16[8192] shared swizzle<3,4,3>"), "{small_text}");
     assert_eq!(launch_dims(small_launch), ([96, 1, 1], [32, 2, 2]));
     assert_eq!(kernels[1].smem().get(), 4 * 2 * 64 * 32 * 2);
-    let [tiled, serial] = tiled_and_serial(&large, &exact_inputs(&large));
+}
+
+#[test]
+fn a_product_shorter_or_narrower_than_the_large_tile_takes_the_small_one() {
+    // 32 large tiles would cover each, 4 rows or 4 columns of them in use.
+    let short = product(DType::F16, [16, 4, 136, 16], PLAIN);
+    let narrow = product(DType::F16, [16, 136, 4, 16], PLAIN);
+
+    let narrower = product(DType::F16, [32, 128, 100, 16], PLAIN);
+    // Few batches of many large tiles each still take them.
+    let batched = product(DType::F16, [4, 256, 1024, 16], PLAIN);
+
+    let [(_, short_launch), (_, narrow_launch), (_, narrower_launch), (_, batched_launch)] =
+        [short.clone(), narrow, narrower, batched].map(scheduled);
+
+    assert_eq!(launch_dims(short_launch), ([48, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(narrow_launch), ([48, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(narrower_launch), ([128, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(batched_launch), ([64, 1, 1], [32, 2, 2]));
+    let [tiled, serial] = tiled_and_serial(&short, &exact_inputs(&short));
     assert_eq!(tiled, serial);
 }
 

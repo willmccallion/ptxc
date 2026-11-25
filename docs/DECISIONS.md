@@ -1565,3 +1565,19 @@ the old one.
   (`RuleCrossThreadReduction`): below that a tree's barriers cost more than
   the few additions it spreads.
 
+## D74. The large tensor-core tile covers only outputs it fills
+
+- **Context:** D58 and D68 give a product the 128 by 128 tile wherever 32
+  of them cover its output, counting its batch. Split-K's partials (D75)
+  are a batched product over the slices, so a 1 by 768 by 3072 product
+  split 8 ways counts 48 large tiles and took them: 128-row tiles over one
+  row, pipelined over two stages, at 23.8 µs against 17.7 for 3 slices of
+  small tiles.
+- **Choice:** the large tile also needs the output to be at least 128 rows
+  tall and 128 columns wide. Anything shorter or narrower takes the 64 by
+  64 tile, as any output with fewer than 32 large tiles does.
+- **Reason:** a large tile over a few rows or columns multiplies mostly
+  overhang, and its two stages hide less latency than the small tile's
+  four, so its only gain, fewer blocks to stage each operand slice for,
+  does not arise. With it the split product took 10.6 µs.
+
