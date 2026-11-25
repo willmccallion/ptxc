@@ -153,6 +153,37 @@ impl ExprArena {
         })
     }
 
+    /// `id` with `k·Σ strideᵢ·varᵢ` replaced by `k·fused`, if `id` reads
+    /// each of `vars` only in that combination, for one non-zero `k`, every
+    /// stride positive: `fused` is the loop fused from `vars`, row-major.
+    pub(crate) fn fold_fused(
+        &mut self,
+        id: ExprId,
+        vars: &[(VarId, i64)],
+        fused: VarId,
+    ) -> Option<ExprId> {
+        let sum = LinearSum::of(self, id)?;
+        let atoms = vars
+            .iter()
+            .map(|&(var, stride)| Some((self.find(Expr::Var(var))?, stride)))
+            .collect::<Option<Vec<_>>>()?;
+        let &(first, first_stride) = atoms.first()?;
+        let scale = sum.coefficient(first).checked_div(first_stride).filter(|&scale| scale != 0)?;
+        let combined = atoms.iter().all(|&(atom, stride)| {
+            stride > 0 && stride.checked_mul(scale) == Some(sum.coefficient(atom))
+        });
+        let rest = atoms.iter().fold(sum, |rest, &(atom, _)| rest.without(atom));
+        let reads_vars = |term: ExprId| {
+            self.vars(term).iter().any(|read| vars.iter().any(|&(var, _)| var == *read))
+        };
+        if !combined || rest.terms().any(|(term, _)| reads_vars(term)) {
+            return None;
+        }
+        let fused = self.var(fused);
+        let folded = rest.plus(&LinearSum::atom(fused).scaled(scale)?)?;
+        Some(folded.build(self))
+    }
+
     fn multiple_atom(&self, atom: ExprId, factor: i64) -> bool {
         match self.get(atom) {
             Expr::FloorMod(a, b) => self.multiple(a, factor) && self.multiple(b, factor),
@@ -222,5 +253,66 @@ mod tests {
         assert_eq!(steps, [true, false, false, false, false, false]);
         assert!(!exprs.steps_with(c, VarId::new(0), u64::MAX));
         assert!(!exprs.steps_with(c, VarId::new(7), 4));
+    }
+
+    /// `9a + 3b + c` scaled by `scale`, plus `offset`.
+    fn row_major(exprs: &mut ExprArena, scale: i64, offset: ExprId) -> ExprId {
+        let [a, b, c] = [0, 1, 2].map(|var| exprs.var(VarId::new(var)));
+        let [nine, three, by] = [9, 3, scale].map(|value| exprs.constant(value));
+        let (nine_a, three_b) = (exprs.mul(a, nine), exprs.mul(b, three));
+        let sum = exprs.add(nine_a, three_b);
+        let sum = exprs.add(sum, c);
+        let scaled = exprs.mul(sum, by);
+        exprs.add(scaled, offset)
+    }
+
+    const STRIDES: [(usize, i64); 3] = [(0, 9), (1, 3), (2, 1)];
+
+    fn strides() -> Vec<(VarId, i64)> {
+        STRIDES.iter().map(|&(var, stride)| (VarId::new(var), stride)).collect()
+    }
+
+    #[test]
+    fn a_row_major_combination_of_fused_loops_folds_into_the_fused_loop() {
+        let mut exprs = ExprArena::new();
+        let other = exprs.var(VarId::new(3));
+        let combined = row_major(&mut exprs, 2, other);
+
+        let folded = exprs.fold_fused(combined, &strides(), VarId::new(4)).unwrap();
+
+        let fused = exprs.var(VarId::new(4));
+        let two = exprs.constant(2);
+        let doubled = exprs.mul(fused, two);
+        let expected = [exprs.add(other, doubled), exprs.add(doubled, other)];
+        assert!(expected.contains(&folded), "{:?}", exprs.get(folded));
+    }
+
+    #[test]
+    fn a_sum_reading_the_loops_otherwise_does_not_fold() {
+        let mut exprs = ExprArena::new();
+        let zero = exprs.constant(0);
+        let a = exprs.var(VarId::new(0));
+        let [nine, four] = [9, 4].map(|value| exprs.constant(value));
+        let skewed = {
+            let combined = row_major(&mut exprs, 1, zero);
+            let extra = exprs.mul(a, nine);
+            exprs.add(combined, extra)
+        };
+        let divided = {
+            let quarter = exprs.floor_div(a, four);
+            row_major(&mut exprs, 1, quarter)
+        };
+        let unit = row_major(&mut exprs, 1, zero);
+
+        let folds = [skewed, divided].map(|id| exprs.fold_fused(id, &strides(), VarId::new(4)));
+        let unread = exprs.fold_fused(unit, &[(VarId::new(9), 1)], VarId::new(4));
+        let zero_stride = exprs.fold_fused(unit, &[(VarId::new(0), 0)], VarId::new(4));
+        let _unread = exprs.var(VarId::new(5));
+        let inner_zero =
+            [(VarId::new(0), 9), (VarId::new(1), 3), (VarId::new(2), 1), (VarId::new(5), 0)];
+        let zero_inner = exprs.fold_fused(unit, &inner_zero, VarId::new(4));
+
+        assert_eq!(folds, [None, None]);
+        assert_eq!([unread, zero_stride, zero_inner], [None, None, None]);
     }
 }
