@@ -2,7 +2,7 @@
 
 mod conv_implicit_gemm;
 pub(crate) mod elementwise;
-mod matmul_loops;
+pub(crate) mod matmul_loops;
 pub(crate) mod matmul_mma;
 pub(crate) mod matmul_shape;
 pub(crate) mod matmul_simt;
