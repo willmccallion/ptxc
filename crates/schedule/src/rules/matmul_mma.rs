@@ -7,7 +7,6 @@
 use super::bind;
 use super::matmul_loops::{GemmLoops, bind_blocks, parts, pipeline_step, stage_operands};
 use crate::tiling::{TensorCoreTile, TileShape};
-use ptxc_core::Dim;
 use ptxc_loop::{
     ComputeDef, LoopId, Open, Primitive, Schedule, ScheduleError, StageCount, Swizzle, TensorExpr,
     TensorParamId, ThreadAxis,
@@ -98,18 +97,19 @@ pub(crate) fn tiled_on_tensor_cores(
     schedule.apply(Primitive::Tensorize { m, n, k, instruction })
 }
 
-/// The large tile where the product of `loops`, unsplit, has at least
-/// `FULL_GRID` of them with `shape`'s `mma`, and the small one otherwise.
+/// The large tile where the output of `loops`, with `shape`'s `mma`, is at
+/// least as tall and wide as one and needs `FULL_GRID` of them, and the
+/// small one otherwise: a large tile over a few rows or columns computes
+/// mostly overhang (D74).
 fn tile_for(schedule: &Schedule<Open>, loops: &GemmLoops, shape: MmaShape) -> TensorCoreTile {
     let extent = |id: LoopId| schedule.loops().loops()[id].extent.get();
     let batch: u64 = loops.batch.iter().map(|&id| extent(id)).product();
-    let blocks = |extent: u64, warps: u64, per_warp: u64, mma: Dim| {
-        extent.div_ceil(warps * per_warp * mma.get())
-    };
-    let rows = blocks(extent(loops.row), LARGE.warps.rows, LARGE.per_warp.rows, shape.m);
-    let columns =
-        blocks(extent(loops.column), LARGE.warps.columns, LARGE.per_warp.columns, shape.n);
-    if batch * rows * columns >= FULL_GRID { LARGE } else { SMALL }
+    let tile_rows = LARGE.warps.rows * LARGE.per_warp.rows * shape.m.get();
+    let tile_columns = LARGE.warps.columns * LARGE.per_warp.columns * shape.n.get();
+    let [rows, columns] = [extent(loops.row), extent(loops.column)];
+    let fills = rows >= tile_rows && columns >= tile_columns;
+    let tiles = batch * rows.div_ceil(tile_rows) * columns.div_ceil(tile_columns);
+    if fills && tiles >= FULL_GRID { LARGE } else { SMALL }
 }
 
 /// Both `operands`' staged tiles swizzled as CUTLASS's layouts are, so the

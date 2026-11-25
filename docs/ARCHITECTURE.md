@@ -484,7 +484,8 @@ and the GPU tests check them.
   an `mma` for the product's operand and sum types (f16, bf16, FP8, 8-bit
   integers), it tiles it on tensor cores instead: a block's four warps each
   hold 4 by 8 `mma` tiles of a 128 by 128 block tile, or 2 by 4 of a 64 by
-  64 one where fewer than 32 large tiles cover the output, both operands
+  64 one where fewer than 32 large tiles cover the output or it is
+  shorter or narrower than one (D74), both operands
   staged two `mma` steps deep and the innermost tile tensorized (D58). The
   SIMT tile and the 64 by 64 one pipeline their steps over four stages, or
   as many as fit shared memory, the 128 by 128 one over two (D68), and
