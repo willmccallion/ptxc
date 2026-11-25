@@ -42,7 +42,8 @@ impl Convolution {
     }
 
     /// Each output element: the sum, over its group's input channels and
-    /// every kernel tap inside the input, of `x * w`, folded with `mul_add`.
+    /// every kernel tap, of `x * w`, folded with `mul_add`, `x` being `zero`
+    /// where a tap reads padding, as ONNX pads the input with zeros.
     pub(super) fn convolve<T: Copy>(
         &self,
         x: &[T],
@@ -68,11 +69,11 @@ impl Convolution {
         let x_base = n * xs[0] + group * group_channels * xs[1];
         let mut acc = zero;
         for tap in &self.taps {
-            let Some(source) = self.windows.source(spatial, tap, &xs[2..]) else { continue };
+            let source = self.windows.source(spatial, tap, &xs[2..]);
             let w_tap: usize = tap.iter().zip(&ws[2..]).map(|(t, s)| t * s).sum();
             for c in 0..group_channels {
-                acc =
-                    mul_add(x[x_base + c * xs[1] + source], w[m * ws[0] + c * ws[1] + w_tap], acc);
+                let value = source.map_or(zero, |source| x[x_base + c * xs[1] + source]);
+                acc = mul_add(value, w[m * ws[0] + c * ws[1] + w_tap], acc);
             }
         }
         acc

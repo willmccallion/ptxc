@@ -24,7 +24,7 @@ fn pool(kind: PoolKind, kernel: u64, axis: WindowAxis, rounding: Rounding) -> Op
 }
 
 #[test]
-fn convolution_masks_padded_taps_and_reads_its_group_channels() {
+fn convolution_pads_its_input_and_reads_its_group_channels() {
     let padded = ConvAttrs { axes: vec![window(2, 2, (1, 1))], groups: Groups::new(2).unwrap() };
     let dense = ConvAttrs { axes: vec![window(1, 1, (0, 0))], groups: Groups::new(1).unwrap() };
     let definitions = [
@@ -46,7 +46,7 @@ fn convolution_masks_padded_taps_and_reads_its_group_channels() {
 }
 
 #[test]
-fn pooling_masks_padding_and_averages_over_counted_taps() {
+fn pooling_pads_its_input_and_averages_over_counted_taps() {
     let padded = window(2, 1, (1, 1));
     let definitions = [
         lowered(pool(PoolKind::Max, 3, padded, Rounding::Ceil), &[(DType::I8, &[1, 1, 5])]),
@@ -65,7 +65,7 @@ fn pooling_masks_padding_and_averages_over_counted_taps() {
 }
 
 #[test]
-fn pooling_masks_exactly_the_windows_that_leave_the_input() {
+fn pooling_pads_exactly_the_windows_that_leave_the_input() {
     let empty = pool(PoolKind::Max, 2, window(1, 1, (1, 1)), Rounding::Floor);
     let end_padded = window(1, 1, (0, 1));
     let counted = window(2, 1, (0, 2));

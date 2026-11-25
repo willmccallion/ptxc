@@ -4,7 +4,7 @@ use crate::stage::{Binding, IntermediateId, LoweredGroup, Stage, TableId};
 use ptxc_core::{DType, Dim, HostTensor, IndexVec, Shape};
 use ptxc_graph::{Graph, Layout, TensorType, ValueId};
 use ptxc_loop::{
-    ComputeBuilder, ComputeError, ComputeName, ExprArena, ExprId, IterVarId, TensorExpr,
+    ComputeBuilder, ComputeError, ComputeName, ExprArena, ExprId, IterVarId, Scalar, TensorExpr,
     TensorName, TensorParamId, VarName,
 };
 use std::sync::Arc;
@@ -153,6 +153,19 @@ impl<'g> StageBuilder<'g> {
     pub(crate) fn load(&mut self, binding: Binding, index: Vec<ExprId>) -> Operand {
         let tensor = self.tensor(binding);
         Operand { expr: TensorExpr::load(tensor, index), dtype: self.type_of(binding).dtype() }
+    }
+
+    /// `binding` read at `index`, one index per axis, or `padding` where
+    /// the index lies outside it.
+    pub(crate) fn padded_load(
+        &mut self,
+        binding: Binding,
+        index: Vec<ExprId>,
+        padding: Scalar,
+    ) -> Operand {
+        let tensor = self.tensor(binding);
+        let expr = TensorExpr::Load { tensor, index, padding: Some(padding) };
+        Operand { expr, dtype: self.type_of(binding).dtype() }
     }
 
     /// An index variable holding `binding`'s integer at `index`, as a gather

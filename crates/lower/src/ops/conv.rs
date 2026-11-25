@@ -1,9 +1,9 @@
 //! Grouped N-d convolution: one reduction over a group's input channels
-//! and every kernel tap, masked where a tap reads padding, with the bias
+//! and every kernel tap, the input read through its padding, with the bias
 //! added after it.
 
 use super::NodeContext;
-use super::window::{Span, masked, read};
+use super::window::{Span, read, window_load};
 use crate::builder::{Operand, StageBuilder};
 use crate::compose::{add, f32, mul};
 use crate::error::LowerError;
@@ -11,14 +11,15 @@ use crate::precision::{demote, promote};
 use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::Dim;
 use ptxc_graph::{ConvAttrs, Groups, ValueId};
-use ptxc_loop::{ExprArena, ExprId, ReduceOp, TensorExpr};
+use ptxc_loop::{ExprArena, ExprId, ReduceOp, Scalar, TensorExpr};
 
 /// What a convolution multiplies at each tap: its input and weights, the
-/// product of an input element and a weight, and the zero that padded taps
-/// and empty inputs contribute.
+/// product of an input element and a weight, the input's padding, whose
+/// product with any weight is zero, and what an empty input sums to.
 pub(super) struct Products<'p> {
     pub(super) values: [ValueId; 2],
     pub(super) product: &'p dyn Fn(Operand, Operand) -> TensorExpr,
+    pub(super) padding: Scalar,
     pub(super) zero: TensorExpr,
 }
 
@@ -51,7 +52,12 @@ pub(super) fn conv(cx: &NodeContext<'_>, attrs: &ConvAttrs) -> Result<LoweredGro
         let product = |value: Operand, weight: Operand| {
             mul(promote(value.expr, value.dtype), promote(weight.expr, weight.dtype))
         };
-        let products = Products { values: [input, weights], product: &product, zero: f32(0.0) };
+        let products = Products {
+            values: [input, weights],
+            product: &product,
+            padding: Scalar::zero(dtype),
+            zero: f32(0.0),
+        };
         let sum = convolved(cx, stage, &products, &geometry, positions)?;
         let biased = match bias {
             Some(bias) => {
@@ -86,8 +92,9 @@ pub(super) fn geometry(
 }
 
 /// The sum, over output `[sample, feature, outs...]`'s group channels and
-/// kernel taps, of `products`' product of input and weight; its zero when
-/// the input has nothing to read.
+/// kernel taps, of `products`' product of input and weight; its zero where
+/// a group has no channels. An input empty along a spatial axis is all
+/// padding.
 pub(super) fn convolved(
     cx: &NodeContext<'_>,
     stage: &mut StageBuilder<'_>,
@@ -95,26 +102,25 @@ pub(super) fn convolved(
     geometry: &Geometry,
     (sample, feature, outs): (ExprId, ExprId, &[ExprId]),
 ) -> Result<TensorExpr, LowerError> {
-    let empty = |dim: Dim| dim.get() == 0;
-    if empty(geometry.group_channels) || geometry.spans.iter().any(|span| empty(span.input)) {
+    if geometry.group_channels.get() == 0 {
         return Ok(products.zero.clone());
     }
     let [input, weights] = products.values;
     let (channel_axis, channel) = stage.reduce_axis(geometry.group_channels);
     let read_channel = input_channel(cx, stage.exprs(), (feature, channel), geometry)?;
     let (mut input_index, mut weight_index) = (vec![sample, read_channel], vec![feature, channel]);
-    let (mut axes, mut inside) = (vec![channel_axis], Vec::new());
+    let (mut axes, mut reads) = (vec![channel_axis], Vec::new());
     for (&out, &span) in outs.iter().zip(&geometry.spans) {
         let (tap_axis, tap) = stage.reduce_axis(span.kernel);
         let tap_read = read(cx, stage.exprs(), span, (out, tap))?;
         input_index.push(tap_read.index);
         weight_index.push(tap);
-        inside.extend(tap_read.inside);
+        reads.push(tap_read);
         axes.push(tap_axis);
     }
-    let value = stage.load(Binding::Value(input), input_index);
+    let value = window_load(stage, (input, input_index), &reads, products.padding);
     let weight = stage.load(Binding::Value(weights), weight_index);
-    let body = masked(inside, (products.product)(value, weight), products.zero.clone());
+    let body = (products.product)(value, weight);
     Ok(TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) })
 }
 

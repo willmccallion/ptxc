@@ -1479,3 +1479,41 @@ the old one.
   definition, and implicit GEMM is a schedule like any tiling, open to
   the tuner. MetaSchedule reaches tensor cores on convolutions the same
   way.
+
+## D71. A window reads its padding through the load
+
+- **Context:** a convolution's or pool's tap that reads padding was handled
+  after the load. The index was clamped into the input and a select took
+  the padding value: zero in place of a convolution's product, the lowest
+  value for a max pool, zero for an average.
+  - A tile staged for `mma` (D70) is multiplied as it lies, so padding
+    has to be in the tile. A select over the product is not a value the
+    fill can copy, and `cp.async` copies or zero-fills, nothing between.
+  - The reference interpreter skipped a convolution's padded taps. ONNX,
+    ONNX Runtime and cuDNN pad the input with zeros and multiply them in,
+    so an infinite weight at a padded tap gives NaN there.
+- **Choice:**
+  - `TensorExpr::Load` carries `padding: Option<Scalar>`: the value it
+    reads where its index lies outside the tensor, as Halide's
+    `BoundaryConditions::constant_exterior` and TVM's inlined padding
+    stage read one. Without padding, the index lies inside wherever the
+    load runs, as `ComputeBuilder::finish` checks.
+  - Unstaged, a padded load lowers to the load clamped into the tensor,
+    selected against the padding wherever the index can leave it.
+  - Staged, the fill already checks each copy's bounds and zero-fills what
+    lies outside the input, as CUTLASS's implicit-GEMM iterators do, so a
+    tile holds zero padding with no select. A non-zero padding is stored
+    before an element copy, which then copies only what lies inside.
+  - A convolution pads its input with zero, a quantized convolution with
+    its input's zero point, a max pool with the lowest value and an
+    average pool with zero. The reference convolution multiplies padding
+    as ONNX does.
+- **Result:**
+  - The implicit GEMM's inner loop is a multiply-add with no select, and
+    its input tile copies with bounds on the window's taps.
+  - An empty input is all padding, so a padded convolution of one sums
+    zeros times its weights rather than returning zero early.
+- **Reason:** padding is a property of how a window reads its input, so
+  it belongs with the read, where staging, lowering and the interpreter all
+  see it, rather than in a mask around whatever uses the value.
+

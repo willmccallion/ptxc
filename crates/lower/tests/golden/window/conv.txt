@@ -4,7 +4,7 @@ compute conv_0(%in0: f16[1, 4, 5], %in1: f16[6, 2, 2], %in2: f16[6]) {
   %i2 = spatial 3
   %k0 = reduce 2
   %k1 = reduce 2
-  %out0: f16[1, 6, 3] = cast<f16>(add(sum[%k0, %k1](select(and(ge(index<i64>(%i2 * 2 + %k1 * 2 + -1), 0:i64), lt(index<i64>(%i2 * 2 + %k1 * 2 + -1), 5:i64)), mul(cast<f32>(%in0[%i0, floordiv(%i1, 3) * 2 + %k0, min(max(%i2 * 2 + %k1 * 2 + -1, 0), 4)]), cast<f32>(%in1[%i1, %k0, %k1])), 0.0:f32)), cast<f32>(%in2[%i1])))
+  %out0: f16[1, 6, 3] = cast<f16>(add(sum[%k0, %k1](mul(cast<f32>(%in0[%i0, floordiv(%i1, 3) * 2 + %k0, %i2 * 2 + %k1 * 2 + -1] pad 0.0:f16), cast<f32>(%in1[%i1, %k0, %k1]))), cast<f32>(%in2[%i1])))
 }
 
 compute conv_0(%in0: f32[1, 1, 4], %in1: f32[1, 1, 3]) {
@@ -16,9 +16,11 @@ compute conv_0(%in0: f32[1, 1, 4], %in1: f32[1, 1, 3]) {
   %out0: f32[1, 1, 2] = sum[%k0, %k1](mul(%in0[%i0, %k0, %i2 + %k1], %in1[%i1, %k0, %k1]))
 }
 
-compute conv_0(%in0: f32[2]) {
+compute conv_0(%in0: f32[1, 1, 0], %in1: f32[2, 1, 1], %in2: f32[2]) {
   %i0 = spatial 1
   %i1 = spatial 2
   %i2 = spatial 2
-  %out0: f32[1, 2, 2] = add(0.0:f32, %in0[%i1])
+  %k0 = reduce 1
+  %k1 = reduce 1
+  %out0: f32[1, 2, 2] = add(sum[%k0, %k1](mul(%in0[%i0, %k0, %i2 + %k1 + -1] pad 0.0:f32, %in1[%i1, %k0, %k1])), %in2[%i1])
 }

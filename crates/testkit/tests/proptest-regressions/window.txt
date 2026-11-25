@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 912104b5b642199ceb0a03b0f489fd2000000a9a3c8b8ff7c07cd1a587fb7766 # shrinks to case = (Conv(ConvAttrs { axes: [WindowAxis { stride: Stride(1), dilation: Dilation(1), pad_begin: Padding(1), pad_end: Padding(0) }], groups: Groups(1) }), [HostTensor { shape: Shape { dims: [Dim(1), Dim(1), Dim(0)], elements: ElementCount(0) }, data: F32([]) }, HostTensor { shape: Shape { dims: [Dim(1), Dim(1), Dim(1)], elements: ElementCount(1) }, data: F32([inf]) }])

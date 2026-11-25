@@ -1,14 +1,14 @@
 //! Max, average and global pooling: a reduction over each window's taps,
-//! masked where a tap reads padding.
+//! the input read through its padding.
 
 use super::NodeContext;
 use super::reduce::{load_reduced, wide};
-use super::window::{Counted, Span, masked, read, tap_count};
+use super::window::{Counted, Span, read, tap_count, window_load};
 use crate::builder::{Operand, StageBuilder};
 use crate::compose::{div, f32};
 use crate::error::LowerError;
 use crate::precision::{convert, demote, promote};
-use crate::stage::{Binding, LoweredGroup};
+use crate::stage::LoweredGroup;
 use ptxc_core::{Axis, DType};
 use ptxc_graph::{GlobalPoolKind, KeepDims, PadCounting, PoolAttrs, PoolKind, ValueId};
 use ptxc_loop::{ExprId, IterVarId, ReduceOp, Scalar, TensorExpr};
@@ -39,13 +39,9 @@ pub(super) fn pool(cx: &NodeContext<'_>, attrs: &PoolAttrs) -> Result<LoweredGro
         match attrs.kind {
             PoolKind::Max if empty => Ok(TensorExpr::Const(Scalar::lowest(dtype))),
             PoolKind::Max => {
-                let window = load_window(cx, stage, input, (*n, *c, outs), &spans)?;
-                let body = masked(
-                    window.inside,
-                    window.value.expr,
-                    TensorExpr::Const(Scalar::lowest(dtype)),
-                );
-                Ok(reduce(ReduceOp::Max, window.taps, body))
+                let padding = Scalar::lowest(dtype);
+                let window = load_window(cx, stage, (input, padding), (*n, *c, outs), &spans)?;
+                Ok(reduce(ReduceOp::Max, window.taps, window.value.expr))
             }
             PoolKind::Average(counting) => {
                 let counted = match counting {
@@ -56,9 +52,13 @@ pub(super) fn pool(cx: &NodeContext<'_>, attrs: &PoolAttrs) -> Result<LoweredGro
                 let sum = if empty {
                     f32(0.0)
                 } else {
-                    let window = load_window(cx, stage, input, (*n, *c, outs), &spans)?;
-                    let wide = promote(window.value.expr, window.value.dtype);
-                    reduce(ReduceOp::Sum, window.taps, masked(window.inside, wide, f32(0.0)))
+                    let padding = Scalar::zero(dtype);
+                    let window = load_window(cx, stage, (input, padding), (*n, *c, outs), &spans)?;
+                    reduce(
+                        ReduceOp::Sum,
+                        window.taps,
+                        promote(window.value.expr, window.value.dtype),
+                    )
                 };
                 Ok(demote(div(sum, count), dtype))
             }
@@ -70,32 +70,31 @@ fn reduce(op: ReduceOp, axes: Vec<IterVarId>, body: TensorExpr) -> TensorExpr {
     TensorExpr::Reduce { op, axes, body: Box::new(body) }
 }
 
-/// One window's read of the input: the value at each tap, the conditions
-/// under which a tap reads the input, and the tap axes.
+/// One window's read of the input: the value at each tap, and the tap
+/// axes.
 struct Window {
     value: Operand,
-    inside: Vec<TensorExpr>,
     taps: Vec<IterVarId>,
 }
 
-/// The input at each tap of output `[n, c, outs...]`'s window, a reduction
-/// axis per spatial axis.
+/// The input at each tap of output `[n, c, outs...]`'s window, `padding`
+/// where a tap reads padding, a reduction axis per spatial axis.
 fn load_window(
     cx: &NodeContext<'_>,
     stage: &mut StageBuilder<'_>,
-    input: ValueId,
+    (input, padding): (ValueId, Scalar),
     (n, c, outs): (ExprId, ExprId, &[ExprId]),
     spans: &[Span],
 ) -> Result<Window, LowerError> {
-    let (mut index, mut inside, mut taps) = (vec![n, c], Vec::new(), Vec::new());
+    let (mut index, mut reads, mut taps) = (vec![n, c], Vec::new(), Vec::new());
     for (&out, &span) in outs.iter().zip(spans) {
         let (tap_axis, tap) = stage.reduce_axis(span.kernel);
         let tap_read = read(cx, stage.exprs(), span, (out, tap))?;
         index.push(tap_read.index);
-        inside.extend(tap_read.inside);
+        reads.push(tap_read);
         taps.push(tap_axis);
     }
-    Ok(Window { value: stage.load(Binding::Value(input), index), inside, taps })
+    Ok(Window { value: window_load(stage, (input, index), &reads, padding), taps })
 }
 
 /// How many taps of output `outs`'s window are counted, as an f32 value.

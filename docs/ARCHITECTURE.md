@@ -247,7 +247,7 @@ pub struct ComputeDef {                               // made only by ComputeBui
 }
 pub struct IterVar { name: VarName, extent: Dim, kind: IterKind }   // IterKind::{Spatial, Reduce}
 pub enum TensorExpr {
-    Load { tensor: TensorParamId, index: Vec<ExprId> },
+    Load { tensor: TensorParamId, index: Vec<ExprId>, padding: Option<Scalar> }, // padding read outside (D71)
     Const(Scalar), Index { index: ExprId, dtype: DType },     // an index read as an integer value
     Unary(UnaryOp, Box<TensorExpr>), Binary(BinaryOp, Box<TensorExpr>, Box<TensorExpr>),
     Cast { to: DType, overflow: Overflow, value: Box<TensorExpr> },
@@ -268,7 +268,9 @@ other direction, an index read as data, is `TensorExpr::Index`, which masks
 running sums and triangles. An arg-reduction over an empty axis gives 0.
 A definition is one stage: at most one reduction, and then exactly one
 output; every load not indexed through a gather stays within its tensor over
-the iteration domain (D40).
+the iteration domain (D40), unless it is padded: a window's read of a
+convolution's or pool's input gives its padding where it leaves the input,
+as Halide's `constant_exterior` does (D71).
 
 **2. Schedule: how to iterate.** A loop tree is transformed by primitives.
 Every applied primitive is recorded in a `Trace`, as in TVM's MetaSchedule.
