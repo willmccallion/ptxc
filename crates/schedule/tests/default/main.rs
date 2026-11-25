@@ -131,8 +131,18 @@ fn empty_and_scalar_stages_stay_serial() {
 }
 
 #[test]
-fn an_empty_reduction_still_spreads_its_rows_over_blocks() {
+fn a_reduction_no_longer_than_a_warp_gives_each_output_a_thread() {
+    let (text, launch) = scheduled(stage(&[300, 32], 1, Some(sum)));
+    let (_, longer) = scheduled(stage(&[300, 33], 1, Some(sum)));
+
+    assert_eq!(launch_dims(launch), ([2, 1, 1], [256, 1, 1]));
+    assert_eq!(launch_dims(longer), ([300, 1, 1], [33, 1, 1]));
+    golden::check("short_reduction.txt", &text).unwrap();
+}
+
+#[test]
+fn an_empty_reduction_still_spreads_its_outputs_over_threads() {
     let (_, launch) = scheduled(stage(&[7, 0], 1, Some(sum)));
 
-    assert_eq!(launch_dims(launch), ([7, 1, 1], [1, 1, 1]));
+    assert_eq!(launch_dims(launch), ([1, 1, 1], [7, 1, 1]));
 }
