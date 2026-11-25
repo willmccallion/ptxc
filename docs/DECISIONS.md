@@ -1517,3 +1517,33 @@ the old one.
   it belongs with the read, where staging, lowering and the interpreter all
   see it, rather than in a mask around whatever uses the value.
 
+## D72. A quantized matmul may give a float result, from FP8 operands too
+
+- **Context:** the GEMM sweep's FP8 rows take E4M3 operands to an f32
+  result. No ONNX op does that directly: models write `DequantizeLinear`
+  on FP8 operands feeding `MatMul`, which QDQ folding (M4) is to fold into
+  a quantized matmul. But `QMatMul` always requantized its result, and D46
+  made FP8 operands of a quantized product an error.
+- **Choice:** this supersedes D46's FP8 sentence.
+  - `QMatMulAttrs::output` is a `QMatMulOutput`. `Quantized` is the grid
+    the product is requantized onto, as `QLinearMatMul` gives it, from
+    operands on integer grids. `Float` is a float type the dequantized
+    product is given in, from operands both on integer grids or both on
+    FP8 ones, whose zero points are 0.
+  - Lowered, integer operands keep the exact zero-centred sum. FP8 operands
+    sum their products widened to f32, the plain product of two loads that
+    the tensor-core rule tiles on FP8 `mma`. A float result is the sum in
+    f32 times both scales, converted to its type; per-row and per-column
+    scales are tables, as D46 has them.
+  - The reference gives a float result as the exact sum times both scales
+    in f64, rounded once: the dequantized product as real numbers. The
+    lowering's f32 sum is within f32's tolerance for the inner extent.
+  - A requantized result keeps integer operands and an integer grid, which
+    is all `QLinearMatMul` imports. FP8 operands with a requantized result
+    are refused by the type rule.
+- **Reason:** a float result is how FP8 GEMMs are used, by TensorRT and
+  Transformer Engine alike: the scales go into the epilogue and the
+  product stays in f32 or f16, not back on a grid. Keeping the operands'
+  dequantization out of the sum lets the FP8 `mma` multiply them as
+  stored.
+

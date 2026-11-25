@@ -8,10 +8,12 @@ use super::matmul::product_reads;
 use crate::builder::{GroupBuilder, Operand, StageBuilder};
 use crate::compose::{add, div, f32, max, min, mul, sub, unary};
 use crate::error::LowerError;
-use crate::precision::convert;
+use crate::precision::{convert, promote};
 use crate::stage::{Binding, LoweredGroup, TableId};
 use ptxc_core::{DType, Granularity, HostTensor, QuantParams};
-use ptxc_graph::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QuantizeAttrs, ValueId};
+use ptxc_graph::{
+    DequantizeAttrs, QConvAttrs, QMatMulAttrs, QMatMulOutput, QuantizeAttrs, ValueId,
+};
 use ptxc_loop::{ExprId, ReduceOp, Scalar, TensorExpr, UnaryOp};
 
 /// Where a grid's scale and zero point come from: one map, inlined as
@@ -175,7 +177,7 @@ fn requantized(sum: TensorExpr, [a, b]: [&Map; 2], y: &Map, dtype: DType) -> Opt
     on_grid(round(scaled), y.zero_point.clone(), dtype)
 }
 
-/// The integer grids a quantized product's operands must be on; FP8
+/// The integer grids a quantized convolution's operands must be on; FP8
 /// operands have no lowering yet.
 fn integer_operands(cx: &NodeContext<'_>, values: &[ValueId]) -> Result<(), LowerError> {
     for &value in values {
@@ -187,39 +189,65 @@ fn integer_operands(cx: &NodeContext<'_>, values: &[ValueId]) -> Result<(), Lowe
     Ok(())
 }
 
-/// `QLinearMatMul`: the exact product of zero-centred operands, `a`'s map
-/// varying by row and `b`'s by column, requantized onto the output grid.
+/// A quantized matmul, `a`'s map varying by row and `b`'s by column (D72).
+/// Integer operands sum exactly, zero-centred; FP8 ones, whose zero points
+/// are 0, sum their products widened to f32, as FP8 tensor cores do. The
+/// sum is requantized onto the output grid, or dequantized to a float
+/// result.
 pub(super) fn qmatmul(
     cx: &NodeContext<'_>,
     attrs: &QMatMulAttrs,
 ) -> Result<LoweredGroup, LowerError> {
     let [lhs, rhs] = cx.values()?;
-    integer_operands(cx, &[lhs, rhs])?;
     let Some(output) = cx.needed_output() else { return Ok(LoweredGroup::default()) };
     let dtype = cx.graph.value(output).ty().dtype();
     let mut group = cx.group();
-    let (a_maps, b_maps, y_maps) = (
-        Maps::of(&mut group, &attrs.a),
-        Maps::of(&mut group, &attrs.b),
-        Maps::of(&mut group, &attrs.output),
-    );
+    let (a_maps, b_maps) = (Maps::of(&mut group, &attrs.a), Maps::of(&mut group, &attrs.b));
+    let y_maps = match &attrs.output {
+        QMatMulOutput::Quantized(params) => Some(Maps::of(&mut group, params)),
+        QMatMulOutput::Float(_) => None,
+    };
     let mut stage = group.stage(cx.name(), cx.graph.value(output).ty().shape());
     let product = product_reads(cx, &mut stage, lhs, rhs)?;
     let missing = || LowerError::Operands(cx.id);
     let a = a_maps.at(&mut stage, |_| product.row).ok_or_else(missing)?;
     let b = b_maps.at(&mut stage, |_| product.column).ok_or_else(missing)?;
-    let y = y_maps.at(&mut stage, |_| None).ok_or_else(missing)?;
-    let terms = mul(
-        centered(&product.lhs, a.zero_point.clone()),
-        centered(&product.rhs, b.zero_point.clone()),
-    );
+    let (terms, sum_dtype) = if product.lhs.dtype.is_float() {
+        (
+            mul(
+                promote(product.lhs.expr, product.lhs.dtype),
+                promote(product.rhs.expr, product.rhs.dtype),
+            ),
+            DType::F32,
+        )
+    } else {
+        let centered_lhs = centered(&product.lhs, a.zero_point.clone());
+        (mul(centered_lhs, centered(&product.rhs, b.zero_point.clone())), DType::I64)
+    };
     let sum =
         TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![product.inner], body: Box::new(terms) };
-    let result = requantized(sum, [&a, &b], &y, dtype).ok_or_else(|| cx.unsupported(dtype))?;
+    let result = match y_maps {
+        Some(y_maps) => {
+            let y = y_maps.at(&mut stage, |_| None).ok_or_else(missing)?;
+            requantized(sum, [&a, &b], &y, dtype).ok_or_else(|| cx.unsupported(dtype))?
+        }
+        None => dequantized((sum, sum_dtype), [&a, &b], dtype),
+    };
     stage.output(Binding::Value(output), result);
     let stage = cx.finish(stage)?;
     group.push(stage);
     Ok(group.finish())
+}
+
+/// `sum`, of `sum_dtype`, times both operands' scales in f32, converted to
+/// the float `dtype`: the dequantized product.
+fn dequantized(
+    (sum, sum_dtype): (TensorExpr, DType),
+    [a, b]: [&Map; 2],
+    dtype: DType,
+) -> TensorExpr {
+    let scaled = mul(mul(convert(sum, sum_dtype, DType::F32), a.scale.clone()), b.scale.clone());
+    convert(scaled, DType::F32, dtype)
 }
 
 /// `QLinearConv`: the exact convolution of zero-centred operands plus the

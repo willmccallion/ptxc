@@ -7,11 +7,14 @@ use crate::error::{InterpError, Malformed};
 use crate::eval::first;
 use crate::extents::Extents;
 use crate::numeric::{
-    Elements, floats, int_to_f32, int_to_f64, saturate_ints, store_floats, truncate, widen,
+    Elements, floats, int_to_f32, int_to_f64, saturate_ints, store_floats, store_wide, truncate,
+    widen,
 };
 use ptxc_core::float::Overflow;
 use ptxc_core::{Affine, DType, Granularity, HostTensor, QuantParams, TensorData};
-use ptxc_graph::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QuantizeAttrs, TensorType};
+use ptxc_graph::{
+    DequantizeAttrs, QConvAttrs, QMatMulAttrs, QMatMulOutput, QuantizeAttrs, TensorType,
+};
 
 /// The affine map of the element at `index`.
 fn map_at(params: &QuantParams, index: &[usize]) -> Affine {
@@ -119,7 +122,10 @@ fn maps_along(params: &QuantParams, extent: usize) -> Vec<Affine> {
     }
 }
 
-/// `QLinearMatMul`; `a`'s maps may vary by row and `b`'s by column.
+/// A quantized matmul; `a`'s maps may vary by row and `b`'s by column. A
+/// quantized result is the exact integer sum requantized, as
+/// `QLinearMatMul`; a float one is the exact sum times both scales in f64,
+/// rounded once into its type: the dequantized product.
 pub(super) fn qmatmul(
     attrs: &QMatMulAttrs,
     operands: &[&HostTensor],
@@ -129,20 +135,48 @@ pub(super) fn qmatmul(
     let (lhs_extents, rhs_extents) = (Extents::of(lhs.shape())?, Extents::of(rhs.shape())?);
     let batched = Batched::of(&lhs_extents, &rhs_extents);
     let (row_count, column_count) = (batched.rows, batched.columns);
-    let rows = maps_along(&attrs.a, row_count);
-    let columns = maps_along(&attrs.b, column_count);
-    let output_map = per_tensor(&attrs.output)?;
-    let (left, right) = (centered(lhs, &attrs.a)?, centered(rhs, &attrs.b)?);
-    let sums = batched.products(&left, &right, 0, |x, w, acc| x * w + acc);
-    let scaled: Vec<f64> = sums
-        .iter()
-        .enumerate()
-        .map(|(flat, &sum)| {
-            let (row, column) = (flat / column_count % row_count, flat % column_count);
-            requantize(sum, rows[row], columns[column], output_map)
-        })
-        .collect();
-    store_grid(&scaled, output.dtype())
+    let (rows, columns) = (maps_along(&attrs.a, row_count), maps_along(&attrs.b, column_count));
+    let maps_at =
+        |flat: usize| (rows[flat / column_count % row_count], columns[flat % column_count]);
+    match &attrs.output {
+        QMatMulOutput::Quantized(grid) => {
+            let output_map = per_tensor(grid)?;
+            let (left, right) = (centered(lhs, &attrs.a)?, centered(rhs, &attrs.b)?);
+            let sums = batched.products(&left, &right, 0, |x, w, acc| x * w + acc);
+            let scaled: Vec<f64> = sums
+                .iter()
+                .enumerate()
+                .map(|(flat, &sum)| {
+                    let (a, b) = maps_at(flat);
+                    requantize(sum, a, b, output_map)
+                })
+                .collect();
+            store_grid(&scaled, output.dtype())
+        }
+        QMatMulOutput::Float(dtype) => {
+            let (left, right) = (real_centered(lhs, &attrs.a)?, real_centered(rhs, &attrs.b)?);
+            let sums = batched.products(&left, &right, 0.0, f64::mul_add);
+            let real: Vec<f64> = sums
+                .iter()
+                .enumerate()
+                .map(|(flat, &sum)| {
+                    let (a, b) = maps_at(flat);
+                    sum * f64::from(a.scale.get()) * f64::from(b.scale.get())
+                })
+                .collect();
+            store_wide(&real, *dtype, Overflow::NonFinite)
+        }
+    }
+}
+
+/// A quantized operand's elements minus their zero points as f64: exactly,
+/// whether integers or FP8 values, whose zero points are 0.
+fn real_centered(tensor: &HostTensor, params: &QuantParams) -> Result<Vec<f64>, InterpError> {
+    match widen(tensor.data()) {
+        Elements::Float(values) => Ok(values.into_iter().map(f64::from).collect()),
+        Elements::Int(_) => Ok(centered(tensor, params)?.into_iter().map(int_to_f64).collect()),
+        Elements::Bool(_) => Err(Malformed::DType(tensor.dtype()).into()),
+    }
 }
 
 /// `QLinearConv`: the integer convolution plus the i32 bias, rescaled per

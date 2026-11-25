@@ -10,7 +10,9 @@ use ptxc_core::float::Overflow;
 use ptxc_core::{
     Affine, DType, Granularity, HostTensor, QuantDType, QuantParams, Scale, TensorData, ZeroPoint,
 };
-use ptxc_graph::{ConvAttrs, DequantizeAttrs, Groups, Op, QConvAttrs, QMatMulAttrs, QuantizeAttrs};
+use ptxc_graph::{
+    ConvAttrs, DequantizeAttrs, Groups, Op, QConvAttrs, QMatMulAttrs, QMatMulOutput, QuantizeAttrs,
+};
 
 pub(super) fn lower(
     op: &str,
@@ -204,7 +206,13 @@ fn qmatmul(context: &NodeContext<'_>) -> Result<Lowered, ImportError> {
     let attrs = QMatMulAttrs {
         a: params(context, quant_dtype(context.ty(0)?.dtype())?, 1, 2, row)?,
         b: params(context, quant_dtype(context.ty(3)?.dtype())?, 4, 5, column)?,
-        output: params(context, quant_dtype(output_zero_dtype(context)?)?, 6, 7, None)?,
+        output: QMatMulOutput::Quantized(params(
+            context,
+            quant_dtype(output_zero_dtype(context)?)?,
+            6,
+            7,
+            None,
+        )?),
     };
     Ok(Lowered::Node {
         op: Op::QMatMul(attrs),

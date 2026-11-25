@@ -106,3 +106,29 @@ fn qlinear_conv_without_a_bias() {
 
     assert_exact(&op(attrs, "i8[1, 2, 2]", &[x, w]), &[1, 2, 2], &[1, 3, 0, 0]);
 }
+
+#[test]
+fn a_dequantized_fp8_matmul_scales_the_exact_sum_per_column() {
+    let e4m3 = |values: &[f32]| {
+        let overflow = ptxc_core::float::Overflow::Saturate;
+        values.iter().map(|&value| F8E4M3Fn::from_f32(value, overflow)).collect::<Vec<_>>()
+    };
+    let a = tensor(&[2, 2], e4m3(&[1.0, 2.0, 3.0, 4.0]));
+    let b = tensor(&[2, 2], e4m3(&[1.0, 0.0, 0.0, 2.0]));
+    let attrs =
+        "qmatmul<a=[f8e4m3fn, [0.5, 0]], b=[f8e4m3fn, 1, [[1.0, 0], [0.25, 0]]], result=f32>";
+
+    // a @ b = [[1, 4], [3, 8]], times 0.5 and each column's scale.
+    assert_close(&op(attrs, "f32[2, 2]", &[a, b]), &[2, 2], &[0.5, 0.5, 1.5, 1.0]);
+}
+
+#[test]
+fn a_dequantized_integer_matmul_scales_the_exact_zero_centred_sum() {
+    let a = tensor(&[2, 2], vec![4_u8, 5, 6, 7]);
+    let b = tensor(&[2, 2], vec![1_u8, 2, 3, 4]);
+    let attrs =
+        "qmatmul<a=[u8, 0, [[0.5, 4], [1.0, 6]]], b=[u8, 1, [[1.0, 1], [2.0, 2]]], result=f16>";
+
+    // Each zero-centred sum is 2, times the row's and the column's scales.
+    assert_close(&op(attrs, "f16[2, 2]", &[a, b]), &[2, 2], &[1.0, 2.0, 2.0, 4.0]);
+}

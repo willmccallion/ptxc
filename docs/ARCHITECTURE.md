@@ -129,7 +129,7 @@ pub enum Op {                              // canonical forms: D32
     Reshape(Shape), Expand(Shape), Transpose(TransposeAttrs), Tile(TileAttrs), Concat(Axis),
     Slice(SliceAttrs), Split(SplitAttrs), Pad(PadAttrs), Trilu(TriluAttrs),
     Gather(Axis), GatherElements(Axis), GatherNd(Rank),
-    Quantize(QuantizeAttrs), Dequantize(DequantizeAttrs), QMatMul(QMatMulAttrs), QConv(QConvAttrs),
+    Quantize(QuantizeAttrs), Dequantize(DequantizeAttrs), QMatMul(QMatMulAttrs), QConv(QConvAttrs), // QMatMul's result: a grid or a float type (D72)
     Resize(ResizeAttrs),
     Attention(AttentionAttrs),             // ONNX's Attention; the M6 matcher produces it too
 }
@@ -204,7 +204,8 @@ them, lowering gives a reshape a copy stage like any other op.
   weights, for example by materialising a broadcast.
 - **QDQ folding** (`rules/qdq.rs`) turns a `Dequantize → MatMul/Conv →
   Quantize` chain into `QMatMul`/`QConv`, as TensorRT's explicit
-  quantization does.
+  quantization does, and a `Dequantize → MatMul` chain into a `QMatMul`
+  with a float result (D72).
 - **Layout** chooses NHWC or NCHW per convolution chain and pushes
   transposes to group boundaries. A layout is part of `TensorType`, never an
   implicit convention.

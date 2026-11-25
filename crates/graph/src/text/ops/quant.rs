@@ -3,7 +3,7 @@
 
 use super::OpText;
 use super::window::{conv_attrs, decode_conv};
-use crate::ops::{DequantizeAttrs, Op, QConvAttrs, QMatMulAttrs, QuantizeAttrs};
+use crate::ops::{DequantizeAttrs, Op, QConvAttrs, QMatMulAttrs, QMatMulOutput, QuantizeAttrs};
 use crate::text::attr::{Attr, AttrValue, Attrs, TextWord, text_words};
 use crate::text::error::ParseError;
 use ptxc_core::float::Overflow;
@@ -53,14 +53,16 @@ pub(super) fn encode_dequantize(attrs: &DequantizeAttrs) -> OpText {
     )
 }
 
+/// A quantized result is written as `output=` its grid; a float one as
+/// `result=` its type.
 pub(super) fn encode_qmatmul(attrs: &QMatMulAttrs) -> OpText {
+    let output = match &attrs.output {
+        QMatMulOutput::Quantized(params) => ("output", params_value(params)),
+        QMatMulOutput::Float(dtype) => ("result", AttrValue::word(dtype.word())),
+    };
     OpText::new(
         "qmatmul",
-        vec![
-            ("a", params_value(&attrs.a)),
-            ("b", params_value(&attrs.b)),
-            ("output", params_value(&attrs.output)),
-        ],
+        vec![("a", params_value(&attrs.a)), ("b", params_value(&attrs.b)), output],
     )
 }
 
@@ -101,11 +103,12 @@ fn decode_dequantize(attrs: &mut Attrs) -> Result<Op, ParseError> {
 }
 
 fn decode_qmatmul(attrs: &mut Attrs) -> Result<Op, ParseError> {
-    Ok(Op::QMatMul(QMatMulAttrs {
-        a: decode_params(&attrs.take("a")?)?,
-        b: decode_params(&attrs.take("b")?)?,
-        output: decode_params(&attrs.take("output")?)?,
-    }))
+    let (a, b) = (decode_params(&attrs.take("a")?)?, decode_params(&attrs.take("b")?)?);
+    let output = match attrs.take_optional("output") {
+        Some(params) => QMatMulOutput::Quantized(decode_params(&params)?),
+        None => QMatMulOutput::Float(attrs.take("result")?.enumerated()?),
+    };
+    Ok(Op::QMatMul(QMatMulAttrs { a, b, output }))
 }
 
 fn decode_qconv(attrs: &mut Attrs) -> Result<Op, ParseError> {

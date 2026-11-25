@@ -4,7 +4,7 @@ use ptxc_core::float::Overflow;
 use ptxc_core::{Affine, Axis, DType, Granularity, QuantDType, QuantParams, Scale, ZeroPoint};
 use ptxc_graph::{
     ConvAttrs, DequantizeAttrs, Dilation, GraphBuilder, Groups, Op, Padding, QConvAttrs,
-    QMatMulAttrs, QuantizeAttrs, Stride, WindowAxis,
+    QMatMulAttrs, QMatMulOutput, QuantizeAttrs, Stride, WindowAxis,
 };
 use ptxc_loop::print_compute;
 use ptxc_testkit::golden;
@@ -78,7 +78,7 @@ fn quantized_matmul_rescales_an_exact_integer_sum() {
     let attrs = QMatMulAttrs {
         a: per_tensor(QuantDType::U8, 0.5, 3),
         b: per_tensor(QuantDType::I8, 0.25, -1),
-        output: per_tensor(QuantDType::I8, 2.0, 5),
+        output: QMatMulOutput::Quantized(per_tensor(QuantDType::I8, 2.0, 5)),
     };
     let mut builder = GraphBuilder::new();
     let lhs = builder.add_input(tensor_type(DType::U8, &[2, 3]));
@@ -90,6 +90,32 @@ fn quantized_matmul_rescales_an_exact_integer_sum() {
         stages(graph).unwrap().iter().map(|stage| print_compute(stage.compute())).collect();
 
     golden::check("quant/qmatmul.txt", &definitions).unwrap();
+}
+
+#[test]
+fn a_float_result_dequantizes_a_sum_of_fp8_products_or_an_exact_integer_one() {
+    let lowered = |[a, b]: [QuantParams; 2], [a_dtype, b_dtype]: [DType; 2], output: DType| {
+        let attrs = QMatMulAttrs { a, b, output: QMatMulOutput::Float(output) };
+        let mut builder = GraphBuilder::new();
+        let lhs = builder.add_input(tensor_type(a_dtype, &[2, 3]));
+        let rhs = builder.add_input(tensor_type(b_dtype, &[3, 4]));
+        let out = builder.add_node(Op::QMatMul(attrs), vec![lhs, rhs]).unwrap();
+        let graph = builder.finish(out).unwrap();
+        stages(graph)
+            .unwrap()
+            .iter()
+            .map(|stage| print_compute(stage.compute()))
+            .collect::<String>()
+    };
+    let fp8 = [per_tensor(QuantDType::F8E4M3Fn, 0.5, 0), per_tensor(QuantDType::F8E4M3Fn, 2.0, 0)];
+    let integer = [per_tensor(QuantDType::U8, 0.5, 3), per_tensor(QuantDType::I8, 0.25, -1)];
+
+    let definitions = [
+        lowered(fp8, [DType::F8E4M3Fn; 2], DType::F32),
+        lowered(integer, [DType::U8, DType::I8], DType::F16),
+    ];
+
+    golden::check("quant/qmatmul_float.txt", &definitions.join("\n")).unwrap();
 }
 
 #[test]
