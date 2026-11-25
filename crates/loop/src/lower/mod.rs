@@ -18,7 +18,7 @@ pub(crate) use cache::{slots_at, tile_extents};
 use context::Lowerer;
 use ptxc_core::KernelName;
 use ptxc_target::{BlockCount, SmemBytes, ThreadsPerBlock};
-pub(crate) use tensorize::operand_layout;
+pub(crate) use tensorize::{operand_layout, tile_steps_with};
 
 impl Schedule<Validated> {
     /// The schedule as an explicit loop nest: bound loops become grid and

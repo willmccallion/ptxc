@@ -26,6 +26,7 @@ cargo test                                   # everything that needs no GPU and 
 cargo test --features gpu                    # also the device tests (crates: cuda, runtime, autotune)
 cargo test --release -p ptxc-core -- --ignored   # exhaustive float-format checks
 cargo test --release -p ptxc-loop --test math -- --ignored every_sin   # one math program over every f32
+cargo test --release -p ptxc-runtime --features gpu -- --ignored  # every ResNet-50 conv layer on tensor cores
 PROPTEST_CASES=200000 cargo test --release -p ptxc-loop   # longer property-test runs
 cargo xtask fetch onnx-tests                 # pinned ONNX node tests into data/onnx/
 ptxc conformance --backend interp            # M1

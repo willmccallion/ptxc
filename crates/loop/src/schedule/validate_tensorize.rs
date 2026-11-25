@@ -6,9 +6,9 @@
 
 use super::error::ScheduleError;
 use super::loop_tree::{CacheId, LoopAnnotation, LoopId, LoopKind, LoopTree, Tensorized};
-use crate::compute::{ComputeDef, IndexVar, ReduceOp, TensorExpr, TensorParamId};
-use crate::expr::{ExprId, VarId};
-use crate::lower::operand_layout;
+use crate::compute::{ComputeDef, ReduceOp, TensorExpr, TensorParamId};
+use crate::expr::VarId;
+use crate::lower::{operand_layout, tile_steps_with};
 use crate::stmt::TileOrder;
 use ptxc_core::{Dim, Idx};
 use ptxc_target::ThreadsPerBlock;
@@ -35,12 +35,6 @@ pub(crate) struct Operand {
     pub(crate) stride: Dim,
 }
 
-/// A load of the product's body, before its layout is known.
-struct Load {
-    tensor: TensorParamId,
-    index: Vec<ExprId>,
-}
-
 /// The tensorized product of `tree`, if it is tensorized, checked against
 /// `compute` with the staged tiles of `extents` filled by `threads`.
 pub(super) fn check_tensorized(
@@ -50,14 +44,17 @@ pub(super) fn check_tensorized(
 ) -> Result<Option<TensorizedProduct>, ScheduleError> {
     let Some(tile) = tree.tensorized() else { return Ok(None) };
     check_place(tree, tile.loops)?;
-    let [first, second] = loads(compute, tile)?;
     let [m, n, k] = tile.loops.map(|id| VarId::new(id.index()));
-    let (lhs, rhs) =
-        if reads(compute, tree, &first.index, m) { (first, second) } else { (second, first) };
-    let layout = |load: Load, vars: [VarId; 3]| {
-        let cache = staged(compute, tree, load.tensor, tile.loops[0])?;
-        let found = operand_layout(compute, tree, (extents, threads), cache, vars);
-        let name = || ScheduleError::TensorizeIndex(compute.inputs()[load.tensor].name.clone());
+    let staged_at =
+        |tensor| staged(compute, tree, tensor, tile.loops[0]).map(|cache| (tensor, cache));
+    let [first, second] = loads(compute, tile)?;
+    let (first, second) = (staged_at(first)?, staged_at(second)?);
+    let tiles = (extents, threads);
+    let first_is_lhs = tile_steps_with(compute, tree, tiles, first.1, m);
+    let (lhs, rhs) = if first_is_lhs { (first, second) } else { (second, first) };
+    let layout = |(tensor, cache): (TensorParamId, CacheId), vars: [VarId; 3]| {
+        let found = operand_layout(compute, tree, tiles, cache, vars);
+        let name = || ScheduleError::TensorizeIndex(compute.inputs()[tensor].name.clone());
         let (order, stride) = found.ok_or_else(name)?;
         Ok(Operand { cache, order, stride })
     };
@@ -89,44 +86,35 @@ fn check_place(tree: &LoopTree, loops: [LoopId; 3]) -> Result<(), ScheduleError>
     if step_after_tile { Err(ScheduleError::TensorizeStepInsideTiles) } else { Ok(()) }
 }
 
-/// The two loads the product multiplies: its one output a sum over one
-/// axis of their product, each widened, if at all, to the accumulator's
-/// type, and of the instruction's multiplicand type.
-fn loads(compute: &ComputeDef, tile: Tensorized) -> Result<[Load; 2], ScheduleError> {
+/// The two loads the product multiplies: its one output a sum of their
+/// product, each widened, if at all, to the accumulator's type, and of the
+/// instruction's multiplicand type. The sum may run over several axes, as a
+/// convolution's runs over its taps and input channels: the loops outside
+/// the tile are steps of it.
+fn loads(compute: &ComputeDef, tile: Tensorized) -> Result<[TensorParamId; 2], ScheduleError> {
     let instruction = tile.instruction;
     let not_product = || ScheduleError::TensorizeNotProduct;
     let [output] = compute.outputs() else { return Err(not_product()) };
-    let Some(TensorExpr::Reduce { op: ReduceOp::Sum, axes, body }) = output.expr.reduction() else {
+    let Some(TensorExpr::Reduce { op: ReduceOp::Sum, body, .. }) = output.expr.reduction() else {
         return Err(not_product());
     };
     let TensorExpr::Binary(crate::compute::BinaryOp::Mul, first, second) = body.as_ref() else {
         return Err(not_product());
     };
-    if axes.len() != 1 || compute.dtype_of(body) != instruction.accumulator {
+    if compute.dtype_of(body) != instruction.accumulator {
         return Err(not_product());
     }
-    let load = |operand: &TensorExpr| -> Option<Load> {
+    let load = |operand: &TensorExpr| -> Option<TensorParamId> {
         // A cast here widens to the accumulator's type, as the product is.
         let read = match operand {
             TensorExpr::Cast { value, .. } => value.as_ref(),
             other => other,
         };
         // A padded load's tile holds its padding, which the mma multiplies.
-        let TensorExpr::Load { tensor, index, .. } = read else { return None };
-        let dtype = compute.inputs()[*tensor].dtype;
-        (dtype == instruction.multiplicands).then(|| Load { tensor: *tensor, index: index.clone() })
+        let TensorExpr::Load { tensor, .. } = read else { return None };
+        (compute.inputs()[*tensor].dtype == instruction.multiplicands).then_some(*tensor)
     };
     Ok([load(first).ok_or_else(not_product)?, load(second).ok_or_else(not_product)?])
-}
-
-/// Whether `index` reads `var` through any of its parts' axis indices.
-fn reads(compute: &ComputeDef, tree: &LoopTree, index: &[ExprId], var: VarId) -> bool {
-    index.iter().any(|&part| {
-        compute.exprs().vars(part).into_iter().any(|read| match &compute.vars()[read] {
-            IndexVar::Iter(axis) => tree.exprs().vars(tree.axis_index(*axis)).contains(&var),
-            IndexVar::Loaded { .. } => false,
-        })
-    })
 }
 
 /// The stage of `tensor`, at a loop outside the tile, whose first loop is
