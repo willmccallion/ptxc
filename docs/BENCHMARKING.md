@@ -76,17 +76,26 @@ sudo nvidia-smi --persistence-mode=0
 ```
 
 The SM frequency is chosen once at M3: the highest clock this card holds
-through a 60 s tensor-core GEMM without power or thermal throttling.
+without power or thermal throttling through the sweeps' hungriest loads.
+Those are ptxc's and cuBLAS's GEMMs back to back: f32 2048³ NT on CUDA
+cores, and int8 4096³ and f16 8192³ on tensor cores.
+- A clock holds a load when every busy sample of `nvidia-smi`, taken every
+  0.5 s, reads the lock with no throttle reason.
+- The search bisects the supported clocks from 2100 to 2700 MHz with 60 s
+  of each load, then confirms the clock it finds with 180 s of each,
+  stepping down while it does not hold.
 
-Recorded 2026-11-24: **2700 MHz**. Locked there, back-to-back f16
-8192³ GEMMs, ptxc's and cuBLAS's, ran for 80 s with `nvidia-smi` sampling
-every 0.5 s. Every busy sample read 2700 MHz with no throttle reason, at
-up to 147 W of the 160 W limit and 68 °C.
+Recorded 2026-11-25: **2355 MHz**. Through 180 s of each load, every
+busy sample read 2355 MHz with no throttle reason, at up to 160 W of the
+160 W limit and 69 °C under f32, 135 W under int8 and 98 W under f16. At
+2370 MHz the f32 load held for 60 s but fell to 2355 MHz in 21 of 350
+samples over 180 s; at 2385 and 2400 MHz it fell below the lock within
+60 s. With the SM clock locked, the memory clock reads 8751 MHz.
 
-The same load under a lock of 2775, 2850, 2925 or 3000 MHz ran below the
-lock in every busy sample. It never fell under 2715 MHz, and it never
-passed 152 W or 69 °C. With the SM clock locked, the memory clock reads
-8751 MHz.
+The first choice, 2700 MHz on 2026-11-24, came from f16 8192³ GEMMs
+alone, which drew at most 147 W there. At that lock the M3 sweep's
+CUDA-core f32 and int8 GEMMs and some of cuDNN's convolutions hit the
+power cap, falling as low as 2325 MHz.
 
 ## Suites
 
