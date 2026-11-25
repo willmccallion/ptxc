@@ -152,7 +152,7 @@ impl<'g> StageBuilder<'g> {
     /// `binding` read at `index`, one index per axis.
     pub(crate) fn load(&mut self, binding: Binding, index: Vec<ExprId>) -> Operand {
         let tensor = self.tensor(binding);
-        Operand { expr: TensorExpr::Load { tensor, index }, dtype: self.type_of(binding).dtype() }
+        Operand { expr: TensorExpr::load(tensor, index), dtype: self.type_of(binding).dtype() }
     }
 
     /// An index variable holding `binding`'s integer at `index`, as a gather

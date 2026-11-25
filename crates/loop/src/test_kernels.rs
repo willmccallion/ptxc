@@ -32,7 +32,7 @@ fn kernel_with(outer: Option<ThreadAxis>) -> LoweredKernel {
     let x = compute.input(TensorName::new("x"), DType::F32, Shape::new(vec![Dim::new(8)]).unwrap());
     let (_, i) = compute.spatial(VarName::new("i"), Dim::new(8));
     let one = TensorExpr::Const(Scalar::float(DType::F32, 1.0).unwrap());
-    let load = TensorExpr::Load { tensor: x, index: vec![i] };
+    let load = TensorExpr::load(x, vec![i]);
     compute.output(
         TensorName::new("y"),
         TensorExpr::Binary(BinaryOp::Add, Box::new(load), Box::new(one)),

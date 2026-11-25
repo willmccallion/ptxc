@@ -15,7 +15,7 @@ fn a_tiled_f32_matmul_multiplies_and_adds_in_one_fma() {
     let (_, row) = compute.spatial(VarName::new("i"), Dim::new(64));
     let (_, column) = compute.spatial(VarName::new("j"), Dim::new(64));
     let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(64));
-    let load = |tensor, index| Box::new(TensorExpr::Load { tensor, index });
+    let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
     let body =
         TensorExpr::Binary(BinaryOp::Mul, load(lhs, vec![row, k]), load(rhs, vec![k, column]));
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![k_axis], body: Box::new(body) };

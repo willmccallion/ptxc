@@ -66,7 +66,7 @@ pub(crate) fn uncast(expr: &TensorExpr) -> &TensorExpr {
 /// The tensor `expr` loads and the axes its index reads, if it is a load
 /// whose every index part is a plain axis or a constant.
 fn load_axes(compute: &ComputeDef, expr: &TensorExpr) -> Option<(TensorParamId, Vec<IterVarId>)> {
-    let TensorExpr::Load { tensor, index } = expr else { return None };
+    let TensorExpr::Load { tensor, index, .. } = expr else { return None };
     let mut axes = Vec::new();
     for &part in index {
         match compute.exprs().get(part) {
@@ -151,14 +151,14 @@ mod tests {
                 })
                 .collect()
         };
-        let load = |tensor, parts: &[&str]| TensorExpr::Load { tensor, index: index(parts) };
+        let load = |tensor, parts: &[&str]| TensorExpr::load(tensor, index(parts));
         let body = TensorExpr::Binary(
             BinaryOp::Mul,
             Box::new(load(x, reads.lhs)),
             Box::new(load(y, reads.rhs)),
         );
         let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![axis], body: Box::new(body) };
-        let first = TensorExpr::Load { tensor: x, index: vec![zero; reads.lhs.len()] };
+        let first = TensorExpr::load(x, vec![zero; reads.lhs.len()]);
         let output = match variant {
             Variant::ReadAgain => TensorExpr::Binary(BinaryOp::Add, Box::new(sum), Box::new(first)),
             Variant::Plain | Variant::Square => sum,
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn every_load_of_a_tensor_counts_wherever_it_sits() {
         let (x, y) = (TensorParamId::new(0), TensorParamId::new(1));
-        let load = |tensor| Box::new(TensorExpr::Load { tensor, index: Vec::new() });
+        let load = |tensor| Box::new(TensorExpr::load(tensor, Vec::new()));
         let chosen = TensorExpr::Select { condition: load(x), then: load(x), otherwise: load(y) };
         let added = TensorExpr::Binary(BinaryOp::Add, Box::new(chosen.clone()), load(y));
 

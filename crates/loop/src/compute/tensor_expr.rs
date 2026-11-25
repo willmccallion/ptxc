@@ -17,12 +17,19 @@ ptxc_core::define_index!(
 /// of index expressions, one per axis of the tensor.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum TensorExpr {
-    /// An element of an input tensor.
+    /// An element of an input tensor, or its padding where the index lies
+    /// outside it, as Halide's `BoundaryConditions::constant_exterior`
+    /// reads a function.
     Load {
         /// The tensor.
         tensor: TensorParamId,
         /// One index per axis.
         index: Vec<ExprId>,
+        /// The value read where `index` lies outside the tensor, of its
+        /// element type: a window's padding. Without it the index lies
+        /// inside wherever the load runs, which `ComputeBuilder::finish`
+        /// checks.
+        padding: Option<Scalar>,
     },
     /// A constant.
     Const(Scalar),
@@ -79,6 +86,12 @@ pub enum TensorExpr {
 }
 
 impl TensorExpr {
+    /// A load of `tensor` at `index`, which lies inside it wherever the
+    /// load runs.
+    pub const fn load(tensor: TensorParamId, index: Vec<ExprId>) -> Self {
+        Self::Load { tensor, index, padding: None }
+    }
+
     /// The one reduction node in `self`, if it holds one (D40).
     pub fn reduction(&self) -> Option<&Self> {
         match self {

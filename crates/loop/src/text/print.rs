@@ -89,7 +89,12 @@ impl ComputePrinter<'_> {
 
     fn write_expr(&self, out: &mut String, expr: &TensorExpr) {
         match expr {
-            TensorExpr::Load { tensor, index } => self.write_load(out, *tensor, index),
+            TensorExpr::Load { tensor, index, padding } => {
+                self.write_load(out, *tensor, index);
+                if let Some(padding) = padding {
+                    let _infallible = write!(out, " pad {padding}");
+                }
+            }
             TensorExpr::Const(scalar) => {
                 let _infallible = write!(out, "{scalar}");
             }

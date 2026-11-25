@@ -6,6 +6,7 @@ mod context;
 mod cross_thread;
 mod elementwise;
 mod fill;
+mod padding;
 mod pipeline;
 mod reduction;
 mod reindex;

@@ -196,7 +196,7 @@ fn unwidened_product(dtype: DType) -> Arc<ComputeDef> {
     let (_, row) = compute.spatial(VarName::new("i"), Dim::new(16));
     let (_, column) = compute.spatial(VarName::new("j"), Dim::new(8));
     let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(32));
-    let load = |tensor, index| Box::new(TensorExpr::Load { tensor, index });
+    let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
     let body = Box::new(TensorExpr::Binary(
         BinaryOp::Mul,
         load(lhs, vec![row, k]),

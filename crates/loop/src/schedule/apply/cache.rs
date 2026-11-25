@@ -1,6 +1,6 @@
 //! Applies `cache_read`: an input's tile staged in shared memory at a loop.
 
-use crate::compute::{ComputeDef, IndexVar, TensorExpr, TensorParamId};
+use crate::compute::{ComputeDef, IndexVar, Scalar, TensorExpr, TensorParamId};
 use crate::expr::ExprId;
 use crate::schedule::error::ScheduleError;
 use crate::schedule::loop_tree::{CacheRead, LoopId, LoopTree};
@@ -14,16 +14,18 @@ pub(in crate::schedule) enum LoadSite {
     OutsideReduction,
 }
 
-/// One load of an input: its compute-level index and where it sits.
+/// One load of an input: its compute-level index, its padding and where
+/// it sits.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(in crate::schedule) struct Load {
     pub(in crate::schedule) index: Vec<ExprId>,
+    pub(in crate::schedule) padding: Option<Scalar>,
     pub(in crate::schedule) site: LoadSite,
 }
 
 impl LoopTree {
     /// Stages `tensor` at serial loop `at`. Its loads must share one index
-    /// that reads no gather. Where `at` sits in the nest is checked by
+    /// that reads no gather, and one padding. Where `at` sits in the nest is checked by
     /// validation, since later primitives can move or replace it.
     pub(in crate::schedule) fn cache_read(
         &mut self,
@@ -45,27 +47,30 @@ impl LoopTree {
         if self.caches.iter().any(|cache| cache.tensor == tensor) {
             return Err(ScheduleError::AlreadyCached(input.name.clone()));
         }
-        let index = shared_index(compute, tensor)?;
-        self.caches.push(CacheRead { tensor, at, index, swizzle: None });
+        let (index, padding) = shared_read(compute, tensor)?;
+        self.caches.push(CacheRead { tensor, at, index, padding, swizzle: None });
         Ok(())
     }
 }
 
-/// The one index every load of `tensor` reads.
-fn shared_index(compute: &ComputeDef, tensor: TensorParamId) -> Result<Vec<ExprId>, ScheduleError> {
+/// The one index every load of `tensor` reads, and its padding.
+fn shared_read(
+    compute: &ComputeDef,
+    tensor: TensorParamId,
+) -> Result<(Vec<ExprId>, Option<Scalar>), ScheduleError> {
     let name = || compute.inputs()[tensor].name.clone();
     let loads = loads_of(compute, tensor);
     let Some(first) = loads.first() else {
         return Err(ScheduleError::CacheUnread(name()));
     };
-    if loads.iter().any(|load| load.index != first.index) {
+    if loads.iter().any(|load| (&load.index, load.padding) != (&first.index, first.padding)) {
         return Err(ScheduleError::CacheLoads(name()));
     }
     let gathers = first.index.iter().flat_map(|&id| compute.exprs().vars(id));
     if gathers.into_iter().any(|var| matches!(compute.vars()[var], IndexVar::Loaded { .. })) {
         return Err(ScheduleError::CacheGathered(name()));
     }
-    Ok(first.index.clone())
+    Ok((first.index.clone(), first.padding))
 }
 
 /// Every load of `tensor` in `compute`'s outputs.
@@ -80,9 +85,9 @@ pub(in crate::schedule) fn loads_of(compute: &ComputeDef, tensor: TensorParamId)
 fn collect_loads(expr: &TensorExpr, tensor: TensorParamId, site: LoadSite, loads: &mut Vec<Load>) {
     let mut each = |operand: &TensorExpr| collect_loads(operand, tensor, site, loads);
     match expr {
-        TensorExpr::Load { tensor: read, index } => {
+        TensorExpr::Load { tensor: read, index, padding } => {
             if *read == tensor {
-                loads.push(Load { index: index.clone(), site });
+                loads.push(Load { index: index.clone(), padding: *padding, site });
             }
         }
         TensorExpr::Const(_) | TensorExpr::Index { .. } => {}

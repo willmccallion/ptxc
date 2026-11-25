@@ -25,7 +25,7 @@ fn module(unrolled: bool) -> String {
     let (_, row) = compute.spatial(VarName::new("i"), Dim::new(256));
     let (_, column) = compute.spatial(VarName::new("j"), Dim::new(256));
     let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(256));
-    let load = |tensor, index| Box::new(TensorExpr::Load { tensor, index });
+    let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
     let body =
         TensorExpr::Binary(BinaryOp::Mul, load(lhs, vec![row, k]), load(rhs, vec![k, column]));
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![k_axis], body: Box::new(body) };

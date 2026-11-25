@@ -13,7 +13,7 @@ pub(crate) fn shape(dims: &[u64]) -> Shape {
 }
 
 pub(crate) fn load(tensor: TensorParamId, index: &[ExprId]) -> TensorExpr {
-    TensorExpr::Load { tensor, index: index.to_vec() }
+    TensorExpr::load(tensor, index.to_vec())
 }
 
 pub(crate) fn binary(op: BinaryOp, lhs: TensorExpr, rhs: TensorExpr) -> TensorExpr {

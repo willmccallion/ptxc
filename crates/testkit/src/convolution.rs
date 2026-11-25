@@ -107,7 +107,7 @@ pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
             vec![feature, channel, tap_row, tap_column],
         ),
     };
-    let load = |tensor, index| TensorExpr::Load { tensor, index };
+    let load = |tensor, index| TensorExpr::load(tensor, index);
     let product = binary(BinaryOp::Mul, load(image, x_index), load(filter, w_index));
     let inside = binary(BinaryOp::And, row_inside, column_inside);
     let body = TensorExpr::Select {

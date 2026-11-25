@@ -284,9 +284,12 @@ impl<'s> Lowerer<'s> {
     pub(super) fn value(&mut self, expr: &TensorExpr, reduced: &ValueExpr) -> ValueExpr {
         let sub = |this: &mut Self, operand: &TensorExpr| Box::new(this.value(operand, reduced));
         match expr {
-            TensorExpr::Load { tensor, index } => {
+            TensorExpr::Load { tensor, index, padding } => {
                 if let Some(tile) = self.tile_load(*tensor) {
                     return tile;
+                }
+                if let Some(padding) = padding {
+                    return self.padded_load(*tensor, index, *padding);
                 }
                 let index = self.input_position(*tensor, index);
                 ValueExpr::Load { buffer: self.inputs[*tensor], index }

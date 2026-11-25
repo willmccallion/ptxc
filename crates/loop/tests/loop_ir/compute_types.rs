@@ -16,7 +16,7 @@ fn type_of(
     let mut b = ComputeBuilder::new(ComputeName::new("probe"));
     let x = b.input(TensorName::new("x"), dtype, shape(&[3]));
     let (k_axis, k) = b.reduce_axis(VarName::new("k"), Dim::new(3));
-    let value = TensorExpr::Load { tensor: x, index: vec![k] };
+    let value = TensorExpr::load(x, vec![k]);
     b.output(TensorName::new("out"), expr(value, k_axis));
     let def = b.finish()?;
     Ok(def.outputs()[0].dtype)
