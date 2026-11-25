@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/lifetime.rs
++++ replace Lifetime::through -> Self with Default::default()
+@@ -23,17 +23,17 @@
+ impl Lifetime {
+     /// Whether some step is in both `self` and `other`.
+     pub(crate) fn overlaps(self, other: Self) -> bool {
+         self.first <= other.last && other.first <= self.last
+     }
+ 
+     /// `self` stretched to include `step`, a step after its first.
+     const fn through(self, step: StepIndex) -> Self {
+-        Self { first: self.first, last: step }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// The steps from `first` to `last`, by position.
+     #[cfg(test)]
+     pub(crate) fn between(first: usize, last: usize) -> Self {
+         Self { first: StepIndex::new(first), last: StepIndex::new(last) }
+     }
+ }

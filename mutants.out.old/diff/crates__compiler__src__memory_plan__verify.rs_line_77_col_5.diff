@@ -1,0 +1,24 @@
+--- crates/compiler/src/memory_plan/verify.rs
++++ replace live_together -> bool with true
+@@ -69,20 +69,17 @@
+     let start = buffer.offset.get();
+     match start.checked_add(buffer.size.get()) {
+         Some(end) if end <= arena.get() => Ok(start..end),
+         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),
+     }
+ }
+ 
+ fn live_together(first: &Placed, second: &Placed) -> bool {
+-    match (first.lifetime, second.lifetime) {
+-        (Some(first), Some(second)) => first.overlaps(second),
+-        _ => false,
+-    }
++    true /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {
+     first.start < second.end && second.start < first.end
+ }
+ 
+ #[cfg(test)]
+ mod tests {

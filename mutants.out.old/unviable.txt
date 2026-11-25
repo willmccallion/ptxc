@@ -1,0 +1,12 @@
+crates/compiler/src/memory_plan/mod.rs:35:5: replace arena_use -> Result<ArenaUse, ArenaError> with Ok(Default::default())
+crates/compiler/src/memory_plan/lifetime.rs:31:9: replace Lifetime::through -> Self with Default::default()
+crates/compiler/src/memory_plan/mod.rs:43:5: replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![Default::default()])
+crates/compiler/src/memory_plan/lifetime.rs:61:5: replace touched -> Vec<BufferId> with vec![Default::default()]
+crates/compiler/src/memory_plan/lifetime.rs:72:5: replace peak_live_bytes -> Option<ByteSize> with Some(Default::default())
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new())
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from_iter([0]))
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new(0))
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from(0))
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from_iter([1]))
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new(1))
+crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from(1))

@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/verify.rs
++++ replace match guard end <= arena.get() with true in bytes_in
+@@ -63,17 +63,17 @@
+ 
+ /// The bytes `buffer` takes, if it is aligned and inside the arena.
+ const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {
+     if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {
+         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));
+     }
+     let start = buffer.offset.get();
+     match start.checked_add(buffer.size.get()) {
+-        Some(end) if end <= arena.get() => Ok(start..end),
++        Some(end) if true /* ~ changed by cargo-mutants ~ */ => Ok(start..end),
+         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),
+     }
+ }
+ 
+ fn live_together(first: &Placed, second: &Placed) -> bool {
+     match (first.lifetime, second.lifetime) {
+         (Some(first), Some(second)) => first.overlaps(second),
+         _ => false,

@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+mod arena;
 mod emit;
 
 use ptxc_compiler::{Compilation, CompileError};

@@ -1,0 +1,369 @@
+
+*** crates/compiler/src/memory_plan/mod.rs:30:5: replace verify_arena -> Result<(), ArenaError> with Ok(())
+
+*** mutation diff:
+--- crates/compiler/src/memory_plan/mod.rs
++++ replace verify_arena -> Result<(), ArenaError> with Ok(())
+@@ -22,17 +22,17 @@
+     pub size: ByteSize,
+     /// The most bytes the arena's buffers hold live at any one step.
+     pub lower_bound: ByteSize,
+ }
+ 
+ /// Checks `program`'s arena: no two buffers live at the same step share a
+ /// byte, and each is aligned and inside the arena.
+ pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {
+-    verify(&placed(program)?, program.arena())
++    Ok(()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// `program`'s arena and its lower bound.
+ pub fn arena_use(program: &Program) -> Result<ArenaUse, ArenaError> {
+     let live =
+         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));
+     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;
+     Ok(ArenaUse { size: program.arena(), lower_bound })
+
+
+*** /nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo test --no-run --verbose --package=ptxc-compiler@0.1.0
+       Fresh unicode-ident v1.0.27
+       Fresh proc-macro2 v1.0.107
+       Fresh quote v1.0.47
+       Fresh syn v3.0.10
+       Fresh rand_core v0.10.1
+       Fresh cfg-if v1.0.5
+       Fresh either v1.19.0
+       Fresh syn v2.0.119
+       Fresh typenum v1.20.1
+       Fresh linux-raw-sys v0.12.1
+       Fresh bytes v1.12.2
+       Fresh thiserror-impl v2.0.21
+       Fresh itertools v0.15.0
+       Fresh hybrid-array v0.4.15
+       Fresh bitflags v2.13.2
+       Fresh autocfg v1.5.1
+       Fresh once_cell v1.21.4
+       Fresh fastrand v2.5.0
+       Fresh cpufeatures v0.3.1
+       Fresh serde_derive v1.0.229
+       Fresh memchr v2.8.3
+       Fresh const-oid v0.10.3
+       Fresh quick-error v1.2.3
+       Fresh itoa v1.0.19
+       Fresh fnv v1.0.7
+       Fresh bit-vec v0.10.2
+       Fresh rand_xorshift v0.5.0
+       Fresh unarray v0.1.4
+       Fresh regex-syntax v0.8.12
+       Fresh core_detect v1.0.0
+       Fresh thiserror v2.0.21
+       Fresh libc v0.2.191
+       Fresh anyhow v1.0.104
+       Fresh rustix v1.1.6
+       Fresh libm v0.2.16
+       Fresh serde_core v1.0.229
+       Fresh crypto-common v0.2.2
+       Fresh block-buffer v0.12.1
+       Fresh chacha20 v0.10.2
+       Fresh bit-set v0.11.1
+       Fresh ptxc-core v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/core)
+       Fresh getrandom v0.4.3
+       Fresh prost-derive v0.14.6
+       Fresh wait-timeout v0.2.1
+       Fresh zmij v1.0.23
+       Fresh digest v0.11.3
+       Fresh serde v1.0.229
+       Fresh ptxc-target v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/target)
+       Fresh ptxc-graph v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/graph)
+       Fresh prost v0.14.6
+       Fresh tempfile v3.27.0
+       Fresh serde_json v1.0.154
+       Fresh num-traits v0.2.19
+       Fresh rand v0.10.4
+       Fresh sha2 v0.11.1
+       Fresh ptxc-loop v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/loop)
+       Fresh ptxc-onnx-proto v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/onnx-proto)
+       Fresh ptxc-interp v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/interp)
+       Fresh rusty-fork v0.3.1
+       Fresh ptxc-program v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/program)
+       Fresh ptxc-lower v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/lower)
+       Fresh ptxc-onnx v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/onnx)
+       Fresh ptxc-schedule v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/schedule)
+       Fresh ptxc-graph-opt v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/graph-opt)
+       Fresh proptest v1.12.0
+       Fresh ptxc-codegen v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/codegen)
+       Fresh ptxc-testkit v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/testkit)
+       Dirty ptxc-compiler v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/compiler): the file `crates/compiler/src/memory_plan/mod.rs` has changed (1795650654.203155576s, 5s after last build at 1795650649.857444532s)
+   Compiling ptxc-compiler v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/compiler)
+     Running `rustc --crate-name ptxc_compiler --edition=2024 crates/compiler/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=1998ef914cfa1881 -C extra-filename=-e9d1e4250c936461 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rlib --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rlib --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rlib --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rlib --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rlib --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rlib --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rlib --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rlib --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rlib --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rlib --extern ptxc_testkit=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_testkit-be8b522e4b5994b4.rlib --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rlib`
+     Running `rustc --crate-name ptxc_compiler --edition=2024 crates/compiler/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=e58cb0a8933d7309 -C extra-filename=-5c152cfb00029417 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rmeta --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rmeta --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rmeta --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rmeta --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rmeta --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rmeta --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rmeta --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rmeta --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rmeta --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rmeta --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rmeta`
+warning: unused import: `verify`
+  --> crates/compiler/src/memory_plan/mod.rs:16:22
+   |
+16 | use verify::{Placed, verify};
+   |                      ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `program`
+  --> crates/compiler/src/memory_plan/mod.rs:29:21
+   |
+29 | pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {
+   |                     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_program`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `overlaps` is never used
+  --> crates/compiler/src/memory_plan/lifetime.rs:25:19
+   |
+23 | impl Lifetime {
+   | ------------- method in this implementation
+24 |     /// Whether some step is in both `self` and `other`.
+25 |     pub(crate) fn overlaps(self, other: Self) -> bool {
+   |                   ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `buffer` and `offset` are never read
+  --> crates/compiler/src/memory_plan/verify.rs:15:16
+   |
+13 | pub(crate) struct Placed {
+   |                   ------ fields in this struct
+14 |     /// The buffer.
+15 |     pub(crate) buffer: BufferId,
+   |                ^^^^^^
+16 |     /// Its offset in the arena.
+17 |     pub(crate) offset: ByteOffset,
+   |                ^^^^^^
+   |
+   = note: `Placed` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: function `verify` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:51:15
+   |
+51 | pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {
+   |               ^^^^^^
+
+warning: function `bytes_in` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:65:10
+   |
+65 | const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {
+   |          ^^^^^^^^
+
+warning: function `live_together` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:76:4
+   |
+76 | fn live_together(first: &Placed, second: &Placed) -> bool {
+   |    ^^^^^^^^^^^^^
+
+warning: function `share` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:83:10
+   |
+83 | const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {
+   |          ^^^^^
+
+warning: `ptxc-compiler` (lib) generated 8 warnings (run `cargo fix --lib -p ptxc-compiler` to apply 2 suggestions)
+     Running `rustc --crate-name compiler --edition=2024 crates/compiler/tests/compiler/main.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=02f058a75ca2a01c -C extra-filename=-fb3c7a8c97dfbbc7 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rlib --extern ptxc_compiler=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_compiler-5c152cfb00029417.rlib --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rlib --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rlib --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rlib --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rlib --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rlib --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rlib --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rlib --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rlib --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rlib --extern ptxc_testkit=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libptxc_testkit-be8b522e4b5994b4.rlib --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rlib`
+warning: `ptxc-compiler` (lib test) generated 2 warnings (2 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.44s
+  Executable `/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/ptxc_compiler-e9d1e4250c936461`
+  Executable `/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/compiler-fb3c7a8c97dfbbc7`
+
+*** result: Success
+
+*** /nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo test --verbose --package=ptxc-compiler@0.1.0
+       Fresh unicode-ident v1.0.27
+       Fresh rand_core v0.10.1
+       Fresh cfg-if v1.0.5
+       Fresh either v1.19.0
+       Fresh typenum v1.20.1
+       Fresh linux-raw-sys v0.12.1
+       Fresh bytes v1.12.2
+       Fresh bitflags v2.13.2
+       Fresh autocfg v1.5.1
+       Fresh once_cell v1.21.4
+       Fresh fastrand v2.5.0
+       Fresh cpufeatures v0.3.1
+       Fresh const-oid v0.10.3
+       Fresh quick-error v1.2.3
+       Fresh fnv v1.0.7
+       Fresh itoa v1.0.19
+       Fresh bit-vec v0.10.2
+       Fresh memchr v2.8.3
+       Fresh proc-macro2 v1.0.107
+       Fresh itertools v0.15.0
+       Fresh hybrid-array v0.4.15
+       Fresh bit-set v0.11.1
+       Fresh rand_xorshift v0.5.0
+       Fresh chacha20 v0.10.2
+       Fresh unarray v0.1.4
+       Fresh regex-syntax v0.8.12
+       Fresh core_detect v1.0.0
+       Fresh quote v1.0.47
+       Fresh libc v0.2.191
+       Fresh anyhow v1.0.104
+       Fresh rustix v1.1.6
+       Fresh libm v0.2.16
+       Fresh serde_core v1.0.229
+       Fresh crypto-common v0.2.2
+       Fresh block-buffer v0.12.1
+       Fresh zmij v1.0.23
+       Fresh syn v3.0.10
+       Fresh syn v2.0.119
+       Fresh getrandom v0.4.3
+       Fresh wait-timeout v0.2.1
+       Fresh serde_json v1.0.154
+       Fresh digest v0.11.3
+       Fresh num-traits v0.2.19
+       Fresh thiserror-impl v2.0.21
+       Fresh prost-derive v0.14.6
+       Fresh serde_derive v1.0.229
+       Fresh tempfile v3.27.0
+       Fresh rand v0.10.4
+       Fresh sha2 v0.11.1
+       Fresh thiserror v2.0.21
+       Fresh prost v0.14.6
+       Fresh rusty-fork v0.3.1
+       Fresh serde v1.0.229
+       Fresh ptxc-core v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/core)
+       Fresh ptxc-onnx-proto v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/onnx-proto)
+       Fresh proptest v1.12.0
+       Fresh ptxc-target v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/target)
+       Fresh ptxc-graph v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/graph)
+       Fresh ptxc-loop v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/loop)
+       Fresh ptxc-interp v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/interp)
+       Fresh ptxc-onnx v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/onnx)
+       Fresh ptxc-program v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/program)
+       Fresh ptxc-lower v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/lower)
+       Fresh ptxc-schedule v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/schedule)
+       Fresh ptxc-graph-opt v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/graph-opt)
+       Fresh ptxc-codegen v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/codegen)
+       Fresh ptxc-testkit v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/testkit)
+warning: unused import: `verify`
+  --> crates/compiler/src/memory_plan/mod.rs:16:22
+   |
+16 | use verify::{Placed, verify};
+   |                      ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `program`
+  --> crates/compiler/src/memory_plan/mod.rs:29:21
+   |
+29 | pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {
+   |                     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_program`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `overlaps` is never used
+  --> crates/compiler/src/memory_plan/lifetime.rs:25:19
+   |
+23 | impl Lifetime {
+   | ------------- method in this implementation
+24 |     /// Whether some step is in both `self` and `other`.
+25 |     pub(crate) fn overlaps(self, other: Self) -> bool {
+   |                   ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `buffer` and `offset` are never read
+  --> crates/compiler/src/memory_plan/verify.rs:15:16
+   |
+13 | pub(crate) struct Placed {
+   |                   ------ fields in this struct
+14 |     /// The buffer.
+15 |     pub(crate) buffer: BufferId,
+   |                ^^^^^^
+16 |     /// Its offset in the arena.
+17 |     pub(crate) offset: ByteOffset,
+   |                ^^^^^^
+   |
+   = note: `Placed` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: function `verify` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:51:15
+   |
+51 | pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {
+   |               ^^^^^^
+
+warning: function `bytes_in` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:65:10
+   |
+65 | const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {
+   |          ^^^^^^^^
+
+warning: function `live_together` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:76:4
+   |
+76 | fn live_together(first: &Placed, second: &Placed) -> bool {
+   |    ^^^^^^^^^^^^^
+
+warning: function `share` is never used
+  --> crates/compiler/src/memory_plan/verify.rs:83:10
+   |
+83 | const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {
+   |          ^^^^^
+
+warning: `ptxc-compiler` (lib) generated 8 warnings (run `cargo fix --lib -p ptxc-compiler` to apply 2 suggestions)
+       Fresh ptxc-compiler v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/crates/compiler)
+warning: `ptxc-compiler` (lib test) generated 2 warnings (2 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running `/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/ptxc_compiler-e9d1e4250c936461`
+
+running 12 tests
+test memory_plan::lifetime::tests::a_buffer_dead_after_a_step_frees_its_bytes_for_the_next ... ok
+test memory_plan::lifetime::tests::lifetimes_overlap_when_they_share_a_step ... ok
+test memory_plan::lifetime::tests::a_buffer_lives_from_the_first_step_touching_it_to_the_last ... ok
+test memory_plan::lifetime::tests::live_bytes_past_2_to_the_64_have_no_peak ... ok
+test memory_plan::lifetime::tests::no_buffers_need_no_bytes ... ok
+test memory_plan::lifetime::tests::the_peak_is_the_most_bytes_live_at_one_step ... ok
+test memory_plan::verify::tests::a_buffer_no_step_touches_overlaps_nothing ... ok
+test memory_plan::verify::tests::a_buffer_past_the_arena_is_refused ... ok
+test memory_plan::verify::tests::a_buffer_reaching_into_a_live_neighbour_overlaps_it ... ok
+test memory_plan::verify::tests::a_buffer_whose_end_passes_2_to_the_64_is_refused ... ok
+test memory_plan::verify::tests::an_offset_off_the_alignment_is_refused ... ok
+test memory_plan::verify::tests::buffers_that_end_where_the_next_begins_share_no_byte ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running `/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-cXrVaa.tmp/target/debug/deps/compiler-fb3c7a8c97dfbbc7`
+
+running 10 tests
+test arena::buffers_live_at_different_steps_may_share_bytes ... ok
+test arena::a_copy_keeps_its_source_live_until_it_runs ... FAILED
+test arena::buffers_live_at_the_same_step_may_not_share_bytes ... FAILED
+test emit::an_unnamed_input_is_rejected ... ok
+test emit::an_output_that_is_an_input_or_a_repeat_is_copied ... ok
+test emit::a_node_becomes_one_launch_over_its_inputs_and_output ... ok
+test emit::a_value_between_nodes_lives_in_the_arena ... ok
+test emit::constants_are_placed_aligned_in_the_blob ... ok
+test arena::the_lower_bound_counts_only_the_bytes_live_together ... ok
+test emit::every_emitted_kernel_assembles_and_the_program_round_trips ... ok
+
+failures:
+
+---- arena::a_copy_keeps_its_source_live_until_it_runs stdout ----
+
+thread 'arena::a_copy_keeps_its_source_live_until_it_runs' (474815) panicked at crates/compiler/tests/compiler/arena.rs:71:5:
+assertion `left == right` failed
+  left: Ok(())
+ right: Err(Overlap { first: BufferId(0), second: BufferId(1) })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- arena::buffers_live_at_the_same_step_may_not_share_bytes stdout ----
+
+thread 'arena::buffers_live_at_the_same_step_may_not_share_bytes' (474817) panicked at crates/compiler/tests/compiler/arena.rs:47:5:
+assertion `left == right` failed
+  left: Ok(())
+ right: Err(Overlap { first: BufferId(0), second: BufferId(1) })
+
+
+failures:
+    arena::a_copy_keeps_its_source_live_until_it_runs
+    arena::buffers_live_at_the_same_step_may_not_share_bytes
+
+test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p ptxc-compiler --test compiler`
+
+*** result: Failure(101)
