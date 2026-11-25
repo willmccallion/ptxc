@@ -1,6 +1,6 @@
 //! Convolution as implicit GEMM, as cuDNN's and CUTLASS's kernels compute
-//! it (D70): a sum over several axes of two loads multiplied, masked where
-//! a tap reads padding, whose axes group into a matrix product's. The
+//! it (D70): a sum over several axes of two loads multiplied, the input
+//! read through its padding, whose axes group into a matrix product's. The
 //! output positions only the left operand reads are its rows, the output
 //! channels only the right reads its columns, and the taps and input
 //! channels both read its depth. Each operand's tile is reindexed as its
@@ -11,7 +11,7 @@ use super::matmul_loops::{GemmLoops, own_loop};
 use super::matmul_shape::{loads, uncast};
 use ptxc_loop::{
     BinaryOp, ComputeDef, ExprId, IndexVar, IterKind, IterVarId, LoopId, LoopKind, Open, Primitive,
-    ReduceOp, Scalar, Schedule, ScheduleError, TensorExpr, TensorParamId,
+    ReduceOp, Schedule, ScheduleError, TensorExpr, TensorParamId,
 };
 
 /// A sum of products whose axes group into a matrix product's.
@@ -31,15 +31,14 @@ pub(crate) struct ImplicitGemm {
 }
 
 /// `compute` as an implicit GEMM: one output holding a sum of the product
-/// of two loads, each read nowhere else, perhaps masked to a zero; each
-/// summed axis read by both; at least one spatial axis read by each alone;
+/// of two loads, each read nowhere else; each summed axis read by both; at least one spatial axis read by each alone;
 /// no gathers; and no empty axis, which the reduction rule keeps serial.
 pub(crate) fn implicit_gemm(compute: &ComputeDef) -> Option<ImplicitGemm> {
     let [output] = compute.outputs() else { return None };
     let TensorExpr::Reduce { op: ReduceOp::Sum, axes, body } = output.expr.reduction()? else {
         return None;
     };
-    let TensorExpr::Binary(BinaryOp::Mul, lhs, rhs) = unmasked(uncast(body)) else { return None };
+    let TensorExpr::Binary(BinaryOp::Mul, lhs, rhs) = uncast(body) else { return None };
     let (lhs, rhs) = (operand(uncast(lhs))?, operand(uncast(rhs))?);
     let (lhs_axes, rhs_axes) = (axes_read(compute, &lhs.1)?, axes_read(compute, &rhs.1)?);
     let only = |reads: &[IterVarId], other: &[IterVarId]| -> Vec<IterVarId> {
@@ -56,19 +55,6 @@ pub(crate) fn implicit_gemm(compute: &ComputeDef) -> Option<ImplicitGemm> {
     }
     let depth = innermost_last(compute, &lhs.1, axes);
     Some(ImplicitGemm { rows, columns, depth, lhs, rhs })
-}
-
-/// `expr` without a mask to zero around it: `select(c, value, 0)` sums as
-/// `value` does where `c` holds and adds nothing elsewhere.
-fn unmasked(expr: &TensorExpr) -> &TensorExpr {
-    match expr {
-        TensorExpr::Select { then, otherwise, .. } if is_zero(otherwise) => then,
-        other => other,
-    }
-}
-
-fn is_zero(expr: &TensorExpr) -> bool {
-    matches!(expr, TensorExpr::Const(scalar) if *scalar == Scalar::zero(scalar.dtype()))
 }
 
 /// The tensor `expr` loads and its index, if it is a load.
@@ -172,8 +158,8 @@ mod tests {
     use super::{ImplicitGemm, implicit_gemm};
     use ptxc_core::{DType, Dim, Shape};
     use ptxc_loop::{
-        BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ReduceOp, Scalar, TensorExpr,
-        TensorName, VarName,
+        BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ReduceOp, TensorExpr, TensorName,
+        VarName,
     };
     use ptxc_testkit::convolution::{Channels, Conv, axes, conv, w, x};
 
@@ -232,14 +218,13 @@ mod tests {
         assert_eq!(found(empty, Channels::Last), None);
     }
 
-    /// `out[i, j] = sum over k, l of select(k < 2, a[i, k, l] * b[k, j],
-    /// otherwise)`, `l` read by `b` too where `both_read_l`.
-    fn masked(otherwise: i64, both_read_l: bool) -> ComputeDef {
-        let mut compute = ComputeBuilder::new(ComputeName::new("masked"));
+    /// `out[i, j] = sum over k, l of a[i, k, l] * b[k, j, l]`, or with
+    /// `b` reading `b[k, j, 0]` unless `both_read_l`.
+    fn product(both_read_l: bool) -> ComputeDef {
+        let mut compute = ComputeBuilder::new(ComputeName::new("product"));
         let shape = |dims: &[u64]| Shape::new(dims.iter().copied().map(Dim::new).collect());
         let left = compute.input(TensorName::new("a"), DType::I32, shape(&[2, 3, 2]).unwrap());
-        let b_shape = if both_read_l { [3, 2, 2] } else { [3, 2, 1] };
-        let right = compute.input(TensorName::new("b"), DType::I32, shape(&b_shape).unwrap());
+        let right = compute.input(TensorName::new("b"), DType::I32, shape(&[3, 2, 2]).unwrap());
         let (_, row) = compute.spatial(VarName::new("i"), Dim::new(2));
         let (_, column) = compute.spatial(VarName::new("j"), Dim::new(2));
         let (k_axis, depth) = compute.reduce_axis(VarName::new("k"), Dim::new(3));
@@ -247,41 +232,28 @@ mod tests {
         let zero = compute.exprs().constant(0);
         let right_inner = if both_read_l { inner } else { zero };
         let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
-        let product = TensorExpr::Binary(
+        let body = TensorExpr::Binary(
             BinaryOp::Mul,
             load(left, vec![row, depth, inner]),
             load(right, vec![depth, column, right_inner]),
         );
-        let below = TensorExpr::Binary(
-            BinaryOp::Less,
-            Box::new(TensorExpr::Index { index: depth, dtype: DType::I64 }),
-            Box::new(TensorExpr::Const(Scalar::i64(2))),
-        );
-        let body = TensorExpr::Select {
-            condition: Box::new(below),
-            then: Box::new(product),
-            otherwise: Box::new(TensorExpr::Const(Scalar::int(DType::I32, otherwise).unwrap())),
-        };
         let axes = vec![k_axis, l_axis];
-        compute.output(
-            TensorName::new("out"),
-            TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) },
-        );
+        let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) };
+        compute.output(TensorName::new("out"), sum);
         compute.finish().unwrap()
     }
 
     #[test]
-    fn a_product_masked_to_zero_is_found_and_to_anything_else_is_not() {
-        let zero = masked(0, true);
+    fn a_product_over_several_axes_both_operands_read_is_found() {
+        let both = product(true);
 
-        let found = implicit_gemm(&zero).unwrap();
+        let found = implicit_gemm(&both).unwrap();
 
-        assert_eq!(found.depth, axes(&zero, &["k", "l"]));
-        assert!(implicit_gemm(&masked(1, true)).is_none());
+        assert_eq!(found.depth, axes(&both, &["k", "l"]));
     }
 
     #[test]
     fn every_summed_axis_is_read_by_both_operands() {
-        assert!(implicit_gemm(&masked(0, false)).is_none());
+        assert!(implicit_gemm(&product(false)).is_none());
     }
 }

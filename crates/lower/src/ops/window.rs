@@ -1,14 +1,15 @@
 //! Sliding windows over spatial axes, shared by convolution and pooling: where
-//! each kernel tap reads, whether it reads the input or padding, and how many
-//! taps of a window do.
+//! each kernel tap reads, the input padded where it reads outside, and how
+//! many taps of a window are counted.
 
 use super::NodeContext;
-use super::shape::{clamped, position, shifted};
-use crate::compose::{binary, select};
+use super::shape::shifted;
+use crate::builder::{Operand, StageBuilder};
 use crate::error::LowerError;
+use crate::stage::Binding;
 use ptxc_core::Dim;
-use ptxc_graph::WindowAxis;
-use ptxc_loop::{BinaryOp, ExprArena, ExprId, Scalar, TensorExpr};
+use ptxc_graph::{ValueId, WindowAxis};
+use ptxc_loop::{ExprArena, ExprId, Scalar};
 
 /// One spatial axis of a window: the input extent, the window's output
 /// extent and kernel extent, and how it moves.
@@ -20,12 +21,12 @@ pub(super) struct Span {
     pub(super) axis: WindowAxis,
 }
 
-/// Where tap `tap` of output position `out` reads along one axis: an index
-/// clamped into the input, and the condition that the tap reads the input
-/// rather than padding, absent when every tap of every window does.
+/// Where tap `tap` of output position `out` reads along one axis: the
+/// input position, negative or past the end in padding, and whether any tap
+/// of any window reads padding.
 pub(super) struct Read {
     pub(super) index: ExprId,
-    pub(super) inside: Option<TensorExpr>,
+    pub(super) reads_padding: bool,
 }
 
 /// The integer constants of `span`, for index arithmetic.
@@ -92,8 +93,7 @@ fn input_position(
     shifted(exprs, padded, -constants.pad_begin)
 }
 
-/// Where tap `tap` of output `out` reads along `span`. The input must not
-/// be empty along it.
+/// Where tap `tap` of output `out` reads along `span`.
 pub(super) fn read(
     cx: &NodeContext<'_>,
     exprs: &mut ExprArena,
@@ -101,15 +101,23 @@ pub(super) fn read(
     (out, tap): (ExprId, ExprId),
 ) -> Result<Read, LowerError> {
     let constants = Constants::of(cx, span)?;
-    let at = input_position(exprs, &constants, (out, tap));
-    if constants.always_inside() {
-        return Ok(Read { index: at, inside: None });
+    let index = input_position(exprs, &constants, (out, tap));
+    Ok(Read { index, reads_padding: !constants.always_inside() })
+}
+
+/// `input` read at `index`, a window's taps, or `padding` where a tap reads
+/// padding, if any of `reads` does.
+pub(super) fn window_load(
+    stage: &mut StageBuilder<'_>,
+    (input, index): (ValueId, Vec<ExprId>),
+    reads: &[Read],
+    padding: Scalar,
+) -> Operand {
+    if reads.iter().any(|read| read.reads_padding) {
+        stage.padded_load(Binding::Value(input), index, padding)
+    } else {
+        stage.load(Binding::Value(input), index)
     }
-    let bound = |value| TensorExpr::Const(Scalar::i64(value));
-    let after_start = binary(BinaryOp::GreaterOrEqual, position(at), bound(0));
-    let before_end = binary(BinaryOp::Less, position(at), bound(constants.input));
-    let inside = binary(BinaryOp::And, after_start, before_end);
-    Ok(Read { index: clamped(exprs, at, constants.input - 1), inside: Some(inside) })
 }
 
 /// Whether a window's taps count padding when averaging.
@@ -157,16 +165,4 @@ pub(super) fn tap_count(
     let difference = exprs.add(last_tap, negated_first);
     let count = shifted(exprs, difference, 1);
     Ok(exprs.max(count, zero))
-}
-
-/// `value` where every condition in `inside` holds, else `outside`.
-pub(super) fn masked(
-    inside: Vec<TensorExpr>,
-    value: TensorExpr,
-    outside: TensorExpr,
-) -> TensorExpr {
-    match inside.into_iter().reduce(|both, next| binary(BinaryOp::And, both, next)) {
-        Some(all) => select(all, value, outside),
-        None => value,
-    }
 }

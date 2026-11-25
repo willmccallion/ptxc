@@ -47,6 +47,15 @@ impl Maps {
         }
     }
 
+    /// The zero point of a single map, which a padded tap of a quantized
+    /// convolution's input reads, so it centres to zero.
+    const fn single_zero_point(&self) -> Option<i64> {
+        match *self {
+            Self::Single { zero_point, .. } => Some(zero_point),
+            Self::Tables { .. } => None,
+        }
+    }
+
     /// The map of the element whose index along the varying axis is
     /// `along(axis)`; a single map needs none.
     fn at(
@@ -243,8 +252,13 @@ pub(super) fn qconv(cx: &NodeContext<'_>, attrs: &QConvAttrs) -> Result<LoweredG
     let product = |value: Operand, weight: Operand| {
         mul(centered(&value, x_map.zero_point.clone()), centered(&weight, w_map.zero_point.clone()))
     };
+    let input_dtype = cx.graph.value(input).ty().dtype();
+    let padding = x_maps
+        .single_zero_point()
+        .and_then(|zero_point| Scalar::int(input_dtype, zero_point))
+        .ok_or_else(missing)?;
     let zero = TensorExpr::Const(Scalar::i64(0));
-    let products = Products { values: [input, weights], product: &product, zero };
+    let products = Products { values: [input, weights], product: &product, padding, zero };
     let sum = convolved(cx, &mut stage, &products, &geometry, (*sample, *feature, outs))?;
     let biased = match bias {
         Some(bias) => {

@@ -83,3 +83,14 @@ fn every_channel_of_a_group_has_its_own_kernel() {
         &[4321.0],
     );
 }
+
+#[test]
+fn a_padded_tap_multiplies_zero_by_its_weight_as_onnx_pads() {
+    // The first output's left tap reads padding: 0 * inf is NaN.
+    let x = f32s(&[1, 1, 2], &[1.0, 2.0]);
+    let w = f32s(&[1, 1, 2], &[f32::INFINITY, 1.0]);
+
+    let y = op("conv<groups=1, axes=[[1, 1, 1, 0]]>", "f32[1, 1, 2]", &[x, w]);
+
+    assert_close(&y, &[1, 1, 2], &[f64::NAN, f64::INFINITY]);
+}

@@ -2,8 +2,8 @@
 //! schedule tests share.
 //!
 //! They sum `i32`s, exactly in any order, and are built as `ptxc-lower`
-//! builds a convolution: each tap's read clamped into the input and the
-//! product masked to zero where it reads padding.
+//! builds a convolution: each tap reads the input through a load padded
+//! with zero.
 //!
 //! NOTE: test code shared as a library. A builder handed a case it cannot
 //! build has a bug, so it panics rather than returning an error (D52).
@@ -66,8 +66,8 @@ fn signed(value: u64) -> i64 {
     i64::try_from(value).unwrap()
 }
 
-/// `out = sum over r, s, c of x * w`, each tap masked to zero where it
-/// reads padding, channels laid out as `channels` says.
+/// `out = sum over r, s, c of x * w`, `x` zero where a tap reads its
+/// padding, channels laid out as `channels` says.
 pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
     let mut compute = ComputeBuilder::new(ComputeName::new("conv"));
     let Conv { batch, size, channels: depth, features, kernel, groups, .. } = geometry;
@@ -95,8 +95,8 @@ pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
     let (tap_rows, tap_row) = compute.reduce_axis(VarName::new("r"), Dim::new(kernel));
     let (tap_columns, tap_column) = compute.reduce_axis(VarName::new("s"), Dim::new(kernel));
     let read_channel = group_channel(compute.exprs(), geometry, (feature, channel));
-    let (row_read, row_inside) = tap(compute.exprs(), geometry, (row, tap_row));
-    let (column_read, column_inside) = tap(compute.exprs(), geometry, (column, tap_column));
+    let row_read = tap(compute.exprs(), geometry, (row, tap_row));
+    let column_read = tap(compute.exprs(), geometry, (column, tap_column));
     let (x_index, w_index) = match channels {
         Channels::Last => (
             vec![sample, row_read, column_read, read_channel],
@@ -107,14 +107,9 @@ pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
             vec![feature, channel, tap_row, tap_column],
         ),
     };
-    let load = |tensor, index| TensorExpr::load(tensor, index);
-    let product = binary(BinaryOp::Mul, load(image, x_index), load(filter, w_index));
-    let inside = binary(BinaryOp::And, row_inside, column_inside);
-    let body = TensorExpr::Select {
-        condition: Box::new(inside),
-        then: Box::new(product),
-        otherwise: Box::new(TensorExpr::Const(Scalar::zero(DType::I32))),
-    };
+    let padding = Some(Scalar::zero(DType::I32));
+    let image = TensorExpr::Load { tensor: image, index: x_index, padding };
+    let body = binary(BinaryOp::Mul, image, TensorExpr::load(filter, w_index));
     let axes = vec![channels_axis, tap_rows, tap_columns];
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) };
     compute.output(TensorName::new("out"), sum);
@@ -184,26 +179,14 @@ fn group_channel(
     exprs.add(first, channel)
 }
 
-/// Where tap `tap` of output `out` reads along one spatial axis, clamped
-/// into the input, and whether it reads the input rather than padding.
-fn tap(
-    exprs: &mut ExprArena,
-    geometry: Conv,
-    (out, tap): (ExprId, ExprId),
-) -> (ExprId, TensorExpr) {
+/// Where tap `tap` of output `out` reads along one spatial axis: in the
+/// padding where it lies outside the input.
+fn tap(exprs: &mut ExprArena, geometry: Conv, (out, tap): (ExprId, ExprId)) -> ExprId {
     let [stride, dilation] =
         [geometry.stride, geometry.dilation].map(|value| exprs.constant(signed(value)));
     let start = exprs.mul(out, stride);
     let offset = exprs.mul(tap, dilation);
     let padded = exprs.add(start, offset);
     let minus_pad = exprs.constant(-signed(geometry.pad));
-    let position = exprs.add(padded, minus_pad);
-    let (zero, last) = (exprs.constant(0), exprs.constant(signed(geometry.size) - 1));
-    let above = exprs.max(position, zero);
-    let clamped = exprs.min(above, last);
-    let at = || TensorExpr::Index { index: position, dtype: DType::I64 };
-    let bound = |value: u64| TensorExpr::Const(Scalar::i64(signed(value)));
-    let after_start = binary(BinaryOp::GreaterOrEqual, at(), bound(0));
-    let before_end = binary(BinaryOp::Less, at(), bound(geometry.size));
-    (clamped, binary(BinaryOp::And, after_start, before_end))
+    exprs.add(padded, minus_pad)
 }
