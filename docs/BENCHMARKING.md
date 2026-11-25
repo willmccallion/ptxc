@@ -231,7 +231,18 @@ One file per suite and framework:
 - Whether clocks were locked is not recorded: the harness cannot read it.
   Clocks that held are what locking is for.
 
-`render_tables.py` joins the files on `id`. It rewrites the README tables
-between `<!-- bench:<suite>:begin -->` and `<!-- bench:<suite>:end -->`
-markers, and refuses to render a case that is unverified, or that comes from
-a series whose clocks moved (`held` false).
+`render_tables.py` joins a run's files on `id` (D77).
+- It rewrites each suite's summary in the README, between
+  `<!-- bench:<suite>:begin -->` and `<!-- bench:<suite>:end -->` markers:
+  - GEMM: ptxc's geometric-mean percentage of cuBLAS's throughput, against
+    its default algorithm and its best of 8, for each type and layout, with
+    the problems ptxc wins and its slowest, then the M3 exit's metric;
+  - convolution: the same against cuDNN in NCHW and channels-last, for
+    each batch size.
+- It writes every case, with its time, its throughput and each baseline's,
+  to `<suite>.md` beside the results, under the GPU, driver, SM clock and
+  each framework's version and commit, and the summary links to it.
+- It refuses the whole run if any file comes from uncommitted changes or
+  another schema, or holds a case that is unverified or whose clocks moved
+  (`held` false). A series during which the GPU reported a power or
+  thermal cap, its clocks held, is marked †.

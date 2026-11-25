@@ -39,3 +39,22 @@ def test_a_missing_image_directory_says_how_to_get_it(monkeypatch, tmp_path):
 
     with pytest.raises(SystemExit, match="absent does not exist: fetch it"):
         cli.run_images(cli.parse(["images", "--source", "imagenetv2"]))
+
+
+def test_render_defaults_to_the_repositorys_readme():
+    args = cli.parse(["render", "--results", "bench/results/run"])
+
+    assert args.readme == str(paths.ROOT / "README.md")
+
+
+def test_results_that_may_not_be_published_end_the_render_with_why(tmp_path):
+    (tmp_path / "gemm-ptxc.json").write_text(
+        '{"schema": 1, "framework": {"name": "ptxc", "version": "0.1.0", '
+        '"commit": "abc", "dirty": true}, "environment": {}, "cases": []}'
+    )
+    readme = tmp_path / "README.md"
+    readme.write_text("unchanged")
+
+    with pytest.raises(SystemExit, match=r"gemm-ptxc\.json: run from uncommitted changes"):
+        cli.run_render(cli.parse(["render", "--results", str(tmp_path), "--readme", str(readme)]))
+    assert readme.read_text() == "unchanged"
