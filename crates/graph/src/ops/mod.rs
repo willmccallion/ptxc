@@ -33,7 +33,7 @@ pub use norm::{
     SoftmaxKind, StashType,
 };
 pub use pool::{GlobalPoolKind, PadCounting, PoolAttrs, PoolAxis, PoolKind};
-pub use quant::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QuantizeAttrs};
+pub use quant::{DequantizeAttrs, QConvAttrs, QMatMulAttrs, QMatMulOutput, QuantizeAttrs};
 pub use reduce::{
     ArgKind, ArgReduceAttrs, CumSumAttrs, Inclusion, KeepDims, ReduceAttrs, ReduceOp,
     ScanDirection, TieBreak,

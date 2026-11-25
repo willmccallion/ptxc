@@ -1,6 +1,9 @@
 //! Quantization onto every grid type, per tensor and per axis, and the
-//! quantized products, which compare within one step: their rescaling is
-//! f32 where the reference's is f64.
+//! quantized products.
+//!
+//! A requantized product compares within one step, its rescaling f32 where
+//! the reference's is f64; a dequantized one within its float type's
+//! tolerance.
 
 use super::values::{Domain, axis_dims, tensor};
 use proptest::collection::vec;
@@ -12,7 +15,7 @@ use ptxc_core::{
 };
 use ptxc_graph::{
     ConvAttrs, DequantizeAttrs, Dilation, Groups, Op, Padding, QConvAttrs, QMatMulAttrs,
-    QuantizeAttrs, Stride, WindowAxis,
+    QMatMulOutput, QuantizeAttrs, Stride, WindowAxis,
 };
 
 const GRIDS: [QuantDType; 4] =
@@ -93,23 +96,37 @@ fn integer_grid() -> impl Strategy<Value = QuantDType> {
     prop_oneof![Just(QuantDType::I8), Just(QuantDType::U8)]
 }
 
+fn fp8_grid() -> impl Strategy<Value = QuantDType> {
+    prop_oneof![Just(QuantDType::F8E4M3Fn), Just(QuantDType::F8E5M2)]
+}
+
+/// The grids a quantized product's operands are on, and what it gives:
+/// integer operands requantized onto an integer grid or dequantized to a
+/// float type, or FP8 operands dequantized (D72).
+fn product_grids() -> impl Strategy<Value = (QuantDType, QuantDType, Result<QuantDType, DType>)> {
+    let floats = || select(FLOATS.to_vec());
+    prop_oneof![
+        (integer_grid(), integer_grid(), integer_grid()).prop_map(|(a, b, y)| (a, b, Ok(y))),
+        (integer_grid(), integer_grid(), floats()).prop_map(|(a, b, y)| (a, b, Err(y))),
+        (fp8_grid(), fp8_grid(), floats()).prop_map(|(a, b, y)| (a, b, Err(y))),
+    ]
+}
+
 /// `[rows, inner] x [inner, columns]`, `a`'s maps maybe per row and `b`'s
-/// maybe per column.
+/// maybe per column, requantized or dequantized.
 pub fn qmatmul_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
     let extent = 0_u64..=3;
-    (
-        integer_grid(),
-        integer_grid(),
-        integer_grid(),
-        [extent.clone(), extent.clone(), extent],
-        any::<[bool; 2]>(),
-    )
-        .prop_flat_map(|(a, b, y, [rows, inner, columns], per_axis)| {
+    (product_grids(), [extent.clone(), extent.clone(), extent], any::<[bool; 2]>())
+        .prop_flat_map(|((a, b, y), [rows, inner, columns], per_axis)| {
             let a_params = params(a, per_axis[0].then_some((0, rows)));
             let b_params = params(b, per_axis[1].then_some((1, columns)));
+            let output = match y {
+                Ok(grid) => params(grid, None).prop_map(QMatMulOutput::Quantized).boxed(),
+                Err(dtype) => Just(QMatMulOutput::Float(dtype)).boxed(),
+            };
             let lhs = tensor(a.dtype(), vec![rows, inner], Domain::Any);
             let rhs = tensor(b.dtype(), vec![inner, columns], Domain::Any);
-            (a_params, b_params, params(y, None), lhs, rhs)
+            (a_params, b_params, output, lhs, rhs)
         })
         .prop_map(|(a, b, output, lhs, rhs)| {
             (Op::QMatMul(QMatMulAttrs { a, b, output }), vec![lhs, rhs])

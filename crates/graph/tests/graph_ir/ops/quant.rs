@@ -4,8 +4,8 @@ use ptxc_core::{
     Affine, Axis, DType, Dim, Granularity, QuantDType, QuantParams, Rank, Scale, ZeroPoint,
 };
 use ptxc_graph::{
-    ConvAttrs, DequantizeAttrs, Dilation, Groups, Padding, QConvAttrs, QMatMulAttrs, QuantizeAttrs,
-    Stride, TensorType, TypeError, TypeRule, WindowAxis,
+    ConvAttrs, DequantizeAttrs, Dilation, Groups, Padding, QConvAttrs, QMatMulAttrs, QMatMulOutput,
+    QuantizeAttrs, Stride, TensorType, TypeError, TypeRule, WindowAxis,
 };
 
 const MAP: Affine = Affine { scale: Scale::new(0.5), zero_point: ZeroPoint::new(0) };
@@ -116,7 +116,7 @@ fn dequantize_input_must_be_on_the_grid_and_output_a_float() {
 }
 
 fn qmatmul(b: QuantParams, output: QuantParams) -> QMatMulAttrs {
-    QMatMulAttrs { a: per_tensor(QuantDType::U8), b, output }
+    QMatMulAttrs { a: per_tensor(QuantDType::U8), b, output: QMatMulOutput::Quantized(output) }
 }
 
 #[test]
@@ -125,6 +125,55 @@ fn qmatmul_follows_matmul_shapes_on_the_output_grid() {
     let (a, b) = (tensor_type(DType::U8, &[2, 3]), tensor_type(DType::I8, &[3, 4]));
 
     assert_eq!(attrs.infer(&[&a, &b]), Ok(vec![tensor_type(DType::U8, &[2, 4])]));
+}
+
+/// `a × b` on `[grid_a, grid_b]`, dequantized to `output`.
+fn dequantized([a, b]: [QuantDType; 2], output: DType) -> QMatMulAttrs {
+    QMatMulAttrs { a: per_tensor(a), b: per_tensor(b), output: QMatMulOutput::Float(output) }
+}
+
+#[test]
+fn a_dequantized_qmatmul_gives_its_float_type_from_integer_or_fp8_grids() {
+    let fp8 = [QuantDType::F8E4M3Fn, QuantDType::F8E5M2];
+    let fp8_operands = (tensor_type(DType::F8E4M3Fn, &[2, 3]), tensor_type(DType::F8E5M2, &[3, 4]));
+    let integer_operands = (tensor_type(DType::U8, &[2, 3]), tensor_type(DType::I8, &[3, 4]));
+
+    let from_fp8 = dequantized(fp8, DType::F32).infer(&[&fp8_operands.0, &fp8_operands.1]);
+    let integers = dequantized([QuantDType::U8, QuantDType::I8], DType::F16);
+    let from_integers = integers.infer(&[&integer_operands.0, &integer_operands.1]);
+
+    assert_eq!(from_fp8, Ok(vec![tensor_type(DType::F32, &[2, 4])]));
+    assert_eq!(from_integers, Ok(vec![tensor_type(DType::F16, &[2, 4])]));
+}
+
+#[test]
+fn fp8_operands_give_only_a_float_result_and_never_beside_an_integer_one() {
+    let (e4m3, e5m2) = (tensor_type(DType::F8E4M3Fn, &[2, 3]), tensor_type(DType::F8E5M2, &[3, 4]));
+    let i8 = tensor_type(DType::I8, &[3, 4]);
+    let requantized = QMatMulAttrs {
+        a: per_tensor(QuantDType::F8E4M3Fn),
+        b: per_tensor(QuantDType::F8E5M2),
+        output: QMatMulOutput::Quantized(per_tensor(QuantDType::I8)),
+    };
+    let mixed = dequantized([QuantDType::F8E4M3Fn, QuantDType::I8], DType::F32);
+    let to_an_integer = dequantized([QuantDType::F8E4M3Fn, QuantDType::F8E5M2], DType::I32);
+    let one_fp8 = |a, b| QMatMulAttrs {
+        a: per_tensor(a),
+        b: per_tensor(b),
+        output: QMatMulOutput::Quantized(per_tensor(QuantDType::I8)),
+    };
+    let u8_a = tensor_type(DType::U8, &[2, 3]);
+    let fp8_a = one_fp8(QuantDType::F8E4M3Fn, QuantDType::I8).infer(&[&e4m3, &i8]);
+    let fp8_b = one_fp8(QuantDType::U8, QuantDType::F8E5M2).infer(&[&u8_a, &e5m2]);
+
+    assert_eq!(
+        requantized.infer(&[&e4m3, &e5m2]),
+        Err(TypeError::UnsupportedDType(DType::F8E4M3Fn))
+    );
+    assert_eq!(fp8_a, Err(TypeError::UnsupportedDType(DType::F8E4M3Fn)));
+    assert_eq!(fp8_b, Err(TypeError::UnsupportedDType(DType::F8E5M2)));
+    assert_eq!(mixed.infer(&[&e4m3, &i8]), Err(TypeError::UnsupportedDType(DType::I8)));
+    assert!(to_an_integer.infer(&[&e4m3, &e5m2]).is_err());
 }
 
 #[test]
@@ -209,7 +258,7 @@ fn qmatmul_maps_vary_only_by_row_of_a_and_column_of_b() {
     let attrs = |a_params, b_params| QMatMulAttrs {
         a: a_params,
         b: b_params,
-        output: per_tensor(QuantDType::U8),
+        output: QMatMulOutput::Quantized(per_tensor(QuantDType::U8)),
     };
 
     let by_row = attrs(per_axis(QuantDType::U8, 0, 2), per_axis(QuantDType::I8, 1, 4));

@@ -73,23 +73,35 @@ impl TypeRule for DequantizeAttrs {
     }
 }
 
-/// A matrix product on quantized operands with a quantized result, as ONNX
-/// `QLinearMatMul` and the `Dequantize -> MatMul -> Quantize` chains QDQ
-/// folding (M4) turns into it. Shapes follow `MatMul`.
+/// A matrix product on quantized operands, as ONNX `QLinearMatMul` and the
+/// `Dequantize -> MatMul [-> Quantize]` chains QDQ folding (M4) turns into
+/// it. Shapes follow `MatMul`.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct QMatMulAttrs {
     /// The left operand's grid.
     pub a: QuantParams,
     /// The right operand's grid.
     pub b: QuantParams,
-    /// The result's grid.
-    pub output: QuantParams,
+    /// What the product gives.
+    pub output: QMatMulOutput,
+}
+
+/// What a quantized matrix product gives (D72).
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum QMatMulOutput {
+    /// The product requantized onto this grid, as `QLinearMatMul` gives
+    /// it, from operands on integer grids.
+    Quantized(QuantParams),
+    /// The dequantized product in this float type, as `Dequantize ->
+    /// MatMul` gives it, from operands both on integer grids or both on
+    /// FP8 ones.
+    Float(DType),
 }
 
 impl TypeRule for QMatMulAttrs {
     /// As ONNX `QLinearMatMul`: `a`'s maps may vary by row and `b`'s by
-    /// column, which the sum over the inner axis leaves constant; the
-    /// result has one map.
+    /// column, which the sum over the inner axis leaves constant; a
+    /// quantized result has one map.
     fn infer(&self, operands: &[&TensorType]) -> Result<Vec<TensorType>, TypeError> {
         let [a, b] = exact_operands(operands)?;
         for (operand, params) in [(a, &self.a), (b, &self.b)] {
@@ -98,12 +110,33 @@ impl TypeRule for QMatMulAttrs {
         let rank = |operand: &TensorType| operand.shape().rank().get();
         check_varies_only_along(&self.a, rank(a).checked_sub(2).map(Axis::new))?;
         check_varies_only_along(&self.b, (rank(b) >= 2).then(|| Axis::new(rank(b) - 1)))?;
-        check_varies_only_along(&self.output, None)?;
-        let dtype = quantized_dtype(&self.output)?;
-        let result = TensorType::new(dtype, matmul_shape(a.shape(), b.shape())?, Layout::RowMajor);
-        check_params(&self.output, &result)?;
-        Ok(vec![result])
+        let shape = matmul_shape(a.shape(), b.shape())?;
+        let [a_fp8, b_fp8] = [&self.a, &self.b].map(|params| is_fp8(params.dtype()));
+        match &self.output {
+            QMatMulOutput::Quantized(params) => {
+                if a_fp8 || b_fp8 {
+                    let fp8 = if a_fp8 { a } else { b };
+                    return Err(TypeError::UnsupportedDType(fp8.dtype()));
+                }
+                check_varies_only_along(params, None)?;
+                let result = TensorType::new(quantized_dtype(params)?, shape, Layout::RowMajor);
+                check_params(params, &result)?;
+                Ok(vec![result])
+            }
+            QMatMulOutput::Float(dtype) => {
+                if a_fp8 != b_fp8 {
+                    return Err(TypeError::UnsupportedDType(b.dtype()));
+                }
+                Accepts::Float.check(*dtype)?;
+                Ok(vec![TensorType::new(*dtype, shape, Layout::RowMajor)])
+            }
+        }
     }
+}
+
+/// Whether `dtype` is an FP8 grid.
+const fn is_fp8(dtype: QuantDType) -> bool {
+    matches!(dtype, QuantDType::F8E4M3Fn | QuantDType::F8E5M2)
 }
 
 /// A convolution on quantized operands with a quantized result, as ONNX

@@ -7,8 +7,8 @@ use ptxc_core::{DType, Dim, QuantDType};
 use ptxc_graph::{
     Antialias, AttentionAttrs, AttentionLayout, AttentionMask, Causality, ConvAttrs,
     CoordinateTransform, DequantizeAttrs, Groups, HeadCount, NearestRounding, Op, OutsideWeights,
-    Presence, QConvAttrs, QMatMulAttrs, QkOutput, QuantizeAttrs, ResizeAttrs, ResizeAxis,
-    ResizeMode, TensorType,
+    Presence, QConvAttrs, QMatMulAttrs, QMatMulOutput, QkOutput, QuantizeAttrs, ResizeAttrs,
+    ResizeAxis, ResizeMode, TensorType,
 };
 
 /// Quantization ops.
@@ -22,7 +22,7 @@ pub(in crate::text) fn quantization() -> Vec<(Op, Vec<TensorType>)> {
     let qmatmul = QMatMulAttrs {
         a: per_tensor(QuantDType::U8),
         b: per_axis(QuantDType::I8, 1, 4),
-        output: per_tensor(QuantDType::U8),
+        output: QMatMulOutput::Quantized(per_tensor(QuantDType::U8)),
     };
     vec![
         (
