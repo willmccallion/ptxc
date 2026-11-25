@@ -1383,3 +1383,53 @@ the old one.
   on the smallest grid. The pipelined loop still does much more integer
   work an iteration than the unpipelined one: 287 instructions against
   152 at 4096³, and 322 against 286 at 3000³. That is #155's to remove.
+
+## D69. Addresses are summed outermost loop first, their invariant part before the loop
+
+- **Context:** the 128 by 128 tile's pipelined loop (D68) ran 287
+  instructions an iteration at 4096³, against 152 for the unpipelined one.
+  - A swizzled address swizzled its whole offset, though a pipeline slot
+    (8 KiB), a warp's tile origin and a copy loop's chunk (2 KiB) are
+    whole multiples of the swizzle's period (1 or 2 KiB).
+  - An index was emitted in the order its expression's tree held it. A
+    refill's global address, `((inv₁ + k·32) + inv₂) + …`, then had no
+    partial sum the loop did not change, so ptxas recomputed all of it
+    every iteration, before and after pipelining.
+  - ptxas does not hoist out of a branch the body runs only sometimes, as
+    it runs the refill.
+  - Each refill copy checked bounds its guard already implied.
+- **Choice:**
+  - An index is taken apart into terms, constant factors distributed over
+    sums. It is summed outermost loop first, as LLVM's Reassociate ranks
+    operands: a term's rank is the depth of the innermost loop whose
+    variable it reads.
+  - An address is the buffer's start plus each rank's part in bytes,
+    outermost first, with the constant as its immediate offset.
+  - In a swizzled buffer, terms that are whole multiples of the period are
+    added after the swizzle, since `swz(x + mT) = swz(x) + mT`. Only the
+    rest is swizzled, and the constant folds in as in D67.
+  - 64-bit index operations are value-numbered within a block, except
+    those reading a `Var`, whose value changes.
+  - Before each serial loop, codegen computes the part of every address in
+    its body that reads no variable of the loop or of a loop inside it, as
+    LLVM's LICM does. Value numbering hands the body those registers.
+  - Lowering builds a refill's copies with the loop variable's range
+    narrowed to what their guard allows, so they check no bound the guard
+    implies.
+- **Result:**
+  - The 128 by 128 tile's loop has 150 instructions an iteration at 4096³
+    (from 287) and 210 at 3000³ (from 322), fewer than unpipelined (152
+    and 286), at 212 and 229 registers.
+  - The golden kernels' PTX shrinks: the row argmax from 449 instructions
+    to 404, and the row sum from 146 to 124.
+  - Against main, f16 NN on the RTX 4060 Ti locked at 2700 MHz, two
+    interleaved rounds within 0.5%:
+    - the 64 by 64 tile's shapes are 13 to 27% faster: 128×768×768 from
+      10.95 to 7.95 µs;
+    - the 128 by 128 tile's are 3 to 5% faster, but 8192³, which is
+      bound elsewhere, is unchanged;
+    - the M3 exit geomean goes from 81.4% to 84.1% of cuBLAS.
+  - f32 NN on CUDA cores is 2 to 12% faster.
+- **Reason:** these are the standard passes for this shape of loop. ptxas
+  does not reassociate a sum by loop depth or hoist out of a branch, so
+  codegen does both.

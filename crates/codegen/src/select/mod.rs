@@ -9,6 +9,7 @@ mod expr;
 mod fp8;
 mod fragment;
 mod hoist;
+mod hoist_addresses;
 mod known;
 mod lanes;
 mod math;

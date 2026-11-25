@@ -33,6 +33,22 @@ impl Selector<'_> {
         }
     }
 
+    /// The places in its tile whose addresses loading `fragment` from
+    /// `source` at `at` gives this lane: one for an `ldmatrix`, else one an
+    /// element.
+    pub(super) fn fragment_places(
+        &mut self,
+        fragment: FragmentTile,
+        (source, at): (BufferId, TileAccess),
+    ) -> Result<Vec<[Reg<B64>; 2]>, CodegenError> {
+        let found = self.fragment(fragment.buffer)?;
+        let layout = found.layout();
+        if let Some(order) = self.matrix_order(found, source, at) {
+            return Ok(vec![self.matrix_place(layout, order)?]);
+        }
+        (0..layout.elements()).map(|element| self.lane_place(layout, element)).collect()
+    }
+
     /// How `ldmatrix` loads `fragment` from `source` at `at`, if it can: a
     /// multiplicand in shared memory with 16-byte aligned rows, its runs
     /// adjacent in memory or, for 16-bit elements, transposed.
@@ -74,11 +90,7 @@ impl Selector<'_> {
         (source, at): (BufferId, TileAccess),
         order: MatrixOrder,
     ) -> Result<(), CodegenError> {
-        let [along_group, along_run] = self.matrix_row(layout, order)?;
-        let place = match layout.group_axis {
-            TileAxis::Rows => [along_group, along_run],
-            TileAxis::Columns => [along_run, along_group],
-        };
+        let place = self.matrix_place(layout, order)?;
         let (_, addr) = self.tile_address(source, at, place)?;
         let registers = self.builder.ld_matrix(order, layout.blocks(), addr);
         for (block, register) in (0..).zip(registers) {
@@ -86,6 +98,20 @@ impl Selector<'_> {
             self.write(&slot, PtxType::B32, register)?;
         }
         Ok(())
+    }
+
+    /// The row and column in its tile of the matrix row whose address this
+    /// lane gives `ldmatrix`.
+    fn matrix_place(
+        &mut self,
+        layout: LaneLayout,
+        order: MatrixOrder,
+    ) -> Result<[Reg<B64>; 2], CodegenError> {
+        let [along_group, along_run] = self.matrix_row(layout, order)?;
+        Ok(match layout.group_axis {
+            TileAxis::Rows => [along_group, along_run],
+            TileAxis::Columns => [along_run, along_group],
+        })
     }
 
     /// Where the matrix row whose address this lane gives `ldmatrix`
