@@ -1,0 +1,38 @@
+schedule conv
+  for %n_p_q.0_m.0 in 1 bind(blockIdx.x)
+    for %n_p_q.1 in 16 bind(threadIdx.y)
+      for %m.1 in 16 bind(threadIdx.x)
+        for %c_r_s.0 in 4 reduce pipeline(4)
+          for %c_r_s.1 in 8 reduce unroll
+            for %n_p_q.2 in 4 unroll
+              for %m.2 in 4 unroll
+  %n = floordiv(%n_p_q.2 + %n_p_q.1 * 4, 16)
+  %m = %m.2 + %m.1 * 4
+  %p = floormod(%n_p_q.1, 4)
+  %q = %n_p_q.2
+  %c = floordiv(%c_r_s.1 + %c_r_s.0 * 8, 9)
+  %r = floormod(floordiv(%c_r_s.1 + %c_r_s.0 * 8, 3), 3)
+  %s = floormod(%c_r_s.1 + %c_r_s.0 * 8, 3)
+  guard %n_p_q.2 + %n_p_q.1 * 4 < 32
+  guard %m.2 + %m.1 * 4 < 5
+  guard %c_r_s.1 + %c_r_s.0 * 8 < 27
+trace
+  reindex x [n, p, q] [c, r, s]
+  reindex w [m] [c, r, s]
+  reorder %n, %p, %q, %m, %c, %r, %s
+  fuse %n, %p, %q
+  fuse %c, %r, %s
+  split %n_p_q [16, 4]
+  split %m [16, 4]
+  split %c_r_s [8]
+  reorder %n_p_q.0, %m.0, %n_p_q.1, %m.1, %c_r_s.0, %c_r_s.1, %n_p_q.2, %m.2
+  fuse %n_p_q.0, %m.0
+  bind %n_p_q.0_m.0 blockIdx.x
+  bind %n_p_q.1 threadIdx.y
+  bind %m.1 threadIdx.x
+  cache_read x %c_r_s.0
+  cache_read w %c_r_s.0
+  pipeline %c_r_s.0 4
+  unroll %c_r_s.1
+  unroll %n_p_q.2
+  unroll %m.2

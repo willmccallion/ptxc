@@ -482,7 +482,12 @@ and the GPU tests check them.
   staged two `mma` steps deep and the innermost tile tensorized (D58). The
   SIMT tile and the 64 by 64 one pipeline their steps over four stages, or
   as many as fit shared memory, the 128 by 128 one over two (D68), and
-  both tensor-core tiles swizzle their tiles.
+  both tensor-core tiles swizzle their tiles. A convolution of one group
+  is tiled with the SIMT tile as an implicit GEMM: its operands reindexed
+  as the GEMM's matrices, and its output positions, its output channels,
+  and its taps with input channels each fused into one loop (D70). A
+  grouped convolution's input index reads the output channel, so it keeps
+  the reduction rule.
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's
