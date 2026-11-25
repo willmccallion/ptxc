@@ -1,8 +1,11 @@
 //! Selects instructions for index and value expressions.
 
+use super::known::IndexOp;
 use super::values::{Held, Narrow, narrow, widen};
 use super::{CodegenError, Selector};
-use crate::ast::{B16, B32, B64, BinaryOp, Compare, CvtMode, F32, PtxType, Reg, Signedness, Value};
+use crate::ast::{
+    B16, B32, B64, BinaryOp, Compare, CvtMode, F32, Operand, PtxType, Reg, Signedness, Value,
+};
 use ptxc_core::DType;
 use ptxc_core::convert::f64_to_f32;
 use ptxc_core::float::Overflow;
@@ -15,6 +18,43 @@ impl Selector<'_> {
             Expr::Const(value) => Ok(Value::<B64>::int(value)),
             _ => self.index(id).map(Value::from),
         }
+    }
+
+    /// `a op b` on 64-bit index values, as `signedness` reads them: the
+    /// register that already holds it where one does. An operation on a
+    /// `Var`, whose value changes, is never reused.
+    pub(super) fn index_op(
+        &mut self,
+        op: BinaryOp,
+        signedness: Signedness,
+        a: Value<B64>,
+        b: Value<B64>,
+    ) -> Reg<B64> {
+        let operands = [a.operand(), b.operand()];
+        let fixed = operands.iter().all(|operand| match operand {
+            Operand::Reg(reg) => !self.builder.is_variable(*reg),
+            Operand::Int(_) | Operand::F32(_) => true,
+        });
+        let key = IndexOp { op, signedness, operands };
+        if let Some(held) = self.known.op(&key) {
+            return held;
+        }
+        let held = self.builder.int(op, signedness, a, b);
+        if fixed {
+            self.known.remember_op(key, held);
+        }
+        held
+    }
+
+    /// The address of array `name`, from the register that already holds
+    /// it where one does.
+    pub(super) fn array_address(&mut self, name: &str) -> Reg<B64> {
+        if let Some(held) = self.known.array(name) {
+            return held;
+        }
+        let held = self.builder.address_of(name);
+        self.known.remember_array(name, held);
+        held
     }
 
     /// Index expression `id` in an `s64` register, computed once a block.
@@ -37,19 +77,19 @@ impl Selector<'_> {
             Expr::Const(value) => self.builder.mov(PtxType::S64, Value::<B64>::int(value)),
             Expr::Add(a, b) => {
                 let (a, b) = pair(self, a, b)?;
-                self.builder.int(BinaryOp::Add, signed, a, b)
+                self.index_op(BinaryOp::Add, signed, a, b)
             }
             Expr::Mul(a, b) => {
                 let (a, b) = pair(self, a, b)?;
-                self.builder.int(BinaryOp::Mul, signed, a, b)
+                self.index_op(BinaryOp::Mul, signed, a, b)
             }
             Expr::Min(a, b) => {
                 let (a, b) = pair(self, a, b)?;
-                self.builder.int(BinaryOp::Min, signed, a, b)
+                self.index_op(BinaryOp::Min, signed, a, b)
             }
             Expr::Max(a, b) => {
                 let (a, b) = pair(self, a, b)?;
-                self.builder.int(BinaryOp::Max, signed, a, b)
+                self.index_op(BinaryOp::Max, signed, a, b)
             }
             Expr::FloorDiv(a, b) => self.floor_div(a, b)?,
             Expr::FloorMod(a, b) => self.floor_mod(a, b)?,
@@ -63,7 +103,7 @@ impl Selector<'_> {
         let dividend = self.index_operand(a)?;
         if let Some(divisor) = self.power_of_two(b) {
             let shift = Value::<B64>::int(i64::from(divisor.trailing_zeros()));
-            return Ok(self.builder.int(BinaryOp::Shr, Signedness::Signed, dividend, shift));
+            return Ok(self.index_op(BinaryOp::Shr, Signedness::Signed, dividend, shift));
         }
         if let Some(divisor) = self.unsigned_divisor(a, b) {
             return Ok(self.unsigned32(BinaryOp::Div, dividend, divisor));
@@ -79,7 +119,7 @@ impl Selector<'_> {
         let dividend = self.index_operand(a)?;
         if let Some(divisor) = self.power_of_two(b) {
             let mask = Value::<B64>::int(divisor - 1);
-            return Ok(self.builder.int(BinaryOp::And, Signedness::Bits, dividend, mask));
+            return Ok(self.index_op(BinaryOp::And, Signedness::Bits, dividend, mask));
         }
         if let Some(divisor) = self.unsigned_divisor(a, b) {
             return Ok(self.unsigned32(BinaryOp::Rem, dividend, divisor));
@@ -123,16 +163,16 @@ impl Selector<'_> {
     /// the truncating remainder is nonzero with the other sign from `b`.
     fn floored(&mut self, a: Value<B64>, b: Value<B64>) -> (Reg<B64>, Reg<B64>) {
         let signed = Signedness::Signed;
-        let quotient = self.builder.int(BinaryOp::Div, signed, a, b);
-        let remainder = self.builder.int(BinaryOp::Rem, signed, a, b);
+        let quotient = self.index_op(BinaryOp::Div, signed, a, b);
+        let remainder = self.index_op(BinaryOp::Rem, signed, a, b);
         let nonzero =
             self.builder.compare_int(Compare::Ne, signed, remainder.into(), Value::<B64>::int(0));
-        let signs = self.builder.int(BinaryOp::Xor, Signedness::Bits, remainder.into(), b);
+        let signs = self.index_op(BinaryOp::Xor, Signedness::Bits, remainder.into(), b);
         let opposite =
             self.builder.compare_int(Compare::Lt, signed, signs.into(), Value::<B64>::int(0));
         let adjust = self.builder.predicate(BinaryOp::And, nonzero, opposite);
-        let lower = self.builder.int(BinaryOp::Sub, signed, quotient.into(), Value::<B64>::int(1));
-        let shifted = self.builder.int(BinaryOp::Add, signed, remainder.into(), b);
+        let lower = self.index_op(BinaryOp::Sub, signed, quotient.into(), Value::<B64>::int(1));
+        let shifted = self.index_op(BinaryOp::Add, signed, remainder.into(), b);
         let quotient = self.builder.select(PtxType::B64, lower.into(), quotient.into(), adjust);
         let remainder = self.builder.select(PtxType::B64, shifted.into(), remainder.into(), adjust);
         (quotient, remainder)

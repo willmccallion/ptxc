@@ -150,18 +150,17 @@ impl Selector<'_> {
         let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
         let storage = self.storage.get(&buffer).ok_or(CodegenError::Unbound)?.clone();
         let signed = Signedness::Signed;
-        let bytes =
-            self.builder.int(BinaryOp::Mul, signed, position.into(), Value::<B64>::int(size));
+        let bytes = self.index_op(BinaryOp::Mul, signed, position.into(), Value::<B64>::int(size));
         let constant = constant.checked_mul(size).ok_or(CodegenError::TooLarge)?;
         let (offset, immediate) = self.placed_offset(buffer, bytes, constant)?;
         let (space, base) = match storage {
             Storage::Global(base) => (Space::Global, base),
-            Storage::Array { space, name } => (space, self.builder.address_of(&name)),
+            Storage::Array { space, name } => (space, self.array_address(&name)),
             Storage::Registers(_) => {
                 return Err(CodegenError::Unsupported { op: "a computed index into registers" });
             }
         };
-        let at = self.builder.int(BinaryOp::Add, signed, base.into(), offset.into());
+        let at = self.index_op(BinaryOp::Add, signed, base.into(), offset.into());
         Ok((space, Address::Reg { base: at.id(), offset: immediate }))
     }
 

@@ -22,7 +22,7 @@ impl Selector<'_> {
         let Some(fold) = swizzle.fold(known.possible_bits(bytes.id()), constant) else {
             let signed = Signedness::Signed;
             let sum =
-                self.builder.int(BinaryOp::Add, signed, bytes.into(), Value::<B64>::int(constant));
+                self.index_op(BinaryOp::Add, signed, bytes.into(), Value::<B64>::int(constant));
             return Ok((self.swizzled_offset(swizzle, sum), 0));
         };
         let swizzled = self.swizzled_offset(swizzle, bytes);
@@ -31,7 +31,7 @@ impl Selector<'_> {
         }
         let xor = i64::try_from(fold.xor).map_err(|_| CodegenError::TooLarge)?;
         let bits = Signedness::Bits;
-        let folded = self.builder.int(BinaryOp::Xor, bits, swizzled.into(), Value::<B64>::int(xor));
+        let folded = self.index_op(BinaryOp::Xor, bits, swizzled.into(), Value::<B64>::int(xor));
         Ok((folded, fold.add))
     }
 
@@ -40,12 +40,12 @@ impl Selector<'_> {
     fn swizzled_offset(&mut self, swizzle: Swizzle, offset: Reg<B64>) -> Reg<B64> {
         let bitwise = Signedness::Bits;
         let above = Value::<B64>::int(i64::from(swizzle.unit() + swizzle.shift()));
-        let read = self.builder.int(BinaryOp::Shr, bitwise, offset.into(), above);
+        let read = self.index_op(BinaryOp::Shr, bitwise, offset.into(), above);
         let mask = Value::<B64>::int((1 << swizzle.bits()) - 1);
-        let bits = self.builder.int(BinaryOp::And, bitwise, read.into(), mask);
+        let bits = self.index_op(BinaryOp::And, bitwise, read.into(), mask);
         let unit = Value::<B64>::int(i64::from(swizzle.unit()));
-        let moved = self.builder.int(BinaryOp::Shl, bitwise, bits.into(), unit);
-        self.builder.int(BinaryOp::Xor, bitwise, offset.into(), moved.into())
+        let moved = self.index_op(BinaryOp::Shl, bitwise, bits.into(), unit);
+        self.index_op(BinaryOp::Xor, bitwise, offset.into(), moved.into())
     }
 
     /// Where `buffer`'s swizzle, if it has one, places constant byte

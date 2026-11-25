@@ -35,7 +35,7 @@ impl Int for B64 {
 }
 
 /// How an integer operation reads its operands.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Signedness {
     Signed,
     Unsigned,

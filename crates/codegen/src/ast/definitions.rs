@@ -68,6 +68,11 @@ impl FunctionBuilder {
         Var(reg)
     }
 
+    /// Whether `reg` is a `Var`, set more than once.
+    pub(crate) fn is_variable(&self, reg: RegId) -> bool {
+        matches!(self.definitions.get(&reg), Some(Definition::Several))
+    }
+
     /// The instruction that alone defines `reg`, if one does.
     pub(crate) fn definition(&self, reg: RegId) -> Option<&Instr> {
         match self.definitions.get(&reg)? {

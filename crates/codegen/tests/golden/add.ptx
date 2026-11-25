@@ -9,7 +9,7 @@
 )
 {
 	.reg .b32 %r<2>;
-	.reg .b64 %rd<16>;
+	.reg .b64 %rd<14>;
 	.reg .f32 %f<3>;
 	ld.param.u64 %rd0, [elementwise_param_0];
 	cvta.to.global.u64 %rd1, %rd0;
@@ -26,12 +26,10 @@
 	mul.lo.s64 %rd10, %rd9, 4;
 	add.s64 %rd11, %rd1, %rd10;
 	ld.global.f32 %f0, [%rd11];
-	mul.lo.s64 %rd12, %rd9, 4;
-	add.s64 %rd13, %rd3, %rd12;
-	ld.global.f32 %f1, [%rd13];
+	add.s64 %rd12, %rd3, %rd10;
+	ld.global.f32 %f1, [%rd12];
 	add.rn.f32 %f2, %f0, %f1;
-	mul.lo.s64 %rd14, %rd9, 4;
-	add.s64 %rd15, %rd5, %rd14;
-	st.global.f32 [%rd15], %f2;
+	add.s64 %rd13, %rd5, %rd10;
+	st.global.f32 [%rd13], %f2;
 	ret;
 }
