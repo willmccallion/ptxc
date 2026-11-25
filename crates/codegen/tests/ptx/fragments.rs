@@ -180,7 +180,9 @@ fn is_swizzle(window: &[Vec<&str>]) -> bool {
 #[test]
 fn a_grid_of_uneven_block_counts_divides_once_in_32_bits() {
     let instruction = f16_mma();
-    let extents = [128, 768, 768];
+    // 11 rows of 64 by 64 tiles, which no group divides, so the grid runs
+    // row by row over 6 columns.
+    let extents = [704, 384, 768];
     let compute = product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor));
     let kernel = ptxc_schedule::default_schedule(compute, &target()).unwrap().lower();
 
@@ -195,7 +197,7 @@ fn a_grid_of_uneven_block_counts_divides_once_in_32_bits() {
     assert_eq!(count(&module, "mma.sync.aligned"), 16);
     let text = module.to_string();
     let by_column_blocks =
-        |op: &str| text.lines().any(|line| line.contains(op) && line.ends_with(", 12;"));
+        |op: &str| text.lines().any(|line| line.contains(op) && line.ends_with(", 6;"));
     assert!(by_column_blocks("div.u32") && by_column_blocks("rem.u32"), "{text}");
     assemble(&module);
 }

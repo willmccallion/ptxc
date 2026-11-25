@@ -1672,3 +1672,37 @@ the old one.
   alone would hide the losses M3 commits to showing. Beside the results,
   the full tables are versioned with the data they come from, and a
   reader checking a number finds its file next to it.
+
+## D78. A product's blocks run in groups of rows, a column at a time
+
+- **Context:** a product's batch, block-row and block-column loops were
+  fused onto `blockIdx.x` in that order, so the blocks running at once
+  cover one or two rows of blocks and every column, and each row of blocks
+  reads all of the right operand. Where it is larger than L2 each row
+  streams it from DRAM again: at 8192 cubed in f16, B is 128 MiB against
+  the 4060 Ti's 32 MiB, and ptxc ran at 76% of cuBLAS NN and 43% NT, whose
+  B rows put each block's reads 16 KiB apart.
+- **Options:**
+  - grouped ordering, as Triton's `GROUP_SIZE_M` and CUTLASS's
+    threadblock swizzle order a GEMM's blocks: a group of rows walked a
+    column at a time, so the blocks running at once share a few rows of A
+    and columns of B. Triton shortens the last group where the rows do not
+    divide, which takes a `min` in the block's index;
+  - a space-filling curve over the blocks, whose index is not affine;
+  - choosing an order per problem from its operands' size against L2.
+- **Choice:** grouped ordering, from the schedule's own primitives: the
+  block-row loop is split by the largest divisor of its extent up to 8,
+  and the parts reordered as the group, the column, then the row in the
+  group, and these and the batch loops are fused onto `blockIdx.x`. A
+  row count with no divisor from 2 to 8 keeps the row-major order. Every
+  product takes it: on tensor cores and CUDA cores, and a convolution's
+  implicit GEMM.
+- **Reason:** a split by a divisor, a reorder and a fuse are affine, so
+  the grid's index folds into the tiles' addresses as before and no group
+  overhangs; a shortened last group would guard every block. Eight is
+  Triton's choice: with two large tiles per SM, the 68 blocks running at
+  once cover 8 rows by 9 columns. At 8192 cubed in f16, NN went from 31.3
+  ms to 24.9 (95% of cuBLAS), NT from 55.1 to 25.0 (96%) and TN from 31.2
+  to 24.8 (97%).
+  The other 93 f16 problems moved by 2% or less, and the M3 exit metric
+  rose from 82% to 89%.

@@ -2,7 +2,7 @@ kernel product(%a: f16[2800] read, %b: f16[1800] read, %out: f32[6300] write)
   grid(4, 1, 1) block(32, 2, 2) smem 32768
   %i.1 = threadIdx.y
   %j.1 = threadIdx.z
-  %batch_i.0_j.0 = blockIdx.x
+  %batch_i.0.0_j.0_i.0.1 = blockIdx.x
   %lane = threadIdx.x
   alloc %acc: f32[1024] fragment<16x8> {
     alloc %lhs: f16[512] fragment<16x16> {
@@ -16,13 +16,13 @@ kernel product(%a: f16[2800] read, %b: f16[1800] read, %out: f32[6300] write)
           alloc %b_tile: f16[8192] shared swizzle<3,4,3> {
             barrier
             for %a_fill in 8 {
-              %a_tile[(%i.1 * 32 + %j.1 * 64 + %a_fill * 128 + %lane) * 2] <- async %a[%i.1 * 70 + %j.1 * 140 + floordiv(%batch_i.0_j.0, 2) * 1400 + floormod(%batch_i.0_j.0, 2) * 64 + %a_fill * 280 + %lane * 2] run 2 if floormod(%batch_i.0_j.0, 2) * 64 + %lane * 2 < 70, %i.1 + %j.1 * 2 + %a_fill * 4 < 20
+              %a_tile[(%i.1 * 32 + %j.1 * 64 + %a_fill * 128 + %lane) * 2] <- async %a[%i.1 * 70 + %j.1 * 140 + floordiv(%batch_i.0.0_j.0_i.0.1, 2) * 1400 + floormod(%batch_i.0.0_j.0_i.0.1, 2) * 64 + %a_fill * 280 + %lane * 2] run 2 if floormod(%batch_i.0.0_j.0_i.0.1, 2) * 64 + %lane * 2 < 70, %i.1 + %j.1 * 2 + %a_fill * 4 < 20
             }
             for %b_fill in 16 {
               %b_tile[%i.1 * 32 + %j.1 * 64 + %lane + %b_fill * 128] = 0.0:f16
               if %j.1 + %b_fill * 2 < 20 {
                 if %i.1 * 32 + %lane < 45 {
-                  %b_tile[%i.1 * 32 + %j.1 * 64 + %lane + %b_fill * 128] = %b[%i.1 * 32 + %j.1 * 45 + floordiv(%batch_i.0_j.0, 2) * 900 + %lane + %b_fill * 90]
+                  %b_tile[%i.1 * 32 + %j.1 * 64 + %lane + %b_fill * 128] = %b[%i.1 * 32 + %j.1 * 45 + floordiv(%batch_i.0.0_j.0_i.0.1, 2) * 900 + %lane + %b_fill * 90]
                 }
               }
             }
@@ -52,9 +52,9 @@ kernel product(%a: f16[2800] read, %b: f16[1800] read, %out: f32[6300] write)
         for %i.2 in 2 unroll {
           for %j.2 in 4 unroll {
             each %acc[%i.2 * 4 + %j.2] as (%i.3, %j.3) {
-              if %i.3 + %i.2 * 16 + %i.1 * 32 + floormod(%batch_i.0_j.0, 2) * 64 < 70 {
+              if %i.3 + %i.2 * 16 + %i.1 * 32 + floormod(%batch_i.0.0_j.0_i.0.1, 2) * 64 < 70 {
                 if %j.3 + %j.2 * 8 + %j.1 * 32 < 45 {
-                  %out[%i.3 * 45 + %i.2 * 720 + %i.1 * 1440 + %j.3 + %j.2 * 8 + %j.1 * 32 + floordiv(%batch_i.0_j.0, 2) * 3150 + floormod(%batch_i.0_j.0, 2) * 2880] = element(%acc)
+                  %out[%i.3 * 45 + %i.2 * 720 + %i.1 * 1440 + %j.3 + %j.2 * 8 + %j.1 * 32 + floordiv(%batch_i.0.0_j.0_i.0.1, 2) * 3150 + floormod(%batch_i.0.0_j.0_i.0.1, 2) * 2880] = element(%acc)
                 }
               }
             }
