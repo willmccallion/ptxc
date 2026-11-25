@@ -40,6 +40,26 @@ See [the roadmap](docs/ROADMAP.md).
   to PTX inside ptxc, with tensor cores used through `mma.sync`, `ldmatrix`
   and `cp.async`.
 
+## Results
+
+M3's sweeps on an RTX 4060 Ti with its SM locked at 2700 MHz, timed as
+[docs/BENCHMARKING.md](docs/BENCHMARKING.md) describes and rendered from
+the committed results by `ptxc-baselines render`. Percentages are of the
+baseline's throughput, as a geometric mean over the problems.
+
+### GEMM against cuBLAS
+
+<!-- bench:gemm:begin -->
+<!-- bench:gemm:end -->
+
+### ResNet-50's convolutions against cuDNN
+
+ptxc takes each layer NCHW, as ONNX gives it, so its input tiles copy
+element by element; channels-last comes with M4's layout pass.
+
+<!-- bench:conv:begin -->
+<!-- bench:conv:end -->
+
 ## Pipeline
 
 ```
