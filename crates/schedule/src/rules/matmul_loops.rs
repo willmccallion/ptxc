@@ -1,7 +1,8 @@
 //! The loops a matrix product's tilings share, on CUDA cores and tensor
 //! cores alike: its rows, columns and depth as one loop each, with its
 //! batch loops; a loop split into parts; the block loops fused onto the
-//! grid; and both operands staged at a reduction step that is pipelined.
+//! grid in groups of rows; and both operands staged at a reduction step
+//! that is pipelined.
 
 use super::matmul_shape::Product;
 use super::{bind, fused};
@@ -65,19 +66,46 @@ pub(super) fn own_loop(
         .ok_or_else(|| ScheduleError::NotInNest(schedule.compute().iter_vars()[axis].name.clone()))
 }
 
+/// The block rows a group spans at most, as Triton's grouped ordering
+/// (`GROUP_SIZE_M`) and CUTLASS's threadblock swizzle order a product's
+/// blocks: a group's blocks run a column at a time, so the blocks running
+/// at once read a few rows of one operand and a few columns of the other,
+/// which stay in L2, rather than every column for one row. Hand-picked,
+/// as Triton's tutorial picks it, until the search tunes it.
+const GROUP_ROWS: u64 = 8;
+
 /// The `batch` loops and the block's row and column loops fused onto
-/// `blockIdx.x`, which no grid limit binds.
+/// `blockIdx.x`, which no grid limit binds, the rows in groups.
 pub(super) fn bind_blocks(
     schedule: &mut Schedule<Open>,
     batch: &[LoopId],
-    [row_block, column_block]: [LoopId; 2],
+    blocks: [LoopId; 2],
 ) -> Result<(), ScheduleError> {
-    let mut blocks = batch.to_vec();
-    blocks.extend([row_block, column_block]);
-    if let Some(grid) = fused(schedule, &blocks)? {
+    let mut grid = batch.to_vec();
+    grid.extend(grouped(schedule, blocks)?);
+    if let Some(grid) = fused(schedule, &grid)? {
         bind(schedule, grid, ThreadAxis::BlockX)?;
     }
     Ok(())
+}
+
+/// The block loops `row_block` and `column_block`, adjacent in the nest,
+/// in the order the grid walks them: the rows split into groups as tall
+/// as the largest divisor of their count up to `GROUP_ROWS`, so no group
+/// overhangs, and each group's rows inside its columns. Rows whose count
+/// has no divisor from 2 to `GROUP_ROWS` stay row by row.
+fn grouped(
+    schedule: &mut Schedule<Open>,
+    [row_block, column_block]: [LoopId; 2],
+) -> Result<Vec<LoopId>, ScheduleError> {
+    let rows = schedule.loops().loops()[row_block].extent.get();
+    let Some(group) = (2..=GROUP_ROWS).rev().find(|&group| rows.is_multiple_of(group)) else {
+        return Ok(vec![row_block, column_block]);
+    };
+    let [row_group, row_in_group] = parts(schedule, row_block, &[group])?;
+    let order = vec![row_group, column_block, row_in_group];
+    schedule.apply(Primitive::Reorder { order: order.clone() })?;
+    Ok(order)
 }
 
 /// `step`, at which both `operands` are staged in `slices`, pipelined over

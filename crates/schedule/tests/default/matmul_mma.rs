@@ -88,6 +88,39 @@ fn a_product_shorter_or_narrower_than_the_large_tile_takes_the_small_one() {
     assert_eq!(tiled, serial);
 }
 
+#[test]
+fn a_products_blocks_run_in_groups_of_eight_rows_a_column_at_a_time() {
+    // 24 rows of large tiles by 4 columns: block b computes row
+    // 8 * (b / 32) + b % 8 and column (b / 8) % 4.
+    let compute = product(DType::F16, [1, 3072, 512, 16], PLAIN);
+
+    let (text, launch) = scheduled(compute);
+
+    assert_eq!(launch_dims(launch), ([96, 1, 1], [32, 2, 2]));
+    let block = "%batch_i.0.0_j.0_i.0.1";
+    assert!(text.contains(&format!("{block} = blockIdx.x")), "{text}");
+    let rows = format!("floordiv({block}, 32) * 16384 + floormod({block}, 8) * 2048");
+    assert!(text.contains(&rows), "{text}");
+    assert!(text.contains(&format!("floormod(floordiv({block}, 8), 4) * 128")), "{text}");
+}
+
+#[test]
+fn a_group_is_as_tall_as_the_largest_divisor_of_the_rows_up_to_eight() {
+    // 6 rows of small tiles make one group; 11 rows of large ones have no
+    // divisor up to 8 and stay in rows.
+    let six = product(DType::F16, [1, 384, 192, 16], PLAIN);
+    let eleven = product(DType::F16, [1, 1408, 512, 16], PLAIN);
+
+    let [(six_text, _), (eleven_text, eleven_launch)] = [six.clone(), eleven].map(scheduled);
+
+    assert!(six_text.contains("floormod(%batch_i.0.0_j.0_i.0.1, 6) * 1024"), "{six_text}");
+    assert_eq!(launch_dims(eleven_launch), ([44, 1, 1], [32, 2, 2]));
+    assert!(eleven_text.contains("%batch_i.0_j.0 = blockIdx.x"), "{eleven_text}");
+    assert!(eleven_text.contains("floordiv(%batch_i.0_j.0, 4) * 2048"), "{eleven_text}");
+    let [tiled, serial] = tiled_and_serial(&six, &exact_inputs(&six));
+    assert_eq!(tiled, serial);
+}
+
 /// An 8-bit integer product summed in `i32`, which the `mma` table takes.
 fn integer_product(multiplicands: DType) -> Arc<ComputeDef> {
     let shape = MmaShape { m: Dim::new(16), n: Dim::new(8), k: Dim::new(32) };
