@@ -325,6 +325,16 @@ MetaSchedule's `ReIndex` does: one coordinate per group of axes, fused
 row-major, so a convolution's input stages as the matrix of an implicit
 GEMM (D70).
 
+`rfactor` splits a definition's reduction over one axis into equal
+slices, as TVM's `rfactor` does, into two definitions (D75). The partial
+one reduces each slice, the slice its outermost spatial axis, into
+partials of the reduction's own type; the combine one reduces the slices
+with the same op inside the original's output expression. Each input the
+axis indexes is viewed with that dimension split as `[slices, chunk]`,
+which moves no row-major element, so every index stays a plain axis and a
+split product is a batched product the tiling rules take unchanged. An
+axis read any other way, or by a gather, is refused.
+
 **3. Lowered kernel: an explicit loop nest.** This is a tree of owned
 statements, as in TVM's TIR. Index arithmetic and data arithmetic are
 different types, so an address can never be computed from loaded data by

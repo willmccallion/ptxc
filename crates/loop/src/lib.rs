@@ -15,9 +15,10 @@ mod verify;
 mod test_kernels;
 
 pub use compute::{
-    ArgKind, BinaryOp, ComputeBuilder, ComputeDef, ComputeError, ComputeName, Constant, IndexVar,
-    InfSign, IterKind, IterVar, IterVarId, OutputDef, ReduceOp, Scalar, TensorExpr, TensorName,
-    TensorParam, TensorParamId, TieBreak, UnaryOp, VarName,
+    ArgKind, BinaryOp, CombineInput, ComputeBuilder, ComputeDef, ComputeError, ComputeName,
+    Constant, IndexVar, InfSign, IterKind, IterVar, IterVarId, OutputDef, ReduceOp, RfactorError,
+    Rfactored, Scalar, Slices, TensorExpr, TensorName, TensorParam, TensorParamId, TieBreak,
+    UnaryOp, VarName, rfactor,
 };
 pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 pub use interp::{RunError, run};
