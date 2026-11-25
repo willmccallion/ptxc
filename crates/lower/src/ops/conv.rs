@@ -10,7 +10,7 @@ use crate::error::LowerError;
 use crate::precision::{demote, promote};
 use crate::stage::{Binding, LoweredGroup};
 use ptxc_core::Dim;
-use ptxc_graph::{ConvAttrs, ValueId};
+use ptxc_graph::{ConvAttrs, Groups, ValueId};
 use ptxc_loop::{ExprArena, ExprId, ReduceOp, TensorExpr};
 
 /// What a convolution multiplies at each tap: its input and weights, the
@@ -22,10 +22,11 @@ pub(super) struct Products<'p> {
     pub(super) zero: TensorExpr,
 }
 
-/// The shape of a convolution: each spatial axis's window, the input
-/// channels per group, and the output channels per group.
+/// The shape of a convolution: each spatial axis's window, its groups, the
+/// input channels per group, and the output channels per group.
 pub(super) struct Geometry {
     spans: Vec<Span>,
+    groups: Groups,
     group_channels: Dim,
     per_group: Dim,
 }
@@ -81,7 +82,7 @@ pub(super) fn geometry(
         .map(|((&axis, &kernel), (&input, &output))| Span { input, output, kernel, axis })
         .collect();
     let per_group = Dim::new(out_channels.get() / attrs.groups.get());
-    Ok(Geometry { spans, group_channels: *group_channels, per_group })
+    Ok(Geometry { spans, groups: attrs.groups, group_channels: *group_channels, per_group })
 }
 
 /// The sum, over output `[sample, feature, outs...]`'s group channels and
@@ -118,13 +119,18 @@ pub(super) fn convolved(
 }
 
 /// The input channel that channel `channel` of output channel `feature`'s
-/// group reads: `(feature / per_group) * group_channels + channel`.
+/// group reads: `(feature / per_group) * group_channels + channel`, or
+/// `channel` itself in a convolution of one group, which reads no output
+/// channel.
 fn input_channel(
     cx: &NodeContext<'_>,
     exprs: &mut ExprArena,
     (feature, channel): (ExprId, ExprId),
     geometry: &Geometry,
 ) -> Result<ExprId, LowerError> {
+    if geometry.groups.get() == 1 {
+        return Ok(channel);
+    }
     let per_group = exprs.constant(cx.signed(geometry.per_group)?);
     let group = exprs.floor_div(feature, per_group);
     let width = exprs.constant(cx.signed(geometry.group_channels)?);
