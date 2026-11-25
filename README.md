@@ -5,17 +5,30 @@ model, optimises and fuses its graph, schedules each fused kernel for the
 GPU, emits PTX directly, and runs the result through the CUDA driver API
 with a statically planned memory arena and CUDA graphs.
 
-**Status:** M2, GPU code generation correct on everything, is done. ptxc
-compiles ONNX models to PTX it emits itself and runs them through the CUDA
-driver API.
-- On the GPU, 984 of the 1,765 ONNX v1.22.0 node tests pass, test for test
-  the same as the reference interpreter. The rest are reported unsupported
-  with a reason (D33, D34).
-- Every kernel matches the loop interpreter bit for bit, NaN payloads aside.
-- 10,000 random graphs over the whole op set agree across the interpreters
-  and the GPU, and 1,200 agree with ONNX Runtime.
-- The kernels are naive. Tiling, tensor cores and the first comparison
-  with cuBLAS come in M3.
+**Status:** M3, tensor-core GEMM and convolution benchmarked against
+cuBLAS, is done. ptxc tiles matrix products and convolutions onto tensor
+cores in f16, bf16, E4M3 and int8, with `ldmatrix`, `mma.sync`, multi-stage
+`cp.async` pipelines, swizzled shared memory and split-K, in PTX it emits
+itself.
+- f16 GEMMs with M, N and K at least 1024 run at 90% of cuBLAS's
+  throughput as a geometric mean (NN 89%, NT 89%, TN 91%), with
+  hand-picked tiles before any autotuning.
+- Every swept GEMM and convolution is checked at full size against an f64
+  reference. On tensor cores, every `mma` type at the sweep's kinds of
+  shape, made small enough to interpret, and all 23 of ResNet-50's
+  convolution layers match the loop interpreter bit for bit.
+- Where ptxc loses, the [results](#results) show it:
+  - ResNet-50's convolutions run at 26–32% of cuDNN. ptxc takes them NCHW,
+    as ONNX gives them; channels-last comes with M4's layout pass.
+  - int8 and E4M3 run at 22–25% of cuBLAS in NT, the layout its fast
+    kernels take, where ptxc builds the transposed operand with a kernel
+    of its own ([#176](https://github.com/willmccallion/ptxc/issues/176)).
+  - f32 on CUDA cores runs at 55–56% of cuBLAS in NN and TN, 16% with B
+    transposed ([#189](https://github.com/willmccallion/ptxc/issues/189)),
+    and least with few rows
+    ([#180](https://github.com/willmccallion/ptxc/issues/180)).
+- M2's correctness checks, from the ONNX node tests to fuzzing against ONNX
+  Runtime, are described in [docs/TESTING.md](docs/TESTING.md).
 
 See [the roadmap](docs/ROADMAP.md).
 
