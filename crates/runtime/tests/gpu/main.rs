@@ -14,4 +14,5 @@ mod fragments;
 mod kernels;
 mod products;
 mod programs;
+mod split_products;
 mod tensor_products;

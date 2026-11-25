@@ -6,6 +6,7 @@
 mod conv;
 mod matmul;
 mod matmul_mma;
+mod split_k;
 
 /// Property tests run `default` cases, or `PROPTEST_CASES` when set, so a
 /// longer run needs no code change (`ProptestConfig::with_cases` alone

@@ -18,7 +18,8 @@ use ptxc_testkit::sums::interpreted;
 /// Cases drawn per family.
 const CASES_PER_FAMILY: usize = 8;
 
-fn run_program(graph: ptxc_graph::Graph, inputs: &[HostTensor]) -> Vec<HostTensor> {
+/// `graph` compiled, saved and reloaded, and run by the eager executor.
+pub(crate) fn run_program(graph: ptxc_graph::Graph, inputs: &[HostTensor]) -> Vec<HostTensor> {
     let target = preset(SmVersion::SM_89).unwrap();
     let compilation = Compilation::from_graph(graph, target);
     let program = compilation.optimize().unwrap().partition().unwrap().lower().unwrap();

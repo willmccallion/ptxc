@@ -2,8 +2,8 @@
 //! read and write.
 
 use ptxc_core::{HostTensor, IndexVec, define_index};
-use ptxc_graph::{TensorType, ValueId};
-use ptxc_loop::{ComputeDef, TensorParamId};
+use ptxc_graph::{Layout, TensorType, ValueId};
+use ptxc_loop::{CombineInput, ComputeDef, Rfactored, TensorParamId};
 use std::sync::Arc;
 
 define_index!(
@@ -29,7 +29,7 @@ pub enum Binding {
 }
 
 /// One compute definition and the tensor bound to each of its inputs and
-/// outputs. Each stage is one kernel in M2.
+/// outputs. Each stage is one kernel.
 #[derive(Clone, Debug)]
 pub struct Stage {
     compute: Arc<ComputeDef>,
@@ -59,6 +59,25 @@ impl Stage {
     /// The tensor each of the definition's outputs computes, in order.
     pub fn outputs(&self) -> &[Binding] {
         &self.outputs
+    }
+
+    /// The stage's partial and combine stages from `rfactored`, the
+    /// partials held in `partials`.
+    fn rfactored(&self, rfactored: Rfactored, partials: IntermediateId) -> [Self; 2] {
+        let Rfactored { partial, partial_inputs, combine, combine_inputs } = rfactored;
+        let partial_reads = partial_inputs.iter().map(|&original| self.inputs[original]).collect();
+        let combine_reads = combine_inputs
+            .iter()
+            .map(|&input| match input {
+                CombineInput::Partials => Binding::Intermediate(partials),
+                CombineInput::Original(original) => self.inputs[original],
+            })
+            .collect();
+        let partials = vec![Binding::Intermediate(partials)];
+        [
+            Self::new(Arc::new(partial), partial_reads, partials),
+            Self::new(Arc::new(combine), combine_reads, self.outputs.clone()),
+        ]
     }
 }
 
@@ -96,5 +115,26 @@ impl LoweredGroup {
     /// The stages, in the order they run.
     pub fn stages(&self) -> &[Stage] {
         &self.stages
+    }
+
+    /// The group with each stage whose definition `split` rfactors replaced
+    /// by its partial and combine stages, joined by a new intermediate that
+    /// holds the partials (D75).
+    pub fn with_split_reductions<E>(
+        self,
+        mut split: impl FnMut(&Arc<ComputeDef>) -> Result<Option<Rfactored>, E>,
+    ) -> Result<Self, E> {
+        let Self { mut intermediates, tables, stages } = self;
+        let mut split_stages = Vec::with_capacity(stages.len());
+        for stage in stages {
+            let Some(rfactored) = split(stage.compute())? else {
+                split_stages.push(stage);
+                continue;
+            };
+            let held = rfactored.partials();
+            let ty = TensorType::new(held.dtype, held.shape.clone(), Layout::RowMajor);
+            split_stages.extend(stage.rfactored(rfactored, intermediates.push(ty)));
+        }
+        Ok(Self { intermediates, tables, stages: split_stages })
     }
 }

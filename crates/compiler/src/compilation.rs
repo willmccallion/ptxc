@@ -6,7 +6,7 @@ use crate::emit::emit;
 use crate::error::CompileError;
 use ptxc_core::IndexVec;
 use ptxc_graph::{Graph, GroupId, Partitioned as PartitionedGraph};
-use ptxc_loop::LoweredKernel;
+use ptxc_loop::{ComputeDef, LoweredKernel};
 use ptxc_lower::LoweredGroup;
 use ptxc_onnx::{ImportOptions, import_model};
 use ptxc_program::Program;
@@ -98,11 +98,18 @@ impl Compilation<Partitioned> {
 }
 
 impl Compilation<Lowered> {
-    /// Each stage under its default schedule, lowered to a kernel.
+    /// Each stage under its default schedule, lowered to a kernel, after
+    /// each product that leaves the GPU idle is split along its sum (D75).
     // NOTE: ARCHITECTURE.md's `schedule` takes a tuning database; M2 has
     // only the default schedules, and the database comes with M5.
     pub fn schedule(self) -> Result<Compilation<Scheduled>, CompileError> {
         let Lowered { partitioned, groups } = self.state;
+        let target = self.target;
+        let split = |compute: &Arc<ComputeDef>| ptxc_schedule::split_k(compute, &target);
+        let groups = groups
+            .into_iter()
+            .map(|group| group.with_split_reductions(split))
+            .collect::<Result<IndexVec<_, _>, _>>()?;
         let kernels = groups
             .iter()
             .map(|group| {
@@ -111,12 +118,12 @@ impl Compilation<Lowered> {
                     .iter()
                     .map(|stage| {
                         let compute = Arc::clone(stage.compute());
-                        Ok(ptxc_schedule::default_schedule(compute, &self.target)?.lower())
+                        Ok(ptxc_schedule::default_schedule(compute, &target)?.lower())
                     })
                     .collect::<Result<Vec<_>, CompileError>>()
             })
             .collect::<Result<_, _>>()?;
-        Ok(Compilation { state: Scheduled { partitioned, groups, kernels }, target: self.target })
+        Ok(Compilation { state: Scheduled { partitioned, groups, kernels }, target })
     }
 }
 

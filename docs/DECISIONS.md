@@ -1581,3 +1581,52 @@ the old one.
   four, so its only gain, fewer blocks to stage each operand slice for,
   does not arise. With it the split product took 10.6 µs.
 
+## D75. A product that leaves the GPU idle is split along its sum
+
+- **Context:** a product whose output has fewer tiles than the GPU has SMs
+  runs on a few of them, each block through the whole depth: decoding's
+  1 by 768 by 3072 has 12 tiles of 64 by 64 and took 29.3 µs against
+  cuBLAS's 7.2. Splitting the depth across blocks needs a second pass to
+  add the slices, and how many slices pay depends on how many blocks the
+  GPU runs at once, which lowering, knowing no GPU, cannot see.
+- **Options:**
+  - atomic adds of each slice into the output: it must be zeroed first and
+    be f32, so an f16 result needs a second pass anyway, and the order the
+    slices land in changes from run to run;
+  - serial split-K, as CUTLASS's semaphore variant: one kernel whose blocks
+    of a tile add into it in turn, which needs synchronization between
+    blocks that the loop IR does not express and its interpreter cannot
+    check;
+  - parallel split-K, as CUTLASS's `GemmSplitKParallel` and TVM's
+    `rfactor`: each slice's sums to a buffer of partials, and a second
+    kernel that adds them.
+- **Choice:** parallel split-K.
+  - `ptxc_loop::rfactor` splits a definition's reduction over one axis into
+    equal slices: a partial definition, the slice its outermost spatial
+    axis, and a combine definition that reduces the slices with the same op
+    inside the original's output expression. Each input the axis indexes is
+    viewed with that dimension split as `[slices, chunk]`, which moves no
+    element, so every index stays a plain axis and the partial is a batched
+    product the tiling rules take unchanged.
+  - `ptxc_schedule::split_k` splits a product whose default schedule
+    launches fewer than 32 blocks, one per SM or so, into the fewest
+    slices that launch 96, the small tiles the GPU holds at once, or into
+    the most there can be. Each slice is a multiple of 64 deep, so it
+    ends on a whole step of every tiled rule, and at least 128, and the
+    slices' partials, written and read, move no more bytes than the
+    operands hold.
+  - `Compilation::schedule` replaces such a stage with its two, joined by an
+    intermediate holding the partials, before scheduling each stage; the
+    testkit's stage runner does the same, so the loop interpreter and the
+    GPU run what the compiler emits.
+- **Reason:** the result does not depend on timing, and the loop
+  interpreter checks both stages as it checks any. The second kernel costs
+  a launch and `slices * M * N` partials written and read, which the byte
+  bound keeps below the operands' reads: without it 128 by 768 by 768 split
+  4 ways took 12.2 µs against 7.9 unsplit. Under it the sweep's K = 3072
+  products at M = 1, 4 and 16 went from 29 µs to 10.6 to 11.5, against
+  cuBLAS's 7.2 to 10.7, and 128 by 768 by 3072 from 30.4 to 21.6. Splitting
+  below 96 blocks instead of 32 gained about 1 µs on the N = 3072 skinny
+  products but cost 13 on 128 by 2304 by 768, whose partials then took the
+  large tile. The split is per target, so it is scheduling's to make, and
+  a tuning record (M5) can hold the slice count beside each stage's trace.

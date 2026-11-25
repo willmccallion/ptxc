@@ -26,7 +26,8 @@ Partitioned          (ptxc-graph: every node in exactly one FusedGroup)
   │ ptxc-lower       one ComputeDef per group
   ▼
 ComputeDef           (ptxc-loop)
-  │ ptxc-schedule    rule → sketch → trace (from the tuning database or defaults)
+  │ ptxc-schedule    split-K where a product leaves the GPU idle (D75);
+  │                  rule → sketch → trace (from the tuning database or defaults)
   ▼
 Schedule<Validated>  (ptxc-loop)
   │ ptxc-loop        lowering
@@ -478,6 +479,9 @@ and the GPU tests check them.
   (softmax, layer norm, log-sum-exp) is several stages, built with
   `GroupBuilder` over f32 intermediates (D44). Attention is four such
   stages until M6 fuses it (D48).
+- `LoweredGroup::with_split_reductions` replaces a stage whose definition
+  scheduling splits with its partial and combine stages, joined by a new
+  intermediate for the partials (D75).
 - `epilogue.rs` substitutes injective consumers into the producing stage's
   output expression. In M2 every stage is its own kernel; M3's `compute_at`
   places a stage inside another's loop nest, so a group becomes one kernel.
@@ -505,7 +509,11 @@ and the GPU tests check them.
   matrices, and its output positions, its output channels, and its taps
   with input channels each fused into one loop (D70). A grouped
   convolution's input index reads the output channel, so it keeps the
-  reduction rule.
+  reduction rule. A product whose default schedule launches fewer than 32
+  blocks is split along its sum first, into slices that launch about 96,
+  as many small tiles as the GPU holds at once, each a multiple of 64 and
+  at least 128 deep, while the partials move no more bytes than the
+  operands hold (D75).
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's

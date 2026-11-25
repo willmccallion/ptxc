@@ -2,7 +2,7 @@
 
 use super::loop_tree::LoopId;
 use super::primitive::ThreadAxis;
-use crate::compute::{TensorName, TensorParamId, VarName};
+use crate::compute::{RfactorError, TensorName, TensorParamId, VarName};
 use ptxc_core::{ByteSize, Dim};
 use ptxc_target::{SmemBytes, ThreadsPerBlock};
 use thiserror::Error;
@@ -10,6 +10,9 @@ use thiserror::Error;
 /// A primitive the loop tree rejects. A rejected primitive changes nothing.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ScheduleError {
+    /// A reduction could not be split (D75).
+    #[error(transparent)]
+    Rfactor(#[from] RfactorError),
     /// A loop that is not in the nest: unknown, or split or fused away.
     #[error("loop {0} is not in the loop nest")]
     NotInNest(VarName),
