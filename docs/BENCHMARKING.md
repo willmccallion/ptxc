@@ -127,6 +127,21 @@ passed 152 W or 69 °C. With the SM clock locked, the memory clock reads
 ResNet-50's distinct convolution layers at batch sizes 1, 8 and 32, against
 PyTorch with cuDNN, with `cudnn.benchmark = True`.
 
+- **Layers:** ResNet-50 v1.5's 23 distinct convolutions at a 224 by 224
+  input: the stem, and each stage's 1 by 1, 3 by 3, strided 3 by 3 and
+  strided projection layers. `bench/conv.json` lists them with the batch
+  sizes and the element type, and both frameworks read it.
+- **Data type:** f16 input, weights and output, summed in f32. No bias.
+- **Layout:** NCHW input and output, OIHW weights, as ONNX's `Conv` takes
+  them; ptxc compiles each layer as one.
+- **Check:** inputs and weights are multiples of 1/8 in [-1, 1], whose
+  products f32 sums exactly. 256 evenly spaced output elements recomputed
+  on the host match within f16's tolerance for the layer's sum. A result
+  that fails its check is reported and not timed, and the run fails.
+- **Metric:** time per layer, and TFLOP/s at two operations per
+  multiply-add of the direct convolution.
+- **Files:** `conv-ptxc.json`, and the baseline's (#115).
+
 ### Whole models (`ptxc-bench models`, M4 to M6)
 
 | Model | Batch sizes | Baselines |
@@ -158,6 +173,7 @@ bench/results/scratch/           gitignored, for runs during development
 
 ```sh
 ptxc-bench gemm --out bench/results/scratch/              # --only f16/NN for a subset
+ptxc-bench conv --out bench/results/scratch/              # --only b32 or --only layer1 for a subset
 ptxc-bench models --model resnet50 --batch 1,8,32 --out bench/results/scratch/
 uv run --project baselines ptxc-baselines bench --framework trt --model resnet50 --batch 1,8,32 --out bench/results/scratch/
 uv run --project baselines ptxc-baselines render --results bench/results/<run>/ --readme README.md

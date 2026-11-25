@@ -53,26 +53,8 @@ mod gpu {
     use crate::suites::gemm::frameworks::{Default, Operands};
     use crate::suites::gemm::problems::{id, problems};
     use crate::suites::gemm::{GemmArgs, checked_run, run};
+    use crate::suites::testing::repository;
     use ptxc_cuda::{DeviceOrdinal, Driver};
-    use std::path::Path;
-    use std::process::Command;
-
-    /// A repository with one commit, ignoring any global hooks and signing.
-    fn repository(directory: &Path) {
-        let git = |arguments: &[&str]| {
-            let status = Command::new("git")
-                .arg("-C")
-                .arg(directory)
-                .args(["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"])
-                .args(["-c", "user.name=bench", "-c", "user.email=bench@example.invalid"])
-                .args(arguments)
-                .status()
-                .unwrap();
-            assert!(status.success(), "git {arguments:?}");
-        };
-        git(&["init", "-q"]);
-        git(&["commit", "-q", "--allow-empty", "-m", "empty"]);
-    }
 
     #[test]
     fn one_problem_is_checked_timed_and_written_for_every_framework() {

@@ -11,6 +11,7 @@ mod timing;
 
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
+use suites::conv::{self, ConvArgs};
 use suites::gemm::{self, GemmArgs};
 
 /// Times ptxc against its baselines (BENCHMARKING.md).
@@ -25,15 +26,17 @@ struct Args {
 enum Command {
     /// The GEMM sweep against cuBLAS.
     Gemm(GemmArgs),
+    /// ResNet-50's convolution layers.
+    Conv(ConvArgs),
 }
 
 fn main() -> ExitCode {
-    let outcome = match Args::parse().command {
-        Command::Gemm(args) => match std::env::current_dir() {
-            Ok(repository) => gemm::run(&args, &repository).map_err(|error| error.to_string()),
-            Err(error) => Err(format!("reading the current directory: {error}")),
-        },
-    };
+    let outcome = std::env::current_dir()
+        .map_err(|error| format!("reading the current directory: {error}"))
+        .and_then(|repository| match Args::parse().command {
+            Command::Gemm(args) => gemm::run(&args, &repository).map_err(|error| error.to_string()),
+            Command::Conv(args) => conv::run(&args, &repository).map_err(|error| error.to_string()),
+        });
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
