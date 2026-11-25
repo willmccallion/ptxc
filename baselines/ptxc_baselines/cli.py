@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import conv_bench, inputs, models, paths, reference
+from . import conv_bench, inputs, models, paths, reference, render_tables
 
 #: Each image source: its directory, the set name's prefix, and how to get it.
 IMAGE_SOURCES = {
@@ -50,6 +50,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
     )
     conv.add_argument("--out", default=str(paths.ROOT / "bench" / "results" / "scratch"))
     conv.add_argument("--only", help="only the problems whose names contain this")
+    render = commands.add_parser(
+        "render", help="rewrite the README's result tables from one run's results"
+    )
+    render.add_argument("--results", required=True, help="the run's directory in bench/results/")
+    render.add_argument("--readme", default=str(paths.ROOT / "README.md"))
     return parser.parse_args(argv)
 
 
@@ -118,6 +123,16 @@ def run_bench_conv(args: argparse.Namespace) -> Path:
     return out
 
 
+def run_render(args: argparse.Namespace) -> Path:
+    readme = Path(args.readme)
+    try:
+        rendered = render_tables.render(Path(args.results), readme)
+    except render_tables.RenderError as error:
+        sys.exit(str(error))
+    print(f"rendered {', '.join(rendered) or 'no suites'}")
+    return readme
+
+
 COMMANDS = {
     "export": run_export,
     "images": run_images,
@@ -125,6 +140,7 @@ COMMANDS = {
     "reference": run_reference,
     "fuzz-reference": run_fuzz_reference,
     "bench-conv": run_bench_conv,
+    "render": run_render,
 }
 
 

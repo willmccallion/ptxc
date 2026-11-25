@@ -1650,3 +1650,25 @@ the old one.
   and stores and never on the inner product, and how the tensor-core
   update already ran (D58). A reduction's guards stay, as summing past the
   axis is only harmless for some ops and bodies.
+
+## D77. The README summarises each sweep; every case is published beside its results
+
+- **Context:** the GEMM sweep is 330 problems, five types in three layouts
+  over 22 shapes, and the convolution sweep 69 layers and batch sizes.
+  BENCHMARKING.md had `render_tables.py` rewrite the README's tables, and
+  M3's exit publishes the full table, the cases where ptxc loses included.
+- **Options:** every case in the README; the README with a summary only;
+  a summary in the README and every case beside the results it comes from.
+- **Choice:** the last. Each suite's README summary gives, per type and
+  layout (GEMM) or batch size (convolution), ptxc's geometric-mean
+  percentage of each baseline's throughput, the cases ptxc wins, and the
+  one it loses worst; the GEMM summary ends with the exit metric. Every
+  case goes to `bench/results/<run>/<suite>.md`, under the run's GPU,
+  driver, SM clock, versions and commits, and the summary links to it.
+  Rendering refuses a run from uncommitted code or in another schema, and
+  any unverified case or moved clock; a series the GPU capped, its clocks
+  held, is marked.
+- **Reason:** 400 rows would bury the README's purpose, and a summary
+  alone would hide the losses M3 commits to showing. Beside the results,
+  the full tables are versioned with the data they come from, and a
+  reader checking a number finds its file next to it.
