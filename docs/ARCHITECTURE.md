@@ -481,8 +481,8 @@ and the GPU tests check them.
   64 one where fewer than 32 large tiles cover the output, both operands
   staged two `mma` steps deep and the innermost tile tensorized (D58). The
   SIMT tile and the 64 by 64 one pipeline their steps over four stages, or
-  as many as fit shared memory, and the 64 by 64 one swizzles its tiles;
-  the 128 by 128 one is neither pipelined (D65) nor swizzled (D66).
+  as many as fit shared memory, the 128 by 128 one over two (D68), and
+  both tensor-core tiles swizzle their tiles.
 - `ScheduleRule` trait. Each rule decides whether it applies to a compute
   definition and emits *sketches*: traces with symbolic knobs (tile sizes,
   stage counts, vector widths) described by a `SearchSpace`. This is Ansor's
