@@ -35,11 +35,11 @@ fn vectorized(dtype: DType, width: u64, element: Element) -> String {
     let expr = match element {
         Element::Read { stride, offset, by_row } => {
             let index = read_index(compute.exprs(), [b, i], [stride, offset], by_row);
-            TensorExpr::Load { tensor: x, index }
+            TensorExpr::load(x, index)
         }
         Element::Fill(value) => TensorExpr::Const(value),
         Element::Twice => {
-            let read = TensorExpr::Load { tensor: x, index: vec![b, i] };
+            let read = TensorExpr::load(x, vec![b, i]);
             compute.output(TensorName::new("z"), read.clone());
             read
         }

@@ -9,7 +9,7 @@
 
 use super::context::Lowerer;
 use super::reindex::TileSpace;
-use crate::compute::{ComputeDef, IterVarId, TensorName, TensorParamId};
+use crate::compute::{ComputeDef, IterVarId, Scalar, TensorName, TensorParamId};
 use crate::expr::{Expr, ExprId, LinearSum, VarId};
 use crate::schedule::{CacheId, CacheRead, LoopAnnotation, LoopId, LoopTree, ScheduleError};
 use crate::stmt::{BufferId, MemScope, Stmt, ValueExpr};
@@ -24,6 +24,8 @@ pub(super) struct Tile {
     pub(super) buffer: BufferId,
     /// The space the tile is a box in.
     pub(super) space: TileSpace,
+    /// What its loads read outside the input, which the tile holds there.
+    pub(super) padding: Option<Scalar>,
     /// The coordinates of the element a load reads, over the kernel's
     /// loops.
     pub(super) coordinates: Vec<ExprId>,
@@ -94,6 +96,7 @@ impl Lowerer<'_> {
                 at: cache.at,
                 buffer,
                 space,
+                padding: cache.padding,
                 coordinates,
                 origin,
                 extents: extents.clone(),

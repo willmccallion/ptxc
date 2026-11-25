@@ -30,7 +30,7 @@ fn elementwise(
         .collect();
     let (_, i) = compute.spatial(VarName::new("i"), Dim::new(length));
     let loads: Vec<TensorExpr> =
-        tensors.into_iter().map(|tensor| TensorExpr::Load { tensor, index: vec![i] }).collect();
+        tensors.into_iter().map(|tensor| TensorExpr::load(tensor, vec![i])).collect();
     compute.output(TensorName::new("y"), expr(&loads));
     compute.finish().unwrap()
 }
@@ -197,10 +197,7 @@ fn rows(
     let x = compute.input(TensorName::new("x"), dtype, shape(&[3, 300]));
     let (_, row) = compute.spatial(VarName::new("row"), Dim::new(3));
     let (axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(300));
-    compute.output(
-        TensorName::new("y"),
-        reduce(axis, TensorExpr::Load { tensor: x, index: vec![row, k] }),
-    );
+    compute.output(TensorName::new("y"), reduce(axis, TensorExpr::load(x, vec![row, k])));
     compute.finish().unwrap()
 }
 
@@ -256,8 +253,8 @@ fn an_unrolled_tile_of_accumulators_matches_bit_for_bit() {
     let (axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(11));
     let product = binary(
         BinaryOp::Mul,
-        &TensorExpr::Load { tensor: lhs, index: vec![row, k] },
-        &TensorExpr::Load { tensor: rhs, index: vec![k, column] },
+        &TensorExpr::load(lhs, vec![row, k]),
+        &TensorExpr::load(rhs, vec![k, column]),
     );
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![axis], body: Box::new(product) };
     compute.output(TensorName::new("out"), sum);
@@ -298,8 +295,8 @@ fn a_pipelined_simt_product_matches_bit_for_bit() {
     let (axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(100));
     let product = binary(
         BinaryOp::Mul,
-        &TensorExpr::Load { tensor: lhs, index: vec![row, k] },
-        &TensorExpr::Load { tensor: rhs, index: vec![k, column] },
+        &TensorExpr::load(lhs, vec![row, k]),
+        &TensorExpr::load(rhs, vec![k, column]),
     );
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![axis], body: Box::new(product) };
     compute.output(TensorName::new("out"), sum);

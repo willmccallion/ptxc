@@ -68,9 +68,21 @@ impl<'a> Checker<'a> {
     /// enclosing reductions bind.
     fn dtype(&mut self, expr: &TensorExpr, scope: &[IterVarId]) -> Result<DType, ComputeError> {
         match expr {
-            TensorExpr::Load { tensor, index } => {
+            TensorExpr::Load { tensor, index, padding } => {
                 self.check_index(*tensor, index, scope)?;
-                Ok(self.input(*tensor)?.dtype)
+                let param = self.input(*tensor)?;
+                match padding {
+                    None => self.check_inside(*tensor, index)?,
+                    Some(value) if value.dtype() != param.dtype => {
+                        return Err(ComputeError::PaddingType {
+                            tensor: param.name.clone(),
+                            expected: param.dtype,
+                            actual: value.dtype(),
+                        });
+                    }
+                    Some(_) => {}
+                }
+                Ok(param.dtype)
             }
             TensorExpr::Const(scalar) => Ok(scalar.dtype()),
             TensorExpr::Index { index, dtype } => {
@@ -158,10 +170,19 @@ impl<'a> Checker<'a> {
                 actual,
             });
         }
-        for (position, (&expr, &extent)) in index.iter().zip(param.shape.dims()).enumerate() {
+        for &expr in index {
             for var in self.exprs.vars(expr) {
                 self.check_var(var, scope)?;
             }
+        }
+        Ok(())
+    }
+
+    /// Checks that a load of `tensor` at `index`, one index per axis,
+    /// stays inside it.
+    fn check_inside(&self, tensor: TensorParamId, index: &[ExprId]) -> Result<(), ComputeError> {
+        let param = self.input(tensor)?;
+        for (position, (&expr, &extent)) in index.iter().zip(param.shape.dims()).enumerate() {
             if !self.stays_within(expr, extent) {
                 let axis = Axis::new(position);
                 return Err(ComputeError::IndexOutOfBounds {
@@ -212,7 +233,8 @@ impl<'a> Checker<'a> {
                         dtype: param.dtype,
                     });
                 }
-                self.check_index(*tensor, index, scope)
+                self.check_index(*tensor, index, scope)?;
+                self.check_inside(*tensor, index)
             }
         }
     }

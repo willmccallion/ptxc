@@ -99,8 +99,9 @@ pub enum ScheduleError {
     /// index.
     #[error("input {0} has no load to stage: it is unread or read only as a gather index")]
     CacheUnread(TensorName),
-    /// A staged input read at more than one index.
-    #[error("input {0} is read at more than one index, so it has no one tile to stage")]
+    /// A staged input read at more than one index, or with more than one
+    /// padding.
+    #[error("input {0} is read at more than one index or padding, so it has no one tile to stage")]
     CacheLoads(TensorName),
     /// A staged input read through a gather index, whose tile depends on
     /// data.

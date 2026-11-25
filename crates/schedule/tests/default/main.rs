@@ -50,7 +50,7 @@ fn stage(dims: &[u64], reduced: usize, reduction: Option<Reduction>) -> Arc<Comp
             axes.push(axis);
         }
     }
-    let read = TensorExpr::Load { tensor: x, index };
+    let read = TensorExpr::load(x, index);
     let expr = match reduction {
         Some(reduce) => reduce(&axes, read),
         None => read,

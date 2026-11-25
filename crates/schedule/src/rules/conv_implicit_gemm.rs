@@ -73,7 +73,7 @@ fn is_zero(expr: &TensorExpr) -> bool {
 
 /// The tensor `expr` loads and its index, if it is a load.
 fn operand(expr: &TensorExpr) -> Option<(TensorParamId, Vec<ExprId>)> {
-    let TensorExpr::Load { tensor, index } = expr else { return None };
+    let TensorExpr::Load { tensor, index, .. } = expr else { return None };
     Some((*tensor, index.clone()))
 }
 
@@ -246,7 +246,7 @@ mod tests {
         let (l_axis, inner) = compute.reduce_axis(VarName::new("l"), Dim::new(2));
         let zero = compute.exprs().constant(0);
         let right_inner = if both_read_l { inner } else { zero };
-        let load = |tensor, index| Box::new(TensorExpr::Load { tensor, index });
+        let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
         let product = TensorExpr::Binary(
             BinaryOp::Mul,
             load(left, vec![row, depth, inner]),

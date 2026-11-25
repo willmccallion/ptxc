@@ -56,7 +56,7 @@ pub(crate) fn product(
     let widened = |tensor, index| TensorExpr::Cast {
         to: DType::F32,
         overflow: Overflow::Saturate,
-        value: Box::new(TensorExpr::Load { tensor, index }),
+        value: Box::new(TensorExpr::load(tensor, index)),
     };
     let lhs = widened(lhs_input, index(!layout.a_broadcast, layout.a_transposed, [row, k]));
     let rhs = widened(rhs_input, index(true, layout.b_transposed, [k, column]));

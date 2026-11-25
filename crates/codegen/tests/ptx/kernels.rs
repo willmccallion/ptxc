@@ -39,10 +39,8 @@ fn elementwise(
         .enumerate()
         .map(|(axis, &extent)| compute.spatial(VarName::new(format!("i{axis}")), extent).1)
         .collect();
-    let loads: Vec<TensorExpr> = tensors
-        .into_iter()
-        .map(|tensor| TensorExpr::Load { tensor, index: index.clone() })
-        .collect();
+    let loads: Vec<TensorExpr> =
+        tensors.into_iter().map(|tensor| TensorExpr::load(tensor, index.clone())).collect();
     compute.output(TensorName::new("y"), expr(&loads));
     compute.finish().ok().map(Arc::new)
 }
@@ -247,7 +245,7 @@ fn floored(divisor: i64, [c, offset]: [i64; 2]) -> PtxModule {
     let raised = exprs.max(quotient, zero);
     let clamped = exprs.min(raised, seven);
     let column = exprs.floor_mod(shifted, divisor);
-    let load = TensorExpr::Load { tensor: x, index: vec![clamped, column] };
+    let load = TensorExpr::load(x, vec![clamped, column]);
     compute.output(TensorName::new("y"), load);
     emitted(Arc::new(compute.finish().unwrap()))
 }
@@ -286,7 +284,7 @@ fn a_gather_loads_its_index_then_the_element() {
     let positions = compute.input(TensorName::new("idx"), DType::I32, shape(&[6]));
     let (_, i) = compute.spatial(VarName::new("i"), Dim::new(6));
     let loaded = compute.loaded_index(VarName::new("j"), positions, vec![i]);
-    compute.output(TensorName::new("y"), TensorExpr::Load { tensor: x, index: vec![loaded] });
+    compute.output(TensorName::new("y"), TensorExpr::load(x, vec![loaded]));
 
     let module = emitted(Arc::new(compute.finish().unwrap()));
 
@@ -304,7 +302,7 @@ fn row_reduction(
     let x = compute.input(TensorName::new("x"), dtype, shape(&[3, 300]));
     let (_, row) = compute.spatial(VarName::new("row"), Dim::new(3));
     let (axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(300));
-    let load = TensorExpr::Load { tensor: x, index: vec![row, k] };
+    let load = TensorExpr::load(x, vec![row, k]);
     compute.output(TensorName::new("y"), reduce(axis, load));
     Arc::new(compute.finish().unwrap())
 }
@@ -345,7 +343,7 @@ fn an_index_multiplying_two_variables_multiplies_their_registers() {
     let (_, row) = compute.spatial(VarName::new("row"), Dim::new(8));
     let (_, column) = compute.spatial(VarName::new("column"), Dim::new(8));
     let product = compute.exprs().mul(row, column);
-    compute.output(TensorName::new("y"), TensorExpr::Load { tensor: x, index: vec![product] });
+    compute.output(TensorName::new("y"), TensorExpr::load(x, vec![product]));
 
     let module = emitted(Arc::new(compute.finish().unwrap())).to_string();
 

@@ -89,7 +89,7 @@ pub fn product(
         Box::new(TensorExpr::Cast {
             to: instruction.accumulator,
             overflow: Overflow::Saturate,
-            value: Box::new(TensorExpr::Load { tensor, index }),
+            value: Box::new(TensorExpr::load(tensor, index)),
         })
     });
     let body = Box::new(TensorExpr::Binary(BinaryOp::Mul, x, y));

@@ -75,9 +75,14 @@ impl Lowerer<'_> {
     /// divides the tile's innermost extent and its origin's innermost
     /// coordinate, so a run lies in one row of the tile, aligned, and whose
     /// elements are adjacent in one row of the input, aligned; and one
-    /// element where none is.
+    /// element where none is, or where the tile's padding is not zero,
+    /// which an asynchronous copy cannot fill.
     pub(super) fn run(&self, tile: &Tile) -> Run {
-        let element = self.compute.inputs()[tile.tensor].dtype.element_size().get();
+        let dtype = self.compute.inputs()[tile.tensor].dtype;
+        if tile.padding.is_some_and(|padding| padding != Scalar::zero(dtype)) {
+            return Run { length: 1, copy: RunCopy::Direct };
+        }
+        let element = dtype.element_size().get();
         let length = match (tile.extents.last(), tile.origin.last()) {
             (Some(extent), Some(&origin)) => {
                 let fits = |run: u64| {
@@ -132,9 +137,10 @@ impl Lowerer<'_> {
     }
 
     /// `tile`'s buffer's element `first` stored from `source`'s, where every
-    /// one of `in_input` holds. In a tensorized nest the element is cleared
-    /// first, so an `mma` over a tile overhanging its input multiplies zeros
-    /// there.
+    /// one of `in_input` holds. A padded load's element is first set to its
+    /// padding, which the load reads outside the input; in a tensorized nest
+    /// any other is first cleared, so an `mma` over a tile overhanging its
+    /// input multiplies zeros there.
     fn element_copy(
         &self,
         tile: &Tile,
@@ -144,12 +150,12 @@ impl Lowerer<'_> {
         let value = ValueExpr::Load { buffer, index: position };
         let copied = Stmt::Store { buffer: tile.buffer, index: first, value };
         let guarded = guarded_by(in_input, copied);
-        if self.tree.tensorized().is_none() {
-            return guarded;
-        }
-        let zero = ValueExpr::Const(Scalar::zero(self.compute.inputs()[tile.tensor].dtype));
-        let cleared = Stmt::Store { buffer: tile.buffer, index: first, value: zero };
-        Stmt::Seq(vec![cleared, guarded])
+        let zero = || Scalar::zero(self.compute.inputs()[tile.tensor].dtype);
+        let outside = tile.padding.or_else(|| self.tree.tensorized().map(|_| zero()));
+        let Some(outside) = outside else { return guarded };
+        let set =
+            Stmt::Store { buffer: tile.buffer, index: first, value: ValueExpr::Const(outside) };
+        Stmt::Seq(vec![set, guarded])
     }
 
     /// `id * factor`, left unsimplified for `id`'s guard to bound it.
@@ -225,7 +231,7 @@ impl Lowerer<'_> {
 
     /// The conditions of `0 <= index < bound` the loops' ranges leave
     /// open, the upper bound first.
-    fn open_bounds(&mut self, index: ExprId, bound: Dim) -> Vec<Condition> {
+    pub(super) fn open_bounds(&mut self, index: ExprId, bound: Dim) -> Vec<Condition> {
         let known = self.bounds(index);
         let mut open = Vec::new();
         if known.is_none_or(|known| i128::from(known.max()) >= i128::from(bound.get())) {

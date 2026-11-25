@@ -11,6 +11,7 @@ mod expressions;
 mod fused;
 mod interp;
 mod lower;
+mod padding;
 mod pipeline;
 mod reindex;
 mod schedule_properties;

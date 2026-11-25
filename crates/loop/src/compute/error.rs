@@ -66,6 +66,16 @@ pub enum ComputeError {
         /// The axis's extent.
         extent: Dim,
     },
+    /// A load whose padding is not of its tensor's element type.
+    #[error("{tensor} holds {} but is padded with {}", .expected.name(), .actual.name())]
+    PaddingType {
+        /// The tensor.
+        tensor: TensorName,
+        /// Its element type.
+        expected: DType,
+        /// The padding's.
+        actual: DType,
+    },
     /// A reduction axis no reduction uses.
     #[error("reduction axis {0} is never reduced over")]
     UnusedReduceAxis(VarName),

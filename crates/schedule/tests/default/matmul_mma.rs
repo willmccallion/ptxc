@@ -87,7 +87,7 @@ fn mixed_product() -> Arc<ComputeDef> {
     let (_, column) = compute.spatial(VarName::new("j"), Dim::new(8));
     let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(16));
     let widened = |tensor, index| {
-        let value = Box::new(TensorExpr::Load { tensor, index });
+        let value = Box::new(TensorExpr::load(tensor, index));
         Box::new(TensorExpr::Cast { to: DType::F32, overflow: Overflow::Saturate, value })
     };
     let body = TensorExpr::Binary(

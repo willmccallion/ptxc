@@ -111,7 +111,8 @@ fn loads(compute: &ComputeDef, tile: Tensorized) -> Result<[Load; 2], ScheduleEr
             TensorExpr::Cast { value, .. } => value.as_ref(),
             other => other,
         };
-        let TensorExpr::Load { tensor, index } = read else { return None };
+        // A padded load's tile holds its padding, which the mma multiplies.
+        let TensorExpr::Load { tensor, index, .. } = read else { return None };
         let dtype = compute.inputs()[*tensor].dtype;
         (dtype == instruction.multiplicands).then(|| Load { tensor: *tensor, index: index.clone() })
     };

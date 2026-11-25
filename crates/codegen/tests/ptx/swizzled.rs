@@ -22,7 +22,7 @@ fn single_thread_product() -> String {
     let (_, row) = compute.spatial(VarName::new("i"), Dim::new(8));
     let (_, column) = compute.spatial(VarName::new("j"), Dim::new(4));
     let (axis, step) = compute.reduce_axis(VarName::new("k"), Dim::new(8));
-    let load = |tensor, index| Box::new(TensorExpr::Load { tensor, index });
+    let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
     let (left, right) = (load(lhs, vec![row, step]), load(rhs, vec![step, column]));
     let body = Box::new(TensorExpr::Binary(BinaryOp::Mul, left, right));
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes: vec![axis], body };

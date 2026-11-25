@@ -20,7 +20,7 @@ fn product([rows, columns, depth]: [u64; 3]) -> Arc<ComputeDef> {
     let (_, row) = compute.spatial(VarName::new("i"), Dim::new(rows));
     let (_, column) = compute.spatial(VarName::new("j"), Dim::new(columns));
     let (axis, step) = compute.reduce_axis(VarName::new("k"), Dim::new(depth));
-    let load = |tensor, index| Box::new(TensorExpr::Load { tensor, index });
+    let load = |tensor, index| Box::new(TensorExpr::load(tensor, index));
     let (left, right) = (load(lhs, vec![row, step]), load(rhs, vec![step, column]));
     let body = Box::new(TensorExpr::Binary(BinaryOp::Mul, left, right));
     compute.output(
