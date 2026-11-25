@@ -9,7 +9,7 @@
 
 use super::cache::Tile;
 use super::context::Lowerer;
-use crate::expr::{ExprId, VarId};
+use crate::expr::{ExprId, Interval, VarId};
 use crate::schedule::StageCount;
 use crate::stmt::{ForKind, Stmt};
 use ptxc_core::Dim;
@@ -61,7 +61,14 @@ impl Lowerer<'_> {
         let current = self.exprs.var(var);
         let offset = self.extent(Dim::new(u64::from(ahead)));
         let next = self.exprs.add(current, offset);
-        let fills = self.fill_iteration(tiles, var, next);
+        // The copies run only where `next < extent`, so `var` is below
+        // `extent - ahead` there: their bounds need checking only past it.
+        let fills = match Interval::of_loop(Dim::new(extent.get() - u64::from(ahead))) {
+            Some(guarded) => {
+                self.with_range(var, guarded, |this| this.fill_iteration(tiles, var, next))
+            }
+            None => self.fill_iteration(tiles, var, next),
+        };
         self.within(next, extent, fills)
     }
 

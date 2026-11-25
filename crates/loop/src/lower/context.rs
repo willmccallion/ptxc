@@ -124,6 +124,22 @@ impl<'s> Lowerer<'s> {
         self.ranges.insert(var, range);
     }
 
+    /// What `build` makes with `var`, a variable with a range, in `range`
+    /// instead, as a condition around what it makes keeps it; `var`'s range
+    /// restored after.
+    pub(super) fn with_range<T>(
+        &mut self,
+        var: VarId,
+        range: Interval,
+        build: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let Some(outer) = self.ranges.get(var) else { return build(self) };
+        self.ranges.insert(var, range);
+        let built = build(self);
+        self.ranges.insert(var, outer);
+        built
+    }
+
     /// Bounds of `id`'s value over the variables' ranges, if they have them.
     pub(super) fn bounds(&self, id: ExprId) -> Option<Interval> {
         self.exprs.bounds(id, &self.ranges)
