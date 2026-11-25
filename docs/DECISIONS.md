@@ -1693,16 +1693,30 @@ the old one.
 - **Choice:** grouped ordering, from the schedule's own primitives: the
   block-row loop is split by the largest divisor of its extent up to 8,
   and the parts reordered as the group, the column, then the row in the
-  group, and these and the batch loops are fused onto `blockIdx.x`. A
-  row count with no divisor from 2 to 8 keeps the row-major order. Every
-  product takes it: on tensor cores and CUDA cores, and a convolution's
-  implicit GEMM.
-- **Reason:** a split by a divisor, a reorder and a fuse are affine, so
-  the grid's index folds into the tiles' addresses as before and no group
-  overhangs; a shortened last group would guard every block. Eight is
-  Triton's choice: with two large tiles per SM, the 68 blocks running at
-  once cover 8 rows by 9 columns. At 8192 cubed in f16, NN went from 31.3
-  ms to 24.9 (95% of cuBLAS), NT from 55.1 to 25.0 (96%) and TN from 31.2
-  to 24.8 (97%).
-  The other 93 f16 problems moved by 2% or less, and the M3 exit metric
-  rose from 82% to 89%.
+  group, and these and the batch loops are fused onto `blockIdx.x`. Every
+  product takes it, on tensor cores and CUDA cores and as a convolution's
+  implicit GEMM, unless its row count has no divisor from 2 to 8 or its
+  grid has no more blocks than the 96 split-K takes the GPU to hold at
+  once (D75); those keep the row-major order.
+- **Reason:**
+  - A split by a divisor, a reorder and a fuse are affine, so the grid's
+    index folds into the tiles' addresses as before and no group
+    overhangs; a shortened last group would guard every block.
+  - Eight is Triton's choice: with two large tiles per SM, the 68 blocks
+    running at once cover 8 rows by 9 columns.
+  - A grid the GPU holds at once reads all its tiles together in any
+    order, so grouping one only moves its blocks between SMs. Measured
+    interleaved against row-major, that cost 1% to 2% on 1000 cubed and
+    the split and small-tile products of 128 rows, and 4.8% on ResNet-50's
+    layer1 expansion at batch 1, a grid of 50.
+  - Larger grids gain where their operands outgrow L2. At 8192 cubed in
+    f16, NN went from 31.3 ms to 24.9 (95% of cuBLAS), NT from 55.1 to
+    25.0 (96%) and TN from 31.2 to 24.8 (97%), and the M3 exit metric
+    rose from 82% to 89%. The other f16 problems moved by 2% or less.
+  - Of the 69 convolutions, measured interleaved, 52 moved by 0.3% or
+    less, as much as the stem at batch 1 did, whose one column of blocks
+    keeps its order. Seven ran 1% to 16% faster: the projections at
+    batch 32, layer1's expansion at batch 32 and four of layer3's layers
+    at batch 8. Ten, each grouped 7 rows high over 2 to 8 columns, ran
+    0.5% to 2.7% slower. Their geometric mean gained 0.5%. The group's
+    height is the search's to tune per problem (M5).

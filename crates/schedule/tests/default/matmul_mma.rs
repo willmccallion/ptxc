@@ -90,35 +90,53 @@ fn a_product_shorter_or_narrower_than_the_large_tile_takes_the_small_one() {
 
 #[test]
 fn a_products_blocks_run_in_groups_of_eight_rows_a_column_at_a_time() {
-    // 24 rows of large tiles by 4 columns: block b computes row
-    // 8 * (b / 32) + b % 8 and column (b / 8) % 4.
-    let compute = product(DType::F16, [1, 3072, 512, 16], PLAIN);
+    // 24 rows of large tiles by 8 columns: block b computes row
+    // 8 * (b / 64) + b % 8 and column (b / 8) % 8.
+    let compute = product(DType::F16, [1, 3072, 1024, 16], PLAIN);
 
     let (text, launch) = scheduled(compute);
 
-    assert_eq!(launch_dims(launch), ([96, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(launch), ([192, 1, 1], [32, 2, 2]));
     let block = "%batch_i.0.0_j.0_i.0.1";
     assert!(text.contains(&format!("{block} = blockIdx.x")), "{text}");
-    let rows = format!("floordiv({block}, 32) * 16384 + floormod({block}, 8) * 2048");
+    let rows = format!("floordiv({block}, 64) * 16384 + floormod({block}, 8) * 2048");
     assert!(text.contains(&rows), "{text}");
-    assert!(text.contains(&format!("floormod(floordiv({block}, 8), 4) * 128")), "{text}");
+    assert!(text.contains(&format!("floormod(floordiv({block}, 8), 8) * 128")), "{text}");
 }
 
 #[test]
 fn a_group_is_as_tall_as_the_largest_divisor_of_the_rows_up_to_eight() {
-    // 6 rows of small tiles make one group; 11 rows of large ones have no
-    // divisor up to 8 and stay in rows.
-    let six = product(DType::F16, [1, 384, 192, 16], PLAIN);
-    let eleven = product(DType::F16, [1, 1408, 512, 16], PLAIN);
+    // 9 batches of 6 rows by 2 columns of small tiles, the rows one group;
+    // 11 rows by 9 columns of large tiles, which no group divides.
+    let six = product(DType::F16, [9, 384, 128, 16], PLAIN);
+    let eleven = product(DType::F16, [1, 1408, 1152, 16], PLAIN);
 
-    let [(six_text, _), (eleven_text, eleven_launch)] = [six.clone(), eleven].map(scheduled);
+    let [(six_text, six_launch), (eleven_text, eleven_launch)] =
+        [six.clone(), eleven].map(scheduled);
 
+    assert_eq!(launch_dims(six_launch), ([108, 1, 1], [32, 2, 2]));
     assert!(six_text.contains("floormod(%batch_i.0.0_j.0_i.0.1, 6) * 1024"), "{six_text}");
-    assert_eq!(launch_dims(eleven_launch), ([44, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(eleven_launch), ([99, 1, 1], [32, 2, 2]));
     assert!(eleven_text.contains("%batch_i.0_j.0 = blockIdx.x"), "{eleven_text}");
-    assert!(eleven_text.contains("floordiv(%batch_i.0_j.0, 4) * 2048"), "{eleven_text}");
+    assert!(eleven_text.contains("floordiv(%batch_i.0_j.0, 9) * 2048"), "{eleven_text}");
     let [tiled, serial] = tiled_and_serial(&six, &exact_inputs(&six));
     assert_eq!(tiled, serial);
+}
+
+#[test]
+fn a_grid_the_gpu_holds_at_once_keeps_its_rows_in_order() {
+    // 8 by 8 large tiles, and 24 by 4: 64 and 96 blocks, as many as the
+    // GPU holds at once.
+    let square = product(DType::F16, [1, 1024, 1024, 16], PLAIN);
+    let tall = product(DType::F16, [1, 3072, 512, 16], PLAIN);
+
+    let [(square_text, square_launch), (tall_text, tall_launch)] = [square, tall].map(scheduled);
+
+    assert_eq!(launch_dims(square_launch), ([64, 1, 1], [32, 2, 2]));
+    assert_eq!(launch_dims(tall_launch), ([96, 1, 1], [32, 2, 2]));
+    for text in [square_text, tall_text] {
+        assert!(text.contains("%batch_i.0_j.0 = blockIdx.x"), "{text}");
+    }
 }
 
 /// An 8-bit integer product summed in `i32`, which the `mma` table takes.

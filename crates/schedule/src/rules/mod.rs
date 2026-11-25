@@ -19,6 +19,11 @@ const BLOCK_THREADS: u64 = 256;
 /// measures each device.
 pub(crate) const FULL_GRID: u64 = 32;
 
+/// The blocks of small tiles the GPU holds at once: three on each SM, as
+/// their shared memory allows, hand-picked from the sweep until tuning
+/// measures each device.
+pub(crate) const RESIDENT_GRID: u64 = 3 * FULL_GRID;
+
 /// `loops`, adjacent in the nest, fused into one; `None` when there are
 /// none.
 fn fused(schedule: &mut Schedule<Open>, loops: &[LoopId]) -> Result<Option<LoopId>, ScheduleError> {

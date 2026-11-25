@@ -5,7 +5,7 @@
 //! that is pipelined.
 
 use super::matmul_shape::Product;
-use super::{bind, fused};
+use super::{RESIDENT_GRID, bind, fused};
 use crate::pipeline::stages_for;
 use crate::tiling::StepTile;
 use ptxc_loop::{
@@ -75,14 +75,15 @@ pub(super) fn own_loop(
 const GROUP_ROWS: u64 = 8;
 
 /// The `batch` loops and the block's row and column loops fused onto
-/// `blockIdx.x`, which no grid limit binds, the rows in groups.
+/// `blockIdx.x`, which no grid limit binds, the rows in groups where the
+/// grid outlasts one wave.
 pub(super) fn bind_blocks(
     schedule: &mut Schedule<Open>,
     batch: &[LoopId],
     blocks: [LoopId; 2],
 ) -> Result<(), ScheduleError> {
     let mut grid = batch.to_vec();
-    grid.extend(grouped(schedule, blocks)?);
+    grid.extend(grouped(schedule, batch, blocks)?);
     if let Some(grid) = fused(schedule, &grid)? {
         bind(schedule, grid, ThreadAxis::BlockX)?;
     }
@@ -92,14 +93,21 @@ pub(super) fn bind_blocks(
 /// The block loops `row_block` and `column_block`, adjacent in the nest,
 /// in the order the grid walks them: the rows split into groups as tall
 /// as the largest divisor of their count up to `GROUP_ROWS`, so no group
-/// overhangs, and each group's rows inside its columns. Rows whose count
-/// has no divisor from 2 to `GROUP_ROWS` stay row by row.
+/// overhangs, and each group's rows inside its columns. The rows stay in
+/// order where no count from 2 to `GROUP_ROWS` divides them, and where
+/// the grid, with its `batch` loops, has no more blocks than
+/// `RESIDENT_GRID`: about what the GPU holds at once, whose blocks read
+/// their tiles together in any order.
 fn grouped(
     schedule: &mut Schedule<Open>,
+    batch: &[LoopId],
     [row_block, column_block]: [LoopId; 2],
 ) -> Result<Vec<LoopId>, ScheduleError> {
-    let rows = schedule.loops().loops()[row_block].extent.get();
-    let Some(group) = (2..=GROUP_ROWS).rev().find(|&group| rows.is_multiple_of(group)) else {
+    let extent = |id: &LoopId| schedule.loops().loops()[*id].extent.get();
+    let rows = extent(&row_block);
+    let blocks: u64 = batch.iter().chain([&row_block, &column_block]).map(extent).product();
+    let divisor = (2..=GROUP_ROWS).rev().find(|&group| rows.is_multiple_of(group));
+    let Some(group) = divisor.filter(|_| blocks > RESIDENT_GRID) else {
         return Ok(vec![row_block, column_block]);
     };
     let [row_group, row_in_group] = parts(schedule, row_block, &[group])?;

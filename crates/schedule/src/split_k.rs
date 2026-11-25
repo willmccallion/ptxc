@@ -4,17 +4,12 @@
 //! sums the slices (D75).
 
 use crate::default::default_schedule;
-use crate::rules::FULL_GRID;
 use crate::rules::matmul_shape::{Product, product};
+use crate::rules::{FULL_GRID, RESIDENT_GRID};
 use ptxc_core::{ByteSize, Dim, ElementCount};
 use ptxc_loop::{ComputeDef, LaunchShape, Rfactored, ScheduleError, Slices, rfactor};
 use ptxc_target::{BlockCount, Target};
 use std::sync::Arc;
-
-/// The blocks of small tiles the GPU holds at once, which split-K aims to
-/// launch: three on each SM, as their shared memory allows, hand-picked
-/// from the sweep until tuning measures each device.
-const RESIDENT_GRID: u64 = 3 * FULL_GRID;
 
 /// What every slice's depth is a multiple of: a whole number of every
 /// tiled rule's steps, so no slice ends in a partial step.
