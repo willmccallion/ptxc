@@ -56,7 +56,7 @@ pub(super) fn check_tensorized(
         let found = operand_layout(compute, tree, tiles, cache, vars);
         let name = || ScheduleError::TensorizeIndex(compute.inputs()[tensor].name.clone());
         let (order, stride) = found.ok_or_else(name)?;
-        Ok(Operand { cache, order, stride })
+        Ok::<_, ScheduleError>(Operand { cache, order, stride })
     };
     let lhs = layout(lhs, [m, k, n])?;
     let rhs = layout(rhs, [k, n, m])?;

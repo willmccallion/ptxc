@@ -1,12 +1,13 @@
 //! Runs a graph as ptxc compiles it before codegen, stage by stage.
 //!
-//! Each node is its own group, each group lowered, and each stage put under
-//! its default schedule and run by an executor the caller gives, such as
-//! the loop interpreter or the GPU.
+//! Each node is its own group, each group lowered and its products split
+//! where the compiler splits them (D75), and each stage put under its
+//! default schedule and run by an executor the caller gives, such as the
+//! loop interpreter or the GPU.
 
 use ptxc_core::{HostTensor, Idx, TensorError};
 use ptxc_graph::{CycleError, Graph, Partitioned, ValueDef, ValueId};
-use ptxc_loop::{LoweredKernel, ScheduleError};
+use ptxc_loop::{ComputeDef, LoweredKernel, ScheduleError};
 use ptxc_lower::{Binding, IntermediateId, LowerError, LoweredGroup};
 use ptxc_target::{SmVersion, UnsupportedSm, preset};
 use std::collections::HashMap;
@@ -56,7 +57,9 @@ pub fn run_lowered<E>(
         intermediates: HashMap::new(),
         tables: Vec::new(),
     };
-    for group in &groups {
+    for group in groups {
+        let split = |compute: &Arc<ComputeDef>| ptxc_schedule::split_k(compute, &target);
+        let group = group.with_split_reductions(split)?;
         tensors.intermediates.clear();
         tensors.tables = group.tables().iter().cloned().collect();
         for stage in group.stages() {
@@ -68,7 +71,7 @@ pub fn run_lowered<E>(
             let schedule = ptxc_schedule::default_schedule(Arc::clone(stage.compute()), &target)?;
             let outputs = run_stage(&schedule.lower(), &arguments).map_err(LoweredError::Stage)?;
             for (&binding, flat) in stage.outputs().iter().zip(outputs) {
-                tensors.write(group, binding, flat)?;
+                tensors.write(&group, binding, flat)?;
             }
         }
     }

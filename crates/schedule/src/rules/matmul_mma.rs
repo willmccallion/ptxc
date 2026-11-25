@@ -4,8 +4,8 @@
 //! stages the block's slices of both operands in shared memory, from which
 //! the warps load their fragments (D58).
 
-use super::bind;
 use super::matmul_loops::{GemmLoops, bind_blocks, parts, pipeline_step, stage_operands};
+use super::{FULL_GRID, bind};
 use crate::tiling::{TensorCoreTile, TileShape};
 use ptxc_loop::{
     ComputeDef, LoopId, Open, Primitive, Schedule, ScheduleError, StageCount, Swizzle, TensorExpr,
@@ -36,11 +36,6 @@ const SMALL: TensorCoreTile = TensorCoreTile {
     steps: 2,
     stages: StageCount::new(4),
 };
-
-/// The blocks a grid of large tiles needs to keep a GPU busy: about one per
-/// SM of a mid-range Ada part, hand-picked from the sweep until tuning
-/// measures each device.
-const FULL_GRID: u64 = 32;
 
 /// The `mma` of `target` that computes the product of `operands` that
 /// `compute` sums: one whose multiplicands are both operands' type and

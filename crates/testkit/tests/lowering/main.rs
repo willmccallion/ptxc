@@ -15,6 +15,7 @@ mod quant;
 mod reduce;
 mod resize;
 mod shape;
+mod split_k;
 mod window;
 
 /// Property-test cases: `PROPTEST_CASES` if set, else `default`.

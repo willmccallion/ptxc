@@ -181,21 +181,19 @@ pub fn tensorized(
     schedule
 }
 
-/// The inputs of `compute`: integers from -4 to 4, or 0 to 8 if unsigned,
-/// salted per input, so every sum of products is exact in any order, and
-/// no float is subnormal.
+/// The inputs of `compute`, each an `exact_tensor` salted by its place.
 pub fn exact_inputs(compute: &ComputeDef) -> Vec<HostTensor> {
-    compute
-        .inputs()
-        .iter()
-        .zip(0_u64..)
-        .map(|(input, salt)| {
-            let count = input.shape.element_count().get();
-            let values = (0..count).map(|n| i64::try_from((3 * n + 7 * salt) % 9).unwrap());
-            let data = small_integers(input.dtype, values);
-            HostTensor::new(input.shape.clone(), data).unwrap()
-        })
-        .collect()
+    let inputs = compute.inputs().iter().zip(0_u64..);
+    inputs.map(|(input, salt)| exact_tensor(input.dtype, input.shape.clone(), salt)).collect()
+}
+
+/// A `dtype` tensor of `shape` holding integers from -4 to 4, or 0 to 8 if
+/// unsigned, varied by `salt`, so every sum of products of such tensors is
+/// exact in any order, and no float is subnormal.
+pub fn exact_tensor(dtype: DType, shape: Shape, salt: u64) -> HostTensor {
+    let count = shape.element_count().get();
+    let values = (0..count).map(|n| i64::try_from((3 * n + 7 * salt) % 9).unwrap());
+    HostTensor::new(shape, small_integers(dtype, values)).unwrap()
 }
 
 /// `values`, each from 0 to 8, as `dtype`: shifted to -4 to 4 unless
@@ -203,6 +201,9 @@ pub fn exact_inputs(compute: &ComputeDef) -> Vec<HostTensor> {
 fn small_integers(dtype: DType, values: impl Iterator<Item = i64>) -> TensorData {
     let centred = values.map(|value| value - 4);
     match dtype {
+        DType::F32 => {
+            centred.map(|value| f32::from(i8::try_from(value).unwrap())).collect::<Vec<_>>().into()
+        }
         DType::F16 => centred.map(F16::from_i64).collect::<Vec<_>>().into(),
         DType::Bf16 => centred.map(Bf16::from_i64).collect::<Vec<_>>().into(),
         DType::F8E4M3Fn => centred
@@ -217,6 +218,6 @@ fn small_integers(dtype: DType, values: impl Iterator<Item = i64>) -> TensorData
         DType::U8 => {
             centred.map(|value| u8::try_from(value + 4).unwrap()).collect::<Vec<_>>().into()
         }
-        other => panic!("{other:?} is no mma multiplicand"),
+        other => panic!("{other:?} has no small integers here"),
     }
 }

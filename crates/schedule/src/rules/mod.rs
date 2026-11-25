@@ -14,6 +14,11 @@ use ptxc_loop::{LoopId, Open, Primitive, Schedule, ScheduleError, SplitFactor, T
 /// leaves room for several blocks on an SM.
 const BLOCK_THREADS: u64 = 256;
 
+/// The blocks a grid of large tiles needs to keep a GPU busy: about one per
+/// SM of a mid-range Ada part, hand-picked from the sweep until tuning
+/// measures each device.
+pub(crate) const FULL_GRID: u64 = 32;
+
 /// `loops`, adjacent in the nest, fused into one; `None` when there are
 /// none.
 fn fused(schedule: &mut Schedule<Open>, loops: &[LoopId]) -> Result<Option<LoopId>, ScheduleError> {
