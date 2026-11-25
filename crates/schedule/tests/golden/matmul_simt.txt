@@ -34,12 +34,8 @@ kernel product(%a: f32[2800] read, %b: f32[1800] read, %out: f32[6300] write)
           for %k.1 in 8 unroll {
             for %i.2 in 4 unroll {
               for %j.2 in 4 unroll {
-                if %i.2 + %i.1 * 4 + floormod(%batch_i.0_j.0, 2) * 64 < 70 {
-                  if %j.2 + %j.1 * 4 < 45 {
-                    if %k.1 + %k.0 * 8 < 20 {
-                      %acc[%i.2 * 4 + %j.2] = fma(cast<f32>(%a_tile[%k.0 * 512 + %i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%k.0 * 512 + %j.2 + %j.1 * 4 + %k.1 * 64]), %acc[%i.2 * 4 + %j.2])
-                    }
-                  }
+                if %k.1 + %k.0 * 8 < 20 {
+                  %acc[%i.2 * 4 + %j.2] = fma(cast<f32>(%a_tile[%k.0 * 512 + %i.2 + %i.1 * 4 + %k.1 * 64]), cast<f32>(%b_tile[%k.0 * 512 + %j.2 + %j.1 * 4 + %k.1 * 64]), %acc[%i.2 * 4 + %j.2])
                 }
               }
             }

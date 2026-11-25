@@ -7,7 +7,7 @@ use super::combine::{Candidate, arg_start, combine, identity, position_start, re
 use super::context::Lowerer;
 use crate::compute::TensorExpr;
 use crate::expr::{ExprId, VarId};
-use crate::schedule::{LoopId, LoopKind};
+use crate::schedule::{Guard, LoopId, LoopKind};
 use crate::stmt::{BufferId, MemScope, Stmt, ValueExpr};
 use ptxc_core::{DType, Dim, Idx};
 
@@ -42,13 +42,25 @@ impl Lowerer<'_> {
         let init = self.initialise(reduction, &accumulator);
         let init = self.wrap_loops(&inner_spatial, init);
         let update = self.update(reduction, &accumulator);
-        let guards = self.tree.guards().to_vec();
+        let guards = self.update_guards(&update);
         let update = self.wrap_guards(&guards, update);
         let update = self.wrap_loops(inner, update);
         let write_back = self.write_back(&accumulator);
         let write_back = self.wrap_loops(&inner_spatial, write_back);
         let body = Self::allocate(&accumulator, Stmt::Seq(vec![init, update, write_back]));
         self.wrap_loops(outer, body)
+    }
+
+    /// The guards `update` runs under: all of them where it reads an input,
+    /// which a point past an uneven split would read out of bounds; else
+    /// only those reading reduction loops. Its staged tiles then hold every
+    /// element of the overhang, and the store's own guards discard what it
+    /// sums there, as CUTLASS predicates only a tile's global loads and
+    /// stores (D76).
+    fn update_guards(&self, update: &Stmt) -> Vec<Guard> {
+        let reads_input = self.reads_input(update);
+        let guards = self.tree.guards().iter().copied();
+        guards.filter(|guard| reads_input || self.reads_reduction(guard)).collect()
     }
 
     /// Local buffers with one element per point of `inner_spatial`.

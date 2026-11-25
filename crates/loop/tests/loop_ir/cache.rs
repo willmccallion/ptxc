@@ -119,6 +119,24 @@ fn a_tile_larger_than_its_block_fills_in_rounds() {
 }
 
 #[test]
+fn an_update_reading_only_tiles_is_guarded_only_on_its_reduction() {
+    let compute = matmul([37, 45, 70]);
+    let (unstaged, [ko, _]) = tiled(&compute, [8, 16]);
+    let mut staged = unstaged.clone();
+    stage(&mut staged, a(), ko);
+    stage(&mut staged, b(), ko);
+
+    let [unstaged, staged] = [unstaged, staged].map(|schedule| print_kernel(&lower(schedule)));
+
+    // The update and the store each check the row and column bounds where
+    // the update reads the inputs; reading tiles, only the store does.
+    let guards = |text: &str, bound: &str| text.matches(&format!(" < {bound} {{")).count();
+    assert_eq!([guards(&unstaged, "37"), guards(&unstaged, "45")], [2, 2], "{unstaged}");
+    assert_eq!([guards(&staged, "37"), guards(&staged, "45")], [1, 1], "{staged}");
+    assert_eq!(guards(&staged, "70"), 1, "{staged}");
+}
+
+#[test]
 fn a_staged_matmul_agrees_where_its_tiles_overhang_the_inputs() {
     let extents = [6, 7, 9];
     let compute = matmul(extents);

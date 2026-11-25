@@ -1547,7 +1547,6 @@ the old one.
   dequantization out of the sum lets the FP8 `mma` multiply them as
   stored.
 
-
 ## D73. A reduction no longer than a warp gets a thread per output
 
 - **Context:** D49 gives every reduction one block per output row, its
@@ -1630,3 +1629,24 @@ the old one.
   products but cost 13 on 128 by 2304 by 768, whose partials then took the
   large tile. The split is per target, so it is scheduling's to make, and
   a tuning record (M5) can hold the slice count beside each stage's trace.
+
+## D76. An update reading only its tiles is guarded only on its reduction
+
+- **Context:** D39 makes an uneven split's guards `If`s, and lowering put
+  every guard around a reduction's update. The update of a tiled product
+  is a multiply-add per element of a thread's tile, so each sat under its
+  own row and column guards: ptxas could share no operand load among them
+  and loaded both operands again for every multiply-add, 259 shared loads
+  for 128 multiply-adds a step, in the SIMT tile of a 4 by 3072 by 768 f32
+  product. It ran 306.9 µs against cuBLAS's 9.2 (#178).
+- **Choice:** this supersedes D39's guards for an update that reads no
+  input directly. Such an update runs under the guards of its reduction
+  loops alone; the store keeps every spatial guard. Every staged tile now
+  holds each of its elements, its padding or zero where it overhangs its
+  input, whether an asynchronous copy or an element copy fills it.
+- **Reason:** the tiles cover the rounded-up loops, so a point past the
+  output reads only their zeros, and the store's guard discards what it
+  sums there. This is how CUTLASS predicates a tile, on its global loads
+  and stores and never on the inner product, and how the tensor-core
+  update already ran (D58). A reduction's guards stay, as summing past the
+  axis is only harmless for some ops and bodies.
