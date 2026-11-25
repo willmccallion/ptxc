@@ -28,10 +28,10 @@ kernel matmul(%a: i32[128] read, %b: i32[128] read, %out: i32[64] write)
           barrier
           if %k.0 + 2 < 4 {
             if %i.1 * 4 + %j.1 < 4 {
-              %a_tile[floormod(%k.0 + 2, 3) * 16 + (%i.1 * 4 + %j.1) * 4] <- async %a[%i.0 * 64 + %j.1 * 16 + %k.0 * 4 + 8] run 4 if %k.0 * 4 + 8 < 16
+              %a_tile[floormod(%k.0 + 2, 3) * 16 + (%i.1 * 4 + %j.1) * 4] <- async %a[%i.0 * 64 + %j.1 * 16 + %k.0 * 4 + 8] run 4
             }
             if %i.1 * 4 + %j.1 < 4 {
-              %b_tile[floormod(%k.0 + 2, 3) * 16 + (%i.1 * 4 + %j.1) * 4] <- async %b[%j.1 * 8 + %j.0 * 4 + %k.0 * 32 + 64] run 4 if %j.1 + %k.0 * 4 + 8 < 16
+              %b_tile[floormod(%k.0 + 2, 3) * 16 + (%i.1 * 4 + %j.1) * 4] <- async %b[%j.1 * 8 + %j.0 * 4 + %k.0 * 32 + 64] run 4
             }
           }
           async commit
