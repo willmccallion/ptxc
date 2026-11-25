@@ -1547,3 +1547,21 @@ the old one.
   dequantization out of the sum lets the FP8 `mma` multiply them as
   stored.
 
+
+## D73. A reduction no longer than a warp gets a thread per output
+
+- **Context:** D49 gives every reduction one block per output row, its
+  threads sharing the row through a shared-memory tree. For a short row and
+  many rows that launches a block of a few threads per output: split-K's
+  combine (D75) adds 3 slices for each of 16 by 768 outputs, and as 12,288
+  blocks of 3 threads it made the split 16 by 768 by 768 product take
+  18.1 µs where the unsplit one took 6.9.
+- **Choice:** this supersedes D49's reduction bullet for short rows. A
+  reduction of no more values than a warp has fuses its output loops onto
+  blocks of 256 threads, as an injective stage does, and each thread
+  reduces its own output serially. A longer one keeps D49's block per row.
+- **Reason:** Ansor's cross-thread reduction rule makes the same cut,
+  sharing a reduction among threads only where it is longer than a warp
+  (`RuleCrossThreadReduction`): below that a tree's barriers cost more than
+  the few additions it spreads.
+

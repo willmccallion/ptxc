@@ -2,8 +2,9 @@
 //! product, or a convolution as an implicit GEMM, is tiled on tensor cores
 //! where the target has an `mma` for its types and on CUDA cores
 //! otherwise, an injective stage spreads over blocks of threads, and any
-//! other reduction gives each output row a block whose threads combine
-//! through shared memory.
+//! other reduction gives each output element a thread if it reduces no
+//! more values than a warp has, and each output row a block whose threads
+//! combine through shared memory if it reduces more.
 
 use crate::rules::conv_implicit_gemm::{gemm_loops, implicit_gemm};
 use crate::rules::matmul_loops::{GemmLoops, product_loops};
@@ -18,7 +19,8 @@ pub fn default_schedule(
     compute: Arc<ComputeDef>,
     target: &Target,
 ) -> Result<Schedule<Validated>, ScheduleError> {
-    let reduces = compute.iter_vars().iter().any(|axis| axis.kind == IterKind::Reduce);
+    let reduced = compute.iter_vars().iter().filter(|axis| axis.kind == IterKind::Reduce);
+    let reduced: Option<u64> = reduced.map(|axis| axis.extent.get()).reduce(u64::saturating_mul);
     let product = matmul_shape::product(&compute);
     let convolution = implicit_gemm(&compute);
     let mut schedule = Schedule::new(compute);
@@ -27,10 +29,12 @@ pub fn default_schedule(
         (None, Some(convolution)) => Some(gemm_loops(&mut schedule, &convolution)?),
         (None, None) => None,
     };
-    match loops {
-        Some(loops) => tiled(&mut schedule, &loops, target)?,
-        None if reduces => reduction::one_block_per_row(&mut schedule)?,
-        None => elementwise::flatten_over_blocks(&mut schedule)?,
+    let warp = u64::from(target.limits().warp_size.get());
+    match (loops, reduced) {
+        (Some(loops), _) => tiled(&mut schedule, &loops, target)?,
+        (None, Some(length)) if length <= warp => reduction::one_thread_per_output(&mut schedule)?,
+        (None, Some(_)) => reduction::one_block_per_row(&mut schedule)?,
+        (None, None) => elementwise::flatten_over_blocks(&mut schedule)?,
     }
     schedule.validate(target)
 }

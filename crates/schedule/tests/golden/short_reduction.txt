@@ -1,0 +1,15 @@
+kernel stage(%x: f32[9600] read, %y: f32[300] write)
+  grid(2, 1, 1) block(256, 1, 1) smem 0
+  %a0.0 = blockIdx.x
+  %a0.1 = threadIdx.x
+  alloc %acc: f32[1] local {
+    %acc[0] = 0.0:f32
+    for %a1 in 32 {
+      if %a0.1 + %a0.0 * 256 < 300 {
+        %acc[0] = add(%acc[0], %x[%a1 + %a0.1 * 32 + %a0.0 * 8192])
+      }
+    }
+    if %a0.1 + %a0.0 * 256 < 300 {
+      %y[%a0.1 + %a0.0 * 256] = %acc[0]
+    }
+  }

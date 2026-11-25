@@ -39,6 +39,14 @@ fn split_by(
     }
 }
 
+/// `id` split onto `blockIdx.x` and `threadIdx.x`, `BLOCK_THREADS` threads
+/// to a block. An empty loop stays serial, as it cannot be bound.
+fn spread_over_blocks(schedule: &mut Schedule<Open>, id: LoopId) -> Result<(), ScheduleError> {
+    let Some([blocks, threads]) = split_by(schedule, id, BLOCK_THREADS)? else { return Ok(()) };
+    bind(schedule, blocks, ThreadAxis::BlockX)?;
+    bind(schedule, threads, ThreadAxis::ThreadX)
+}
+
 fn bind(schedule: &mut Schedule<Open>, id: LoopId, axis: ThreadAxis) -> Result<(), ScheduleError> {
     schedule.apply(Primitive::Bind { loop_: id, axis })
 }

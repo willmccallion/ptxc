@@ -1,8 +1,19 @@
 //! Reductions: one block per output row, its threads striding along the
-//! row and combining their partial results in shared memory.
+//! row and combining their partial results in shared memory, or, for a
+//! row no longer than a warp, one thread per output element.
 
-use super::{BLOCK_THREADS, bind, fused, split_by};
+use super::{BLOCK_THREADS, bind, fused, split_by, spread_over_blocks};
 use ptxc_loop::{LoopId, LoopKind, Open, Schedule, ScheduleError, ThreadAxis};
+
+/// Fuses the spatial loops into one spread over blocks of threads, each
+/// thread reducing its own output serially: as Ansor's cross-thread
+/// reduction rule leaves a reduction no longer than a warp to one thread,
+/// which sums it faster than a block can share it (D73).
+pub(crate) fn one_thread_per_output(schedule: &mut Schedule<Open>) -> Result<(), ScheduleError> {
+    let (spatial, _) = by_kind(schedule);
+    let Some(outputs) = fused(schedule, &spatial)? else { return Ok(()) };
+    spread_over_blocks(schedule, outputs)
+}
 
 /// Fuses the spatial loops into rows, each bound to a block, and the
 /// reduction loops into one, split so `threadIdx.x` takes consecutive

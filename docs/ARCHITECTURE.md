@@ -477,7 +477,8 @@ and the GPU tests check them.
 - **In:** `ComputeDef` and `Target`. **Out:** a `Schedule<Validated>`, from
   a `Trace` replayed from the tuning database, or from `default.rs`.
   In M2, `default_schedule` gives injective stages blocks of 256 threads and
-  reductions a block per output row with a shared-memory tree (D49). In
+  reductions a block per output row with a shared-memory tree (D49), or a
+  thread per output for a reduction no longer than a warp (D73). In
   M3 it tiles a matrix product on CUDA cores, its operands staged in shared
   memory and each thread's outputs in registers (D56). Where the target has
   an `mma` for the product's operand and sum types (f16, bf16, FP8, 8-bit
