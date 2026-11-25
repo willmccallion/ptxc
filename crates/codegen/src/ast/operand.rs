@@ -4,7 +4,7 @@ use super::arithmetic::Int;
 use super::reg::{B16, B32, B64, Class, F32, Reg, RegId};
 
 /// A source operand as instructions store it.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Operand {
     Reg(RegId),
     /// An integer immediate.

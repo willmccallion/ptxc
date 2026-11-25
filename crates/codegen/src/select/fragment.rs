@@ -98,9 +98,9 @@ impl Selector<'_> {
             self.builder.convert(CvtMode::Plain, (PtxType::S64, PtxType::U32), index.into());
         let bits = Signedness::Bits;
         let shift = Value::<B64>::int(i64::from(GROUP_LANES.trailing_zeros()));
-        let group = self.builder.int(BinaryOp::Shr, bits, index.into(), shift);
+        let group = self.index_op(BinaryOp::Shr, bits, index.into(), shift);
         let mask = Value::<B64>::int(signed(GROUP_LANES - 1)?);
-        let thread = self.builder.int(BinaryOp::And, bits, index.into(), mask);
+        let thread = self.index_op(BinaryOp::And, bits, index.into(), mask);
         self.lane = Some(Lane { index, group, thread });
         Ok(())
     }
@@ -135,9 +135,9 @@ impl Selector<'_> {
         let tile = self.index(fragment.tile)?;
         let signedness = Signedness::Signed;
         let scaled =
-            self.builder.int(BinaryOp::Mul, signedness, tile.into(), Value::<B64>::int(tile_bytes));
+            self.index_op(BinaryOp::Mul, signedness, tile.into(), Value::<B64>::int(tile_bytes));
         let base = self.builder.address_of(&name);
-        let at = self.builder.int(BinaryOp::Add, signedness, base.into(), scaled.into());
+        let at = self.index_op(BinaryOp::Add, signedness, base.into(), scaled.into());
         Ok(Place::Memory(Space::Local, Address::Reg { base: at.id(), offset: element_offset }))
     }
 
@@ -153,8 +153,8 @@ impl Selector<'_> {
                 continue;
             }
             let factor = Value::<B64>::int(signed(coefficient)?);
-            let term = self.builder.int(BinaryOp::Mul, Signedness::Signed, part.into(), factor);
-            sum = self.builder.int(BinaryOp::Add, Signedness::Signed, sum.into(), term.into());
+            let term = self.index_op(BinaryOp::Mul, Signedness::Signed, part.into(), factor);
+            sum = self.index_op(BinaryOp::Add, Signedness::Signed, sum.into(), term.into());
         }
         Ok(sum)
     }
@@ -196,9 +196,9 @@ impl Selector<'_> {
         let stride = Value::<B64>::int(signed(at.stride.get())?);
         let origin = self.index_operand(at.origin)?;
         let signedness = Signedness::Signed;
-        let scaled = self.builder.int(BinaryOp::Mul, signedness, outer.into(), stride);
-        let within = self.builder.int(BinaryOp::Add, signedness, scaled.into(), inner.into());
-        Ok(self.builder.int(BinaryOp::Add, signedness, within.into(), origin))
+        let scaled = self.index_op(BinaryOp::Mul, signedness, outer.into(), stride);
+        let within = self.index_op(BinaryOp::Add, signedness, scaled.into(), inner.into());
+        Ok(self.index_op(BinaryOp::Add, signedness, within.into(), origin))
     }
 
     /// Sets each of the lane's elements of `fragment`'s tile to `value`.

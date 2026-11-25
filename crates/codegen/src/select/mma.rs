@@ -109,10 +109,10 @@ impl Selector<'_> {
         let signed = Signedness::Signed;
         Ok(match order {
             MatrixOrder::Rows => {
-                [self.builder.int(BinaryOp::Add, signed, along_group.into(), row.into()), along_run]
+                [self.index_op(BinaryOp::Add, signed, along_group.into(), row.into()), along_run]
             }
             MatrixOrder::Columns => {
-                [along_group, self.builder.int(BinaryOp::Add, signed, along_run.into(), row.into())]
+                [along_group, self.index_op(BinaryOp::Add, signed, along_run.into(), row.into())]
             }
         })
     }
@@ -121,19 +121,19 @@ impl Selector<'_> {
     /// `count`.
     fn low_bits(&mut self, value: Reg<B64>, count: u64) -> Result<Reg<B64>, CodegenError> {
         let mask = signed(count - 1)?;
-        Ok(self.builder.int(BinaryOp::And, Signedness::Bits, value.into(), Value::<B64>::int(mask)))
+        Ok(self.index_op(BinaryOp::And, Signedness::Bits, value.into(), Value::<B64>::int(mask)))
     }
 
     /// `value >> shift`, for a non-negative `value`.
     fn shifted_right(&mut self, value: Reg<B64>, shift: u32) -> Reg<B64> {
         let shift = Value::<B64>::int(i64::from(shift));
-        self.builder.int(BinaryOp::Shr, Signedness::Bits, value.into(), shift)
+        self.index_op(BinaryOp::Shr, Signedness::Bits, value.into(), shift)
     }
 
     fn scaled(&mut self, value: Reg<B64>, factor: u64) -> Result<Reg<B64>, CodegenError> {
         let factor = signed(factor)?;
         let signed = Signedness::Signed;
-        Ok(self.builder.int(BinaryOp::Mul, signed, value.into(), Value::<B64>::int(factor)))
+        Ok(self.index_op(BinaryOp::Mul, signed, value.into(), Value::<B64>::int(factor)))
     }
 
     /// `accumulator += a · b` on the warp's fragments, by `instruction`.

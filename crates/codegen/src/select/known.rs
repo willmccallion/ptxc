@@ -11,14 +11,24 @@
 
 use super::memory::Place;
 use super::values::Held;
-use crate::ast::{B64, Reg};
+use crate::ast::{B64, BinaryOp, Operand, Reg, Signedness};
 use ptxc_loop::{BufferId, ExprId, ValueExpr};
 use std::collections::HashMap;
+
+/// A 64-bit index operation on two operands, as its signedness reads them.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(super) struct IndexOp {
+    pub(super) op: BinaryOp,
+    pub(super) signedness: Signedness,
+    pub(super) operands: [Operand; 2],
+}
 
 /// What earlier instructions of the current block left in registers.
 #[derive(Clone, Default)]
 pub(super) struct Known {
     indices: HashMap<ExprId, Reg<B64>>,
+    ops: HashMap<IndexOp, Reg<B64>>,
+    arrays: HashMap<String, Reg<B64>>,
     addresses: HashMap<(BufferId, ExprId), Place>,
     values: HashMap<ValueExpr, Held>,
 }
@@ -30,6 +40,22 @@ impl Known {
 
     pub(super) fn remember_index(&mut self, id: ExprId, held: Reg<B64>) {
         let _previous = self.indices.insert(id, held);
+    }
+
+    pub(super) fn op(&self, op: &IndexOp) -> Option<Reg<B64>> {
+        self.ops.get(op).copied()
+    }
+
+    pub(super) fn remember_op(&mut self, op: IndexOp, held: Reg<B64>) {
+        let _previous = self.ops.insert(op, held);
+    }
+
+    pub(super) fn array(&self, name: &str) -> Option<Reg<B64>> {
+        self.arrays.get(name).copied()
+    }
+
+    pub(super) fn remember_array(&mut self, name: &str, held: Reg<B64>) {
+        let _previous = self.arrays.insert(name.to_owned(), held);
     }
 
     pub(super) fn address(&self, buffer: BufferId, index: ExprId) -> Option<Place> {
@@ -68,8 +94,8 @@ impl Known {
 
 #[cfg(test)]
 mod tests {
-    use super::Known;
-    use crate::ast::{Address, B64, F32, Reg, Space};
+    use super::{IndexOp, Known};
+    use crate::ast::{Address, B64, BinaryOp, F32, Operand, Reg, Signedness, Space};
     use crate::select::memory::Place;
     use crate::select::values::Held;
     use ptxc_core::Idx;
@@ -140,11 +166,30 @@ mod tests {
         let mut known = knowing(&[before], &[(load(0), 1)]);
         let outer = known.clone();
         known.remember_index(inside, Reg::new(9));
+        known.remember_op(scaled(2), Reg::new(10));
 
         known.leave(outer);
 
         assert_eq!(known.index(before), Some(Reg::new(0)));
         assert_eq!(known.index(inside), None);
+        assert_eq!(known.op(&scaled(2)), None);
         assert!(known.value(&load(0)).is_none());
+    }
+
+    /// Register 0 times `factor`.
+    fn scaled(factor: i64) -> IndexOp {
+        let operands = [Operand::Reg(Reg::<B64>::new(0).id()), Operand::Int(factor)];
+        IndexOp { op: BinaryOp::Mul, signedness: Signedness::Signed, operands }
+    }
+
+    #[test]
+    fn an_operation_is_found_by_its_operator_signedness_and_operands() {
+        let mut known = Known::default();
+        let unsigned = IndexOp { signedness: Signedness::Unsigned, ..scaled(4) };
+
+        known.remember_op(scaled(4), Reg::new(3));
+
+        assert_eq!(known.op(&scaled(4)), Some(Reg::new(3)));
+        assert_eq!([known.op(&scaled(8)), known.op(&unsigned)], [None, None]);
     }
 }
