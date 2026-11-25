@@ -138,9 +138,18 @@ PyTorch with cuDNN, with `cudnn.benchmark = True`.
   products f32 sums exactly. 256 evenly spaced output elements recomputed
   on the host match within f16's tolerance for the layer's sum. A result
   that fails its check is reported and not timed, and the run fails.
+- **Baseline:** PyTorch with cuDNN, `cudnn.benchmark = True`, run from
+  `baselines/` on the same layers. Each layer is captured in a CUDA graph
+  after cuDNN has chosen its algorithm and replayed, so a sample times the
+  GPU's work rather than Python's launch overhead. It runs NCHW, as ptxc
+  takes the layer, and channels-last, cuDNN's documented best layout for
+  tensor cores. Its result is checked as ptxc's is, against a float64
+  convolution, within the same tolerance.
 - **Metric:** time per layer, and TFLOP/s at two operations per
   multiply-add of the direct convolution.
-- **Files:** `conv-ptxc.json`, and the baseline's (#115).
+- **Files:** `conv-ptxc.json`, `conv-pytorch.json` (NCHW) and
+  `conv-pytorch-channels-last.json`. A PyTorch file's version names
+  PyTorch's and cuDNN's; its `commit` is the harness's.
 
 ### Whole models (`ptxc-bench models`, M4 to M6)
 
@@ -174,6 +183,7 @@ bench/results/scratch/           gitignored, for runs during development
 ```sh
 ptxc-bench gemm --out bench/results/scratch/              # --only f16/NN for a subset
 ptxc-bench conv --out bench/results/scratch/              # --only b32 or --only layer1 for a subset
+uv run --project baselines ptxc-baselines bench-conv --out bench/results/scratch/
 ptxc-bench models --model resnet50 --batch 1,8,32 --out bench/results/scratch/
 uv run --project baselines ptxc-baselines bench --framework trt --model resnet50 --batch 1,8,32 --out bench/results/scratch/
 uv run --project baselines ptxc-baselines render --results bench/results/<run>/ --readme README.md

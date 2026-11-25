@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import inputs, models, paths, reference
+from . import conv_bench, inputs, models, paths, reference
 
 #: Each image source: its directory, the set name's prefix, and how to get it.
 IMAGE_SOURCES = {
@@ -45,6 +45,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
         help="cache ONNX Runtime's outputs for every case `ptxc fuzz-export` wrote",
     )
     fuzz.add_argument("--dir", default=str(paths.DATA / "fuzz-ort"), help="the exported cases")
+    conv = commands.add_parser(
+        "bench-conv", help="time PyTorch with cuDNN on the layers of bench/conv.json"
+    )
+    conv.add_argument("--out", default=str(paths.ROOT / "bench" / "results" / "scratch"))
+    conv.add_argument("--only", help="only the problems whose names contain this")
     return parser.parse_args(argv)
 
 
@@ -105,12 +110,21 @@ def run_fuzz_reference(args: argparse.Namespace) -> Path:
     return directory
 
 
+def run_bench_conv(args: argparse.Namespace) -> Path:
+    out = Path(args.out)
+    failed = conv_bench.run(out, args.only)
+    if failed:
+        sys.exit(f"{len(failed)} results failed their checks:\n" + "\n".join(failed))
+    return out
+
+
 COMMANDS = {
     "export": run_export,
     "images": run_images,
     "random": run_random,
     "reference": run_reference,
     "fuzz-reference": run_fuzz_reference,
+    "bench-conv": run_bench_conv,
 }
 
 
