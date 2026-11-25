@@ -1,0 +1,119 @@
+
+*** crates/compiler/src/memory_plan/lifetime.rs:61:5: replace touched -> Vec<BufferId> with vec![Default::default()]
+
+*** mutation diff:
+--- crates/compiler/src/memory_plan/lifetime.rs
++++ replace touched -> Vec<BufferId> with vec![Default::default()]
+@@ -53,20 +53,17 @@
+             }
+         }
+     }
+     found
+ }
+ 
+ /// The buffers `step` reads or writes.
+ fn touched(step: &Step) -> Vec<BufferId> {
+-    match step {
+-        Step::Launch { args, .. } => args.clone(),
+-        Step::Copy { from, to } => vec![*from, *to],
+-    }
++    vec![Default::default()] /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// The most bytes `buffers`, each a size and a lifetime, hold live at any
+ /// one step: no placement fits them in less. `None` if that passes 2^64.
+ pub(crate) fn peak_live_bytes(
+     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,
+ ) -> Option<ByteSize> {
+     let mut changes: Vec<(StepIndex, Change)> = Vec::new();
+
+
+*** /nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo test --no-run --verbose --package=ptxc-compiler@0.1.0
+       Fresh unicode-ident v1.0.27
+       Fresh cfg-if v1.0.5
+       Fresh rand_core v0.10.1
+       Fresh either v1.19.0
+       Fresh typenum v1.20.1
+       Fresh proc-macro2 v1.0.107
+       Fresh itertools v0.15.0
+       Fresh hybrid-array v0.4.15
+       Fresh bitflags v2.13.2
+       Fresh autocfg v1.5.1
+       Fresh linux-raw-sys v0.12.1
+       Fresh bytes v1.12.2
+       Fresh cpufeatures v0.3.1
+       Fresh once_cell v1.21.4
+       Fresh fastrand v2.5.0
+       Fresh itoa v1.0.19
+       Fresh fnv v1.0.7
+       Fresh bit-vec v0.10.2
+       Fresh memchr v2.8.3
+       Fresh const-oid v0.10.3
+       Fresh quote v1.0.47
+       Fresh libc v0.2.191
+       Fresh anyhow v1.0.104
+       Fresh serde_core v1.0.229
+       Fresh libm v0.2.16
+       Fresh rustix v1.1.6
+       Fresh crypto-common v0.2.2
+       Fresh block-buffer v0.12.1
+       Fresh quick-error v1.2.3
+       Fresh chacha20 v0.10.2
+       Fresh bit-set v0.11.1
+       Fresh rand_xorshift v0.5.0
+       Fresh regex-syntax v0.8.12
+       Fresh core_detect v1.0.0
+       Fresh unarray v0.1.4
+       Fresh syn v3.0.10
+       Fresh syn v2.0.119
+       Fresh getrandom v0.4.3
+       Fresh zmij v1.0.23
+       Fresh wait-timeout v0.2.1
+       Fresh digest v0.11.3
+       Fresh thiserror-impl v2.0.21
+       Fresh prost-derive v0.14.6
+       Fresh serde_derive v1.0.229
+       Fresh tempfile v3.27.0
+       Fresh rand v0.10.4
+       Fresh serde_json v1.0.154
+       Fresh num-traits v0.2.19
+       Fresh sha2 v0.11.1
+       Fresh thiserror v2.0.21
+       Fresh prost v0.14.6
+       Fresh rusty-fork v0.3.1
+       Fresh serde v1.0.229
+       Fresh ptxc-core v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/core)
+       Fresh ptxc-onnx-proto v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/onnx-proto)
+       Fresh proptest v1.12.0
+       Fresh ptxc-target v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/target)
+       Fresh ptxc-graph v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/graph)
+       Fresh ptxc-loop v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/loop)
+       Fresh ptxc-interp v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/interp)
+       Fresh ptxc-onnx v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/onnx)
+       Fresh ptxc-program v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/program)
+       Fresh ptxc-schedule v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/schedule)
+       Fresh ptxc-lower v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/lower)
+       Fresh ptxc-codegen v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/codegen)
+       Fresh ptxc-graph-opt v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/graph-opt)
+       Fresh ptxc-testkit v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/testkit)
+   Compiling ptxc-compiler v0.1.0 (/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/crates/compiler)
+     Running `rustc --crate-name ptxc_compiler --edition=2024 crates/compiler/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=e58cb0a8933d7309 -C extra-filename=-5c152cfb00029417 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rmeta --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rmeta --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rmeta --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rmeta --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rmeta --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rmeta --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rmeta --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rmeta --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rmeta --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rmeta --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rmeta`
+     Running `rustc --crate-name ptxc_compiler --edition=2024 crates/compiler/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=1998ef914cfa1881 -C extra-filename=-e9d1e4250c936461 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rlib --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rlib --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rlib --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rlib --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rlib --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rlib --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rlib --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rlib --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rlib --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rlib --extern ptxc_testkit=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_testkit-be8b522e4b5994b4.rlib --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rlib`
+error[E0277]: the trait bound `ptxc_program::BufferId: Default` is not satisfied
+  --> crates/compiler/src/memory_plan/lifetime.rs:61:10
+   |
+61 |     vec![Default::default()] /* ~ changed by cargo-mutants ~ */
+   |          ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `ptxc_program::BufferId`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `ptxc-compiler` (lib) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `rustc --crate-name ptxc_compiler --edition=2024 crates/compiler/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=e58cb0a8933d7309 -C extra-filename=-5c152cfb00029417 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rmeta --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rmeta --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rmeta --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rmeta --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rmeta --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rmeta --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rmeta --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rmeta --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rmeta --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rmeta --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rmeta` (exit status: 1)
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ptxc-compiler` (lib test) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `rustc --crate-name ptxc_compiler --edition=2024 crates/compiler/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=1998ef914cfa1881 -C extra-filename=-e9d1e4250c936461 --out-dir /tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps -C incremental=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps --extern ptxc_codegen=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_codegen-35067da82a50b32c.rlib --extern ptxc_core=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_core-dccdb768ddcd8ed0.rlib --extern ptxc_graph=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph-2788ad5eaa3aaa7f.rlib --extern ptxc_graph_opt=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_graph_opt-c2f07dfc3be64a6f.rlib --extern ptxc_loop=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_loop-91995a3cbc2d819a.rlib --extern ptxc_lower=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_lower-aa324dfb3d1418e9.rlib --extern ptxc_onnx=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_onnx-78607b5eba157567.rlib --extern ptxc_program=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_program-62e6ea538ede1a30.rlib --extern ptxc_schedule=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_schedule-b32d317f1bb95696.rlib --extern ptxc_target=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_target-6f71fb61b36b9d0a.rlib --extern ptxc_testkit=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libptxc_testkit-be8b522e4b5994b4.rlib --extern thiserror=/tmp/nix-shell.cqDk46/cargo-mutants-ptxc-GxpHFX.tmp/target/debug/deps/libthiserror-7742b2b28d3c7ec8.rlib` (exit status: 1)
+
+*** result: Failure(101)

@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/mod.rs
++++ replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![])
+@@ -35,17 +35,10 @@
+     let live =
+         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));
+     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;
+     Ok(ArenaUse { size: program.arena(), lower_bound })
+ }
+ 
+ /// `program`'s arena buffers, with their lifetimes over its steps.
+ fn placed(program: &Program) -> Result<Vec<Placed>, ArenaError> {
+-    let lifetimes = lifetimes(program.steps(), program.buffers());
+-    let mut placed = Vec::new();
+-    for (buffer, found) in program.buffers().iter_enumerated() {
+-        let Location::Arena(offset) = found.location else { continue };
+-        let size = found.elements.in_bytes(found.dtype)?;
+-        placed.push(Placed { buffer, offset, size, lifetime: lifetimes[buffer] });
+-    }
+-    Ok(placed)
++    Ok(vec![]) /* ~ changed by cargo-mutants ~ */
+ }

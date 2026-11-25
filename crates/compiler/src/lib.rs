@@ -9,3 +9,4 @@ mod tuning_db;
 
 pub use compilation::{Compilation, Imported, Lowered, Optimized, Partitioned, Scheduled};
 pub use error::CompileError;
+pub use memory_plan::{ArenaError, ArenaUse, arena_use, verify_arena};

@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/lifetime.rs
++++ replace Lifetime::overlaps -> bool with false
+@@ -18,17 +18,17 @@
+ pub(crate) struct Lifetime {
+     first: StepIndex,
+     last: StepIndex,
+ }
+ 
+ impl Lifetime {
+     /// Whether some step is in both `self` and `other`.
+     pub(crate) fn overlaps(self, other: Self) -> bool {
+-        self.first <= other.last && other.first <= self.last
++        false /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// `self` stretched to include `step`, a step after its first.
+     const fn through(self, step: StepIndex) -> Self {
+         Self { first: self.first, last: step }
+     }
+ 
+     /// The steps from `first` to `last`, by position.

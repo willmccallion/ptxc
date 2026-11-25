@@ -638,13 +638,18 @@ TensorRT's engine build, and lets a tuned model be reused.
 Memory planning is part of compilation, as in XLA's BufferAssignment.
 
 - Buffers are the outputs of fused groups that are neither graph inputs nor
-  graph outputs.
-- `lifetime.rs` computes each buffer's live range over the step order.
+  graph outputs, and each group's intermediates.
+- `lifetime.rs` computes each buffer's live range over the step order, from
+  the first step touching it to the last, both included: buffers one step
+  touches are never shared.
+- The lower bound on the arena is the most bytes live at any one step;
+  `arena_use` reports a program's arena against it.
 - A `MemoryPlanner` assigns byte offsets in a single arena so that buffers
   whose live ranges overlap never overlap in memory. Two planners are
   planned: greedy-by-size (TensorFlow Lite's planner) and linear scan.
-- The output is checked by an independent verifier in tests: no two live
-  buffers overlap, and every buffer is aligned.
+- The output is checked by an independent verifier, `verify_arena`, in
+  tests: no two live buffers overlap, and every buffer is aligned and inside
+  the arena.
 
 ### CUDA bindings (`ptxc-cuda`)
 

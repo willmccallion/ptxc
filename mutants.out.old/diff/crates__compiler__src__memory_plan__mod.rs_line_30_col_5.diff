@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/mod.rs
++++ replace verify_arena -> Result<(), ArenaError> with Ok(())
+@@ -22,17 +22,17 @@
+     pub size: ByteSize,
+     /// The most bytes the arena's buffers hold live at any one step.
+     pub lower_bound: ByteSize,
+ }
+ 
+ /// Checks `program`'s arena: no two buffers live at the same step share a
+ /// byte, and each is aligned and inside the arena.
+ pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {
+-    verify(&placed(program)?, program.arena())
++    Ok(()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// `program`'s arena and its lower bound.
+ pub fn arena_use(program: &Program) -> Result<ArenaUse, ArenaError> {
+     let live =
+         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));
+     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;
+     Ok(ArenaUse { size: program.arena(), lower_bound })

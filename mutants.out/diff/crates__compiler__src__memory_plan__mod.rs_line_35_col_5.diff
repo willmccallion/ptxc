@@ -1,0 +1,24 @@
+--- crates/compiler/src/memory_plan/mod.rs
++++ replace arena_use -> Result<ArenaUse, ArenaError> with Ok(Default::default())
+@@ -27,20 +27,17 @@
+ /// Checks `program`'s arena: no two buffers live at the same step share a
+ /// byte, and each is aligned and inside the arena.
+ pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {
+     verify(&placed(program)?, program.arena())
+ }
+ 
+ /// `program`'s arena and its lower bound.
+ pub fn arena_use(program: &Program) -> Result<ArenaUse, ArenaError> {
+-    let live =
+-        placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));
+-    let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;
+-    Ok(ArenaUse { size: program.arena(), lower_bound })
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// `program`'s arena buffers, with their lifetimes over its steps.
+ fn placed(program: &Program) -> Result<Vec<Placed>, ArenaError> {
+     let lifetimes = lifetimes(program.steps(), program.buffers());
+     let mut placed = Vec::new();
+     for (buffer, found) in program.buffers().iter_enumerated() {
+         let Location::Arena(offset) = found.location else { continue };
