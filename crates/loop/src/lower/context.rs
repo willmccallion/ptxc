@@ -440,6 +440,11 @@ impl<'s> Lowerer<'s> {
             .collect()
     }
 
+    /// Whether `stmt` reads any of the kernel's inputs.
+    pub(super) fn reads_input(&self, stmt: &Stmt) -> bool {
+        self.inputs.iter().any(|&buffer| stmt.reads(buffer))
+    }
+
     /// Whether a guard reads a reduction loop.
     pub(super) fn reads_reduction(&self, guard: &Guard) -> bool {
         self.tree

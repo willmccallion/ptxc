@@ -368,12 +368,16 @@ pub enum Stmt {
 ```
 
 `Schedule<Validated>::lower` turns loops bound to grid and block axes into
-those indices and guards into `If`s. A reduction keeps an accumulator per
-spatial point inside its first reduction loop, as TVM's
-`decompose_reduction` does, and an f32 sum of a product accumulates
-through a fused multiply-add (D57). A reduction bound to a thread axis combines the
-threads' partials in shared memory with a halving tree, with barriers only
-where every thread reaches them, as TVM's cross-thread allreduce does.
+those indices and guards into `If`s. A reduction's update that reads only
+staged tiles runs under its reduction loops' guards alone: its tiles hold
+the overhang, and the store's spatial guards discard what it sums there,
+as CUTLASS predicates only a tile's global loads and stores (D76). A
+reduction keeps an accumulator per spatial point inside its first
+reduction loop, as TVM's `decompose_reduction` does, and an f32 sum of a
+product accumulates through a fused multiply-add (D57). A reduction bound
+to a thread axis combines the threads' partials in shared memory with a
+halving tree, with barriers only where every thread reaches them, as
+TVM's cross-thread allreduce does.
 Arg-reductions combine (value, position) pairs by a rule that depends only
 on both, so any loop order or thread split gives the same position. A
 staged input's loop allocates its tile, and each iteration fills it between
@@ -423,7 +427,8 @@ fragment once, then multiplies every pair of tiles. The result is stored
 through a `FragmentEach` that binds the tile's row and column loops, so the
 output's guards and epilogue apply unchanged. Staged tiles hold zeros where
 they overhang their input, so an `mma` there multiplies zeros: copies
-zero-fill, and a tile copied element by element is cleared first.
+zero-fill, and an element copy sets the element first, to zero or the
+load's padding.
 `verify` checks what code generation relies on: variables bound where read,
 buffers used as their scope and access allow, shared and local accesses
 provably in bounds (with `If` conditions narrowing ranges and capping the

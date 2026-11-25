@@ -139,11 +139,12 @@ impl Lowerer<'_> {
     }
 
     /// `tile`'s buffer's element `first` stored from `source`'s, where every
-    /// one of `in_input` holds. A padded load's element is first set to its
-    /// padding, which the load reads outside the input; in a tensorized nest
-    /// any other is first cleared, so an `mma` over a tile overhanging its
-    /// input multiplies zeros there. From an empty input only that is
-    /// stored, as there is nothing to copy.
+    /// one of `in_input` holds, after setting it to what holds outside the
+    /// input: a padded load's padding, or zero, as an asynchronous copy
+    /// fills it. A tile thus holds every element, so an `mma`, or an update
+    /// left unguarded (D76), over a tile overhanging its input reads zeros
+    /// there. From an empty input only that is stored, as there is nothing
+    /// to copy.
     fn element_copy(
         &self,
         tile: &Tile,
@@ -153,9 +154,8 @@ impl Lowerer<'_> {
         let value = ValueExpr::Load { buffer, index: position };
         let copied = Stmt::Store { buffer: tile.buffer, index: first, value };
         let guarded = guarded_by(in_input, copied);
-        let zero = || Scalar::zero(self.compute.inputs()[tile.tensor].dtype);
-        let outside = tile.padding.or_else(|| self.tree.tensorized().map(|_| zero()));
-        let Some(outside) = outside else { return guarded };
+        let outside =
+            tile.padding.unwrap_or_else(|| Scalar::zero(self.compute.inputs()[tile.tensor].dtype));
         let set =
             Stmt::Store { buffer: tile.buffer, index: first, value: ValueExpr::Const(outside) };
         if self.empty_input(tile) { set } else { Stmt::Seq(vec![set, guarded]) }
