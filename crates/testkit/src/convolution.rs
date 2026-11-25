@@ -1,9 +1,10 @@
 //! Square 2-D convolutions as compute definitions, which the loop IR and
 //! schedule tests share.
 //!
-//! They sum `i32`s, exactly in any order, and are built as `ptxc-lower`
-//! builds a convolution: each tap reads the input through a load padded
-//! with zero.
+//! They are built as `ptxc-lower` builds a convolution: each tap reads the
+//! input through a load padded with zero. `conv` sums `i32`s, exactly in
+//! any order; `typed_conv` sums an `mma`'s types, exact on
+//! `tensorized::exact_inputs`.
 //!
 //! NOTE: test code shared as a library. A builder handed a case it cannot
 //! build has a bug, so it panics rather than returning an error (D52).
@@ -14,11 +15,13 @@
     reason = "test builders panic on cases they build wrong (D52)"
 )]
 
+use ptxc_core::float::Overflow;
 use ptxc_core::{DType, Dim, HostTensor, Shape, TensorData};
 use ptxc_loop::{
     BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ExprArena, ExprId, IterVarId, ReduceOp,
     Scalar, TensorExpr, TensorName, TensorParamId, VarName,
 };
+use ptxc_target::MmaInstruction;
 use std::sync::Arc;
 
 /// A square 2-D convolution.
@@ -66,9 +69,31 @@ fn signed(value: u64) -> i64 {
     i64::try_from(value).unwrap()
 }
 
-/// `out = sum over r, s, c of x * w`, `x` zero where a tap reads its
-/// padding, channels laid out as `channels` says.
+/// The element types a convolution reads and sums in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ConvTypes {
+    /// The input's and the weights'.
+    pub operands: DType,
+    /// The sum's, which each product is widened to.
+    pub sum: DType,
+}
+
+impl ConvTypes {
+    /// The types `instruction` multiplies and accumulates.
+    pub const fn of(instruction: MmaInstruction) -> Self {
+        Self { operands: instruction.multiplicands, sum: instruction.accumulator }
+    }
+}
+
+/// `out = sum over r, s, c of x * w` on `i32`, `x` zero where a tap reads
+/// its padding, channels laid out as `channels` says.
 pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
+    typed_conv(geometry, channels, ConvTypes { operands: DType::I32, sum: DType::I32 })
+}
+
+/// As `conv`, reading `types.operands` and summing each product widened
+/// to `types.sum`.
+pub fn typed_conv(geometry: Conv, channels: Channels, types: ConvTypes) -> Arc<ComputeDef> {
     let mut compute = ComputeBuilder::new(ComputeName::new("conv"));
     let Conv { batch, size, channels: depth, features, kernel, groups, .. } = geometry;
     let inputs = groups * depth;
@@ -76,8 +101,8 @@ pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
         Channels::Last => ([batch, size, size, inputs], [features, kernel, kernel, depth]),
         Channels::First => ([batch, inputs, size, size], [features, depth, kernel, kernel]),
     };
-    let image = compute.input(TensorName::new("x"), DType::I32, shape(&x_shape));
-    let filter = compute.input(TensorName::new("w"), DType::I32, shape(&w_shape));
+    let image = compute.input(TensorName::new("x"), types.operands, shape(&x_shape));
+    let filter = compute.input(TensorName::new("w"), types.operands, shape(&w_shape));
     let output = Dim::new(geometry.output());
     let mut spatial = |name: &str, extent: Dim| compute.spatial(VarName::new(name), extent).1;
     let sample = spatial("n", Dim::new(batch));
@@ -107,9 +132,15 @@ pub fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
             vec![feature, channel, tap_row, tap_column],
         ),
     };
-    let padding = Some(Scalar::zero(DType::I32));
+    let padding = Some(Scalar::zero(types.operands));
     let image = TensorExpr::Load { tensor: image, index: x_index, padding };
-    let body = binary(BinaryOp::Mul, image, TensorExpr::load(filter, w_index));
+    let widened = |value: TensorExpr| {
+        if types.operands == types.sum {
+            return value;
+        }
+        TensorExpr::Cast { to: types.sum, overflow: Overflow::Saturate, value: Box::new(value) }
+    };
+    let body = binary(BinaryOp::Mul, widened(image), widened(TensorExpr::load(filter, w_index)));
     let axes = vec![channels_axis, tap_rows, tap_columns];
     let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) };
     compute.output(TensorName::new("out"), sum);

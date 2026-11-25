@@ -7,6 +7,7 @@
 #![cfg(feature = "gpu")]
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+mod convolutions;
 mod device;
 mod families;
 mod fragments;

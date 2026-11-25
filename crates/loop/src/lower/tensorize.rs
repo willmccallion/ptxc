@@ -49,6 +49,23 @@ pub(crate) fn operand_layout(
     }
 }
 
+/// Whether the staged tile of `cache` steps with `var`'s loop: which of a
+/// product's operands holds its rows, even where the rows' axes are all
+/// of extent one, so their indices are constant and the tile's coordinate
+/// alone still steps.
+pub(crate) fn tile_steps_with(
+    compute: &ComputeDef,
+    tree: &LoopTree,
+    (extents, threads): (&[Vec<Dim>], ThreadsPerBlock),
+    cache: CacheId,
+    var: VarId,
+) -> bool {
+    let mut lowerer = Lowerer::new(compute, tree);
+    lowerer.stage(extents, threads);
+    let position = lowerer.tile_position(cache);
+    lowerer.exprs.vars(position).contains(&var)
+}
+
 impl Lowerer<'_> {
     /// The loops computing `product`, a tensorized reduction.
     pub(super) fn tensorized(&mut self, product: &TensorizedProduct) -> Stmt {

@@ -6,7 +6,6 @@
 
 use super::bind;
 use super::matmul_loops::{GemmLoops, bind_blocks, parts, pipeline_step, stage_operands};
-use super::matmul_shape::Product;
 use crate::tiling::{TensorCoreTile, TileShape};
 use ptxc_core::Dim;
 use ptxc_loop::{
@@ -44,20 +43,20 @@ const SMALL: TensorCoreTile = TensorCoreTile {
 /// measures each device.
 const FULL_GRID: u64 = 32;
 
-/// The `mma` of `target` that computes `product` of `compute`: one whose
-/// multiplicands are both operands' type and whose accumulator is the
-/// type the products are summed in.
+/// The `mma` of `target` that computes the product of `operands` that
+/// `compute` sums: one whose multiplicands are both operands' type and
+/// whose accumulator is the type the products are summed in.
 pub(crate) fn instruction(
     compute: &ComputeDef,
-    product: Product,
+    [lhs, rhs]: [TensorParamId; 2],
     target: &Target,
 ) -> Option<MmaInstruction> {
     let [output] = compute.outputs() else { return None };
     let Some(TensorExpr::Reduce { body, .. }) = output.expr.reduction() else { return None };
     let inputs = compute.inputs();
-    let multiplicands = inputs[product.lhs].dtype;
+    let multiplicands = inputs[lhs].dtype;
     let accumulator = compute.dtype_of(body);
-    let same_operands = inputs[product.rhs].dtype == multiplicands;
+    let same_operands = inputs[rhs].dtype == multiplicands;
     let matches = |mma: &&MmaInstruction| {
         mma.multiplicands == multiplicands && mma.accumulator == accumulator
     };
