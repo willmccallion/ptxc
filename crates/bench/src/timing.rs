@@ -3,7 +3,9 @@
 //! 100 samples and 2 s. A sample is a batch of back-to-back launches between
 //! two events on one stream, sized in the warmup to last at least 1 ms, so
 //! the events' resolution and the gaps between launches are a small part
-//! of it; it records the time per launch.
+//! of it; it records the time per launch. The GPU's state is read just
+//! before and just after the series, once the warmup has brought it to the
+//! state the series runs in.
 
 use ptxc_core::Microseconds;
 use ptxc_cuda::{Context, CudaError, Stream};
@@ -43,6 +45,14 @@ pub(crate) struct Series {
     pub(crate) batch: u32,
 }
 
+/// A timed series, and the GPU's state read just before and just after it.
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) struct Timed<S> {
+    pub(crate) series: Series,
+    pub(crate) before: S,
+    pub(crate) after: S,
+}
+
 /// A series' median and spread.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) struct Summary {
@@ -79,12 +89,14 @@ fn percentile(sorted: &[f64], percent: u8) -> Option<Microseconds> {
 }
 
 /// Times `launch`, which queues one iteration's work on `stream`: a warmup
-/// of single launches, then a timed series of batches sized from it.
-pub(crate) fn time<E: From<CudaError>>(
+/// of single launches, then a timed series of batches sized from it, with
+/// the GPU's state `read` just before and just after the series.
+pub(crate) fn time<S, E: From<CudaError>>(
     context: &Context,
     stream: &Stream,
     mut launch: impl FnMut() -> Result<(), E>,
-) -> Result<Series, E> {
+    mut read: impl FnMut() -> Result<S, E>,
+) -> Result<Timed<S>, E> {
     let (start, end) = (context.event()?, context.event()?);
     let mut sample = |batch: u32| -> Result<Microseconds, E> {
         start.record(stream)?;
@@ -97,7 +109,10 @@ pub(crate) fn time<E: From<CudaError>>(
     };
     let warmup = run(Budget::WARMUP, &mut || sample(1))?;
     let batch = batch_size(&Series { samples: warmup, batch: 1 });
-    Ok(Series { samples: run(Budget::TIMED, &mut || sample(batch))?, batch })
+    let before = read()?;
+    let samples = run(Budget::TIMED, &mut || sample(batch))?;
+    let after = read()?;
+    Ok(Timed { series: Series { samples, batch }, before, after })
 }
 
 /// The launches a sample batches to last `SAMPLE_TIME`, from `warmup`'s
@@ -240,9 +255,10 @@ pub(crate) fn exclusive_gpu() -> std::sync::MutexGuard<'static, ()> {
 #[cfg(all(test, feature = "gpu"))]
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod gpu {
-    use super::{exclusive_gpu, time};
+    use super::{Budget, Timed, exclusive_gpu, time};
     use ptxc_core::KernelName;
     use ptxc_cuda::{BlockDim, CudaError, DeviceOrdinal, Driver, GridDim};
+    use std::cell::Cell;
 
     /// Waits until `nanoseconds` of the global timer have passed.
     const WAIT: &str = "
@@ -267,24 +283,36 @@ LOOP:
     /// The wait timed, in microseconds.
     const WAIT_MICROSECONDS: f64 = 50.0;
 
-    #[test]
-    fn a_kernel_waiting_50_microseconds_times_at_about_50() {
-        let _gpu = exclusive_gpu();
+    /// The wait kernel's launches timed, `launched` called at each launch
+    /// and `read` for the GPU's state.
+    fn timed_waits<S>(
+        mut launched: impl FnMut(),
+        read: impl FnMut() -> Result<S, CudaError>,
+    ) -> Timed<S> {
         let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
         let context = device.primary_context();
         let module = context.load_ptx(WAIT).unwrap();
         let function = module.function(&KernelName::new("wait")).unwrap();
         let stream = context.stream().unwrap();
+        let nanoseconds = 50_000_u64;
 
-        let series = time(&context, &stream, || -> Result<(), CudaError> {
+        let launch = || -> Result<(), CudaError> {
+            launched();
             function
                 .launch()
                 .grid(GridDim::new(1, 1, 1))
                 .block(BlockDim::new(1, 1, 1))
-                .arg(50_000_u64)
+                .arg(nanoseconds)
                 .launch(&stream)
-        })
-        .unwrap();
+        };
+        time(&context, &stream, launch, read).unwrap()
+    }
+
+    #[test]
+    fn a_kernel_waiting_50_microseconds_times_at_about_50() {
+        let _gpu = exclusive_gpu();
+
+        let series = timed_waits(|| {}, || Ok(())).series;
 
         let summary = series.summary().unwrap();
         assert!(series.samples.len() >= 100, "{}", series.samples.len());
@@ -292,5 +320,19 @@ LOOP:
         assert!(summary.p10.get() >= WAIT_MICROSECONDS, "{summary:?}");
         assert!(summary.median.get() < 2.0 * WAIT_MICROSECONDS, "{summary:?}");
         assert!(summary.p10 <= summary.median && summary.median <= summary.p90, "{summary:?}");
+    }
+
+    #[test]
+    fn the_gpu_is_read_after_the_warmup_just_before_and_just_after_the_series() {
+        let _gpu = exclusive_gpu();
+        let launches = Cell::new(0_usize);
+
+        let timed = timed_waits(|| launches.set(launches.get() + 1), || Ok(launches.get()));
+
+        let series = &timed.series;
+        let timed_launches = series.samples.len() * usize::try_from(series.batch).unwrap();
+        assert!(timed.before >= Budget::WARMUP.iterations, "{}", timed.before);
+        assert_eq!(timed.after - timed.before, timed_launches);
+        assert_eq!(timed.after, launches.get());
     }
 }

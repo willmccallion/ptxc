@@ -18,7 +18,8 @@ pub(crate) struct Timing<'a> {
 
 impl Timing<'_> {
     /// The case `id` with `params`, verified, its series timed with
-    /// `enqueue` between readings of the GPU's state.
+    /// `enqueue` between readings of the GPU's state taken after its
+    /// warmup.
     pub(crate) fn case<P, E>(
         self,
         (id, params): (String, P),
@@ -27,10 +28,9 @@ impl Timing<'_> {
     where
         E: From<CudaError> + From<ClockError> + From<ResultsError>,
     {
-        let before = GpuState::read()?;
-        let series = time(self.context, self.stream, &mut enqueue)?;
-        let after = GpuState::read()?;
-        Ok(Case::new(id, params, true, (before, after), &series)?)
+        let read = || GpuState::read().map_err(E::from);
+        let timed = time(self.context, self.stream, &mut enqueue, read)?;
+        Ok(Case::new(id, params, true, (timed.before, timed.after), &timed.series)?)
     }
 }
 
