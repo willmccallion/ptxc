@@ -1,6 +1,7 @@
 //! Selects instructions for index and value expressions.
 
 use super::known::IndexOp;
+use super::position::constant_factor;
 use super::values::{Held, Narrow, narrow, widen};
 use super::{CodegenError, Selector};
 use crate::ast::{
@@ -75,9 +76,9 @@ impl Selector<'_> {
         Ok(match self.kernel.exprs().get(id) {
             Expr::Var(var) => *self.vars.get(&var).ok_or(CodegenError::Unbound)?,
             Expr::Const(value) => self.builder.mov(PtxType::S64, Value::<B64>::int(value)),
-            Expr::Add(a, b) => {
-                let (a, b) = pair(self, a, b)?;
-                self.index_op(BinaryOp::Add, signed, a, b)
+            Expr::Add(..) => self.linear_index(id)?,
+            Expr::Mul(a, b) if constant_factor(self.kernel.exprs(), a, b).is_some() => {
+                self.linear_index(id)?
             }
             Expr::Mul(a, b) => {
                 let (a, b) = pair(self, a, b)?;
