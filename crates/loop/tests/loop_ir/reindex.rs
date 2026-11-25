@@ -2,156 +2,20 @@
 //! input and weights staged as the matrices of an implicit GEMM, which
 //! never changes a result, and the reindexes a schedule rejects.
 
-use crate::compute_build::{binary, load, shape};
+use crate::compute_build::{load, shape};
 use crate::interp::{ints, run_default, target, tensor};
 use crate::lower::lower;
 use crate::schedule_support::open;
 use proptest::prelude::*;
-use ptxc_core::{DType, Dim, HostTensor, Idx};
+use ptxc_core::{DType, Dim, Idx};
 use ptxc_loop::{
-    BinaryOp, ComputeBuilder, ComputeDef, ComputeName, ExprArena, ExprId, IterVarId, LoopId, Open,
-    Primitive, ReduceOp, Scalar, Schedule, ScheduleError, SplitFactor, StageCount, TensorExpr,
-    TensorName, TensorParamId, ThreadAxis, VarName, print_kernel, print_schedule, run,
+    ComputeBuilder, ComputeDef, ComputeName, IterVarId, LoopId, Open, Primitive, ReduceOp,
+    Schedule, ScheduleError, SplitFactor, StageCount, TensorExpr, TensorName, TensorParamId,
+    ThreadAxis, VarName, print_kernel, print_schedule, run,
 };
+use ptxc_testkit::convolution::{Channels, Conv, axes, axis, conv, conv_inputs, w, x};
 use ptxc_testkit::golden;
 use std::sync::Arc;
-
-/// A square 2-D convolution: its batch, input size and channels, output
-/// channels, kernel size, stride, dilation and padding on every side.
-#[derive(Clone, Copy, Debug)]
-struct Conv {
-    batch: u64,
-    size: u64,
-    channels: u64,
-    features: u64,
-    kernel: u64,
-    stride: u64,
-    dilation: u64,
-    pad: u64,
-}
-
-/// Where a convolution's channels lie in its input and weights.
-#[derive(Clone, Copy, Debug)]
-enum Channels {
-    /// Innermost: `x[n, h, w, c]` and `w[m, r, s, c]`.
-    Last,
-    /// After the batch or output channel: `x[n, c, h, w]` and
-    /// `w[m, c, r, s]`.
-    First,
-}
-
-impl Conv {
-    /// The output size, at least one where the padded input holds a window.
-    const fn output(self) -> u64 {
-        let span = self.dilation * (self.kernel - 1) + 1;
-        (self.size + 2 * self.pad - span) / self.stride + 1
-    }
-
-    fn signed(value: u64) -> i64 {
-        i64::try_from(value).unwrap()
-    }
-}
-
-/// The axes of `conv`: `n`, `p`, `q`, `m` spatial, `r`, `s`, `c` summed.
-const N: usize = 0;
-const P: usize = 1;
-const Q: usize = 2;
-const M: usize = 3;
-const R: usize = 4;
-const S: usize = 5;
-const C: usize = 6;
-
-fn axes(ids: &[usize]) -> Vec<IterVarId> {
-    ids.iter().map(|&id| IterVarId::new(id)).collect()
-}
-
-fn x() -> TensorParamId {
-    TensorParamId::new(0)
-}
-
-fn w() -> TensorParamId {
-    TensorParamId::new(1)
-}
-
-/// Where tap `tap` of output `out` reads along one spatial axis, clamped
-/// into the input, and whether it reads the input rather than padding,
-/// as `ptxc-lower` builds a convolution's windows.
-fn tap(
-    exprs: &mut ExprArena,
-    geometry: Conv,
-    (out, tap): (ExprId, ExprId),
-) -> (ExprId, TensorExpr) {
-    let [stride, dilation] =
-        [geometry.stride, geometry.dilation].map(|value| exprs.constant(Conv::signed(value)));
-    let start = exprs.mul(out, stride);
-    let offset = exprs.mul(tap, dilation);
-    let padded = exprs.add(start, offset);
-    let minus_pad = exprs.constant(-Conv::signed(geometry.pad));
-    let position = exprs.add(padded, minus_pad);
-    let (zero, last) = (exprs.constant(0), exprs.constant(Conv::signed(geometry.size) - 1));
-    let above = exprs.max(position, zero);
-    let clamped = exprs.min(above, last);
-    let at = || TensorExpr::Index { index: position, dtype: DType::I64 };
-    let bound = |value: u64| TensorExpr::Const(Scalar::i64(Conv::signed(value)));
-    let after_start = binary(BinaryOp::GreaterOrEqual, at(), bound(0));
-    let before_end = binary(BinaryOp::Less, at(), bound(geometry.size));
-    (clamped, binary(BinaryOp::And, after_start, before_end))
-}
-
-/// `out[n, p, q, m] = sum over r, s, c of x * w` on `i32`, each tap
-/// masked to zero where it reads padding.
-fn conv(geometry: Conv, channels: Channels) -> Arc<ComputeDef> {
-    let mut compute = ComputeBuilder::new(ComputeName::new("conv"));
-    let Conv { batch, size, channels: depth, features, kernel, .. } = geometry;
-    let (x_shape, w_shape) = match channels {
-        Channels::Last => ([batch, size, size, depth], [features, kernel, kernel, depth]),
-        Channels::First => ([batch, depth, size, size], [features, depth, kernel, kernel]),
-    };
-    let image = compute.input(TensorName::new("x"), DType::I32, shape(&x_shape));
-    let filter = compute.input(TensorName::new("w"), DType::I32, shape(&w_shape));
-    let output = Dim::new(geometry.output());
-    let (_, sample) = compute.spatial(VarName::new("n"), Dim::new(batch));
-    let (_, row) = compute.spatial(VarName::new("p"), output);
-    let (_, column) = compute.spatial(VarName::new("q"), output);
-    let (_, feature) = compute.spatial(VarName::new("m"), Dim::new(features));
-    let (tap_rows, tap_row) = compute.reduce_axis(VarName::new("r"), Dim::new(kernel));
-    let (tap_columns, tap_column) = compute.reduce_axis(VarName::new("s"), Dim::new(kernel));
-    let (channels_axis, channel) = compute.reduce_axis(VarName::new("c"), Dim::new(depth));
-    let (row_read, row_inside) = tap(compute.exprs(), geometry, (row, tap_row));
-    let (column_read, column_inside) = tap(compute.exprs(), geometry, (column, tap_column));
-    let (x_index, w_index) = match channels {
-        Channels::Last => {
-            ([sample, row_read, column_read, channel], [feature, tap_row, tap_column, channel])
-        }
-        Channels::First => {
-            ([sample, channel, row_read, column_read], [feature, channel, tap_row, tap_column])
-        }
-    };
-    let product = binary(BinaryOp::Mul, load(image, &x_index), load(filter, &w_index));
-    let inside = binary(BinaryOp::And, row_inside, column_inside);
-    let zero = TensorExpr::Const(Scalar::zero(DType::I32));
-    let body = TensorExpr::Select {
-        condition: Box::new(inside),
-        then: Box::new(product),
-        otherwise: Box::new(zero),
-    };
-    let axes = vec![tap_rows, tap_columns, channels_axis];
-    let sum = TensorExpr::Reduce { op: ReduceOp::Sum, axes, body: Box::new(body) };
-    compute.output(TensorName::new("out"), sum);
-    Arc::new(compute.finish().unwrap())
-}
-
-/// Inputs of `conv` counting up from distinct starts, so a read of the
-/// wrong element shows.
-fn inputs(compute: &ComputeDef) -> Vec<HostTensor> {
-    let tensors = compute.inputs();
-    let values = |param: TensorParamId, start: i32| {
-        let dims: Vec<u64> = tensors[param].shape.dims().iter().map(|dim| dim.get()).collect();
-        let count = i32::try_from(dims.iter().product::<u64>()).unwrap();
-        tensor(&dims, (0..count).map(|value| start + value % 23).collect::<Vec<i32>>())
-    };
-    vec![values(x(), 1), values(w(), -9)]
-}
 
 /// A tiling of `conv`'s implicit GEMM: `rows` by `columns` threads, each
 /// computing one output, over output positions `n·p·q` by channels `m`,
@@ -163,35 +27,50 @@ struct Tiling {
     depth: u64,
 }
 
+/// The output positions, all rows of the GEMM.
+const POSITIONS: [&str; 3] = ["n", "p", "q"];
+
+/// The taps and input channels, the GEMM's depth, input channels
+/// innermost.
+const TAPS: [&str; 3] = ["r", "s", "c"];
+
 /// `conv`'s nest as an implicit GEMM, its step loop returned: both
 /// operands reindexed as the GEMM's matrices, the input as output
 /// positions by taps and the weights as channels by taps, then tiled by
 /// `tiling` with every output position a row.
 fn implicit_gemm(compute: &Arc<ComputeDef>, tiling: Tiling) -> (Schedule<Open>, LoopId) {
-    let (mut schedule, nest) = open(compute);
-    let input = vec![axes(&[N, P, Q]), axes(&[R, S, C])];
+    let (mut schedule, _) = open(compute);
+    let input = vec![axes(compute, &POSITIONS), axes(compute, &TAPS)];
     schedule.apply(Primitive::Reindex { tensor: x(), groups: input }).unwrap();
-    let weights = vec![axes(&[M]), axes(&[R, S, C])];
+    let weights = vec![axes(compute, &["m"]), axes(compute, &TAPS)];
     schedule.apply(Primitive::Reindex { tensor: w(), groups: weights }).unwrap();
-    let step = gemm_loops(&mut schedule, &nest, (tiling, &[N, P, Q]));
+    let step = gemm_loops(&mut schedule, (tiling, &POSITIONS));
     (schedule, step)
 }
 
-/// `conv`'s default nest `nest` tiled as an implicit GEMM by `tiling`, its
-/// step loop returned: the axes of `rows` fused and split onto
-/// `blockIdx.y` and `threadIdx.y`, any other output position axis on
+/// `conv`'s default nest tiled as an implicit GEMM by `tiling`, its step
+/// loop returned: the output positions `rows` fused and split onto
+/// `blockIdx.y` and `threadIdx.y`, any other output position on
 /// `blockIdx.z`, channels split onto `blockIdx.x` and `threadIdx.x`, and
 /// taps and input channels fused and split into steps.
-fn gemm_loops(
-    schedule: &mut Schedule<Open>,
-    nest: &[LoopId],
-    (tiling, rows): (Tiling, &[usize]),
-) -> LoopId {
+fn gemm_loops(schedule: &mut Schedule<Open>, (tiling, rows): (Tiling, &[&str])) -> LoopId {
+    let own = |schedule: &Schedule<Open>, name: &str| {
+        schedule.loops().loop_of(axis(schedule.compute(), name)).unwrap()
+    };
+    let owns = |schedule: &Schedule<Open>, names: &[&str]| -> Vec<LoopId> {
+        names.iter().map(|name| own(schedule, name)).collect()
+    };
+    let batch: Vec<&str> = POSITIONS.into_iter().filter(|name| !rows.contains(name)).collect();
+    let (batch, row_loops, column) =
+        (owns(schedule, &batch), owns(schedule, rows), own(schedule, "m"));
+    let taps = owns(schedule, &TAPS);
+    let order = [&batch[..], &row_loops, &[column], &taps].concat();
+    schedule.apply(Primitive::Reorder { order }).unwrap();
     let by = |factor| vec![SplitFactor::new(factor).unwrap()];
-    let positions = schedule.fuse(rows.iter().map(|&axis| nest[axis]).collect()).unwrap();
-    let taps = schedule.fuse(vec![nest[R], nest[S], nest[C]]).unwrap();
+    let positions = schedule.fuse(row_loops).unwrap();
+    let taps = schedule.fuse(taps).unwrap();
     let row_parts = schedule.split(positions, by(tiling.rows)).unwrap();
-    let columns = schedule.split(nest[M], by(tiling.columns)).unwrap();
+    let columns = schedule.split(column, by(tiling.columns)).unwrap();
     let steps = schedule.split(taps, by(tiling.depth)).unwrap();
     let order = vec![row_parts[0], columns[0], row_parts[1], columns[1], steps[0], steps[1]];
     schedule.apply(Primitive::Reorder { order }).unwrap();
@@ -201,8 +80,7 @@ fn gemm_loops(
         (row_parts[1], ThreadAxis::ThreadY),
         (columns[1], ThreadAxis::ThreadX),
     ];
-    let batch = [N, P, Q].into_iter().find(|axis| !rows.contains(axis));
-    binds.extend(batch.map(|axis| (nest[axis], ThreadAxis::BlockZ)));
+    binds.extend(batch.into_iter().map(|loop_| (loop_, ThreadAxis::BlockZ)));
     for (loop_, axis) in binds {
         schedule.apply(Primitive::Bind { loop_, axis }).unwrap();
     }
@@ -217,14 +95,23 @@ fn stage_matrices(schedule: &mut Schedule<Open>, step: LoopId) {
 }
 
 fn agrees_with_default(compute: &Arc<ComputeDef>, schedule: Schedule<Open>) {
-    let inputs = inputs(compute);
+    let inputs = conv_inputs(compute);
     let expected = run_default(compute, &inputs).unwrap();
     let actual = run(&lower(schedule), &inputs).unwrap();
     assert_eq!(ints(&actual[0]), ints(&expected[0]));
 }
 
-const PADDED: Conv =
-    Conv { batch: 2, size: 4, channels: 4, features: 4, kernel: 3, stride: 1, dilation: 1, pad: 1 };
+const PADDED: Conv = Conv {
+    batch: 2,
+    size: 4,
+    channels: 4,
+    features: 4,
+    kernel: 3,
+    stride: 1,
+    dilation: 1,
+    pad: 1,
+    groups: 1,
+};
 
 const SQUARE: Tiling = Tiling { rows: 4, columns: 4, depth: 4 };
 
@@ -267,6 +154,7 @@ fn a_pipelined_strided_dilated_convolution_agrees() {
         stride: 2,
         dilation: 2,
         pad: 2,
+        groups: 1,
     };
     for channels in [Channels::Last, Channels::First] {
         let compute = conv(shape, channels);
@@ -299,7 +187,7 @@ fn a_reindexed_schedule_prints_its_coordinates_and_replays_them() {
 fn a_reindex_needs_a_known_input_once() {
     let compute = conv(PADDED, Channels::Last);
     let (mut schedule, _) = open(&compute);
-    let groups = vec![axes(&[N, P, Q]), axes(&[R, S, C])];
+    let groups = vec![axes(&compute, &POSITIONS), axes(&compute, &TAPS)];
     let reindex = |tensor| Primitive::Reindex { tensor, groups: groups.clone() };
 
     let unknown = schedule.apply(reindex(TensorParamId::new(5)));
@@ -335,12 +223,13 @@ fn groups_are_nonempty_and_of_distinct_nonempty_axes() {
         schedule.apply(Primitive::Reindex { tensor: x(), groups })
     };
 
+    let [n, p] = [axis(&compute, "n"), axis(&compute, "p")];
     let cases = [
         rejected(&compute, Vec::new()),
-        rejected(&compute, vec![axes(&[N]), Vec::new()]),
-        rejected(&compute, vec![axes(&[N, P]), axes(&[P])]),
-        rejected(&compute, vec![axes(&[N, 7])]),
-        rejected(&empty_axis, vec![axes(&[0])]),
+        rejected(&compute, vec![vec![n], Vec::new()]),
+        rejected(&compute, vec![vec![n, p], vec![p]]),
+        rejected(&compute, vec![vec![n, IterVarId::new(7)]]),
+        rejected(&empty_axis, vec![vec![IterVarId::new(0)]]),
     ];
 
     let bad = || Err(ScheduleError::ReindexAxes(TensorName::new("x")));
@@ -350,10 +239,10 @@ fn groups_are_nonempty_and_of_distinct_nonempty_axes() {
 #[test]
 fn a_tile_missing_an_axis_that_varies_across_it_is_rejected() {
     let compute = conv(PADDED, Channels::Last);
-    let (mut schedule, nest) = open(&compute);
-    let groups = vec![axes(&[N, P, Q]), axes(&[R, S])];
+    let (mut schedule, _) = open(&compute);
+    let groups = vec![axes(&compute, &POSITIONS), axes(&compute, &["r", "s"])];
     schedule.apply(Primitive::Reindex { tensor: x(), groups }).unwrap();
-    let step = gemm_loops(&mut schedule, &nest, (SQUARE, &[N, P, Q]));
+    let step = gemm_loops(&mut schedule, (SQUARE, &POSITIONS));
     schedule.apply(Primitive::CacheRead { tensor: x(), at: step }).unwrap();
 
     let validated = schedule.validate(&target());
@@ -367,10 +256,10 @@ fn a_tile_missing_an_axis_that_varies_across_it_is_rejected() {
 fn an_axis_fixed_across_the_tile_needs_no_coordinate() {
     // Each image on its own block: the batch is fixed across a tile.
     let compute = conv(PADDED, Channels::Last);
-    let (mut schedule, nest) = open(&compute);
-    let groups = vec![axes(&[P, Q]), axes(&[R, S, C])];
+    let (mut schedule, _) = open(&compute);
+    let groups = vec![axes(&compute, &["p", "q"]), axes(&compute, &TAPS)];
     schedule.apply(Primitive::Reindex { tensor: x(), groups }).unwrap();
-    let step = gemm_loops(&mut schedule, &nest, (SQUARE, &[P, Q]));
+    let step = gemm_loops(&mut schedule, (SQUARE, &["p", "q"]));
     schedule.apply(Primitive::CacheRead { tensor: x(), at: step }).unwrap();
 
     agrees_with_default(&compute, schedule);
@@ -392,7 +281,7 @@ fn a_run_stops_at_its_axis_where_the_input_row_runs_on() {
     let compute = Arc::new(compute.finish().unwrap());
     let (mut schedule, nest) = open(&compute);
     let staged = TensorParamId::new(0);
-    let groups = vec![axes(&[0]), axes(&[1, 2])];
+    let groups = vec![axes(&compute, &["i"]), axes(&compute, &["r", "k"])];
     schedule.apply(Primitive::Reindex { tensor: staged, groups }).unwrap();
     let taps = schedule.fuse(vec![nest[1], nest[2]]).unwrap();
     let steps = schedule.split(taps, vec![SplitFactor::new(4).unwrap()]).unwrap();
@@ -412,7 +301,8 @@ fn conv_shape() -> impl Strategy<Value = Conv> {
     (1_u64..=2, 1_u64..=6, 1_u64..=6, 1_u64..=5, 1_u64..=3, 1_u64..=2, 1_u64..=2, 0_u64..=2)
         .prop_filter_map("a window the padded input holds", |shape| {
             let (batch, size, channels, features, kernel, stride, dilation, pad) = shape;
-            let geometry = Conv { batch, size, channels, features, kernel, stride, dilation, pad };
+            let geometry =
+                Conv { batch, size, channels, features, kernel, stride, dilation, pad, groups: 1 };
             (size + 2 * pad > dilation * (kernel - 1)).then_some(geometry)
         })
 }
