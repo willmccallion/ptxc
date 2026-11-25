@@ -56,7 +56,7 @@ pub(crate) fn product(compute: &ComputeDef) -> Option<Product> {
 }
 
 /// `expr` without the casts around it.
-fn uncast(expr: &TensorExpr) -> &TensorExpr {
+pub(crate) fn uncast(expr: &TensorExpr) -> &TensorExpr {
     match expr {
         TensorExpr::Cast { value, .. } => uncast(value),
         other => other,
@@ -82,7 +82,7 @@ fn load_axes(compute: &ComputeDef, expr: &TensorExpr) -> Option<(TensorParamId, 
 }
 
 /// How many loads of `tensor` `expr` holds.
-fn loads(expr: &TensorExpr, tensor: TensorParamId) -> usize {
+pub(crate) fn loads(expr: &TensorExpr, tensor: TensorParamId) -> usize {
     match expr {
         TensorExpr::Load { tensor: read, .. } => usize::from(*read == tensor),
         TensorExpr::Const(_) | TensorExpr::Index { .. } => 0,

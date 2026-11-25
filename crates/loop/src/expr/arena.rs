@@ -34,7 +34,7 @@ impl ExprArena {
     }
 
     /// The variables `id` reads, each once, in first-read order.
-    pub(crate) fn vars(&self, id: ExprId) -> Vec<VarId> {
+    pub fn vars(&self, id: ExprId) -> Vec<VarId> {
         let mut found = Vec::new();
         let mut pending = vec![id];
         while let Some(next) = pending.pop() {

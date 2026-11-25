@@ -1,6 +1,6 @@
 //! The schedule rules, one per kernel family.
 
-mod conv_implicit_gemm;
+pub(crate) mod conv_implicit_gemm;
 pub(crate) mod elementwise;
 pub(crate) mod matmul_loops;
 pub(crate) mod matmul_mma;

@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+mod conv;
 mod matmul;
 mod matmul_mma;
 
