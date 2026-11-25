@@ -1,5 +1,5 @@
 //! Each framework's GEMM, run once to be checked and then timed: ptxc's
-//! program, compiled as an ONNX `Gemm`; cuBLAS's default; and each of
+//! program, compiled from an ONNX graph; cuBLAS's default; and each of
 //! cuBLASLt's top algorithms.
 
 use super::SweepError;
@@ -7,35 +7,81 @@ use super::data::Inputs;
 use crate::cublas::{Candidate, Handle, LtHandle, Plan, gemm, lt};
 use crate::problem::{GemmProblem, GemmType, Layout};
 use ptxc_compiler::Compilation;
-use ptxc_core::{ByteSize, HostTensor};
+use ptxc_core::{
+    Affine, Axis, ByteSize, DType, Granularity, HostTensor, QuantDType, QuantParams, Scale,
+    ZeroPoint,
+};
 use ptxc_cuda::{Device, DeviceBuffer, Stream};
-use ptxc_graph::F32Attr;
 use ptxc_graph::{
-    GemmAttrs, Graph, GraphBuilder, Layout as ValueLayout, Op, Orientation, TensorType, ValueName,
+    F32Attr, GemmAttrs, Graph, GraphBuilder, Layout as ValueLayout, MatMulIntegerAttrs, Op,
+    Orientation, QMatMulAttrs, QMatMulOutput, TensorType, TransposeAttrs, ValueName, ZeroPoints,
 };
 use ptxc_runtime::{Eager, Executor, load};
 use ptxc_target::{SmVersion, preset};
 
-/// ptxc's program for `problem`, or `None` for types its `Gemm` does not
-/// take as the sweep defines them: E4M3 to f32 and int8 to i32 come with
-/// the quantized matmul of #107.
+/// ptxc's program for `problem`, compiled from `graph`.
 pub(super) fn ptxc(
     problem: GemmProblem,
     device: &Device,
     inputs: &Inputs,
-) -> Result<Option<Executor<Eager>>, SweepError> {
-    if matches!(problem.dtype, GemmType::E4m3 | GemmType::I8) {
-        return Ok(None);
-    }
-    let graph = gemm_graph(problem.layout, inputs)?;
+) -> Result<Executor<Eager>, SweepError> {
     let target = preset(SmVersion::SM_89)?;
-    let program = Compilation::from_graph(graph, target)
+    let program = Compilation::from_graph(graph(problem, inputs)?, target)
         .optimize()?
         .partition()?
         .lower()?
         .schedule()?
         .emit()?;
-    Ok(Some(Executor::eager(load(program, device)?)))
+    Ok(Executor::eager(load(program, device)?))
+}
+
+/// The ONNX graph ptxc compiles for `problem`: a `Gemm` for the float
+/// types, a `MatMulInteger` for int8 to i32, and an FP8 quantized matmul
+/// with unit scales and an f32 result for E4M3 (D72).
+pub(super) fn graph(problem: GemmProblem, inputs: &Inputs) -> Result<Graph, SweepError> {
+    match problem.dtype {
+        GemmType::E4m3 => quantized_graph(problem.layout, inputs, Op::QMatMul(unit_fp8()?)),
+        GemmType::I8 => {
+            let zero = ZeroPoints::PerTensor(ZeroPoint::new(0));
+            let attrs = MatMulIntegerAttrs { a: zero.clone(), b: zero };
+            quantized_graph(problem.layout, inputs, Op::MatMulInteger(attrs))
+        }
+        GemmType::F32 | GemmType::F16 | GemmType::Bf16 => gemm_graph(problem.layout, inputs),
+    }
+}
+
+/// A product of E4M3 operands of scale 1, dequantized to f32: their plain
+/// product, as the sweep defines it.
+fn unit_fp8() -> Result<QMatMulAttrs, SweepError> {
+    let map = Affine { scale: Scale::new(1.0), zero_point: ZeroPoint::new(0) };
+    let unit = QuantParams::new(QuantDType::F8E4M3Fn, Granularity::PerTensor(map))?;
+    Ok(QMatMulAttrs { a: unit.clone(), b: unit, output: QMatMulOutput::Float(DType::F32) })
+}
+
+/// `y0 = product(x0, x1)`, `product` a quantized matmul, which takes no
+/// transposes: an input stored transposed is transposed back by a
+/// `Transpose` node, a kernel of its own until fusion (M4) folds it into
+/// the product's reads.
+fn quantized_graph(layout: Layout, inputs: &Inputs, product: Op) -> Result<Graph, SweepError> {
+    let mut builder = GraphBuilder::new();
+    let mut operand = |name: &str, tensor: &HostTensor, transposed: bool| {
+        let ty = TensorType::new(tensor.dtype(), tensor.shape().clone(), ValueLayout::RowMajor);
+        let value = builder.add_input(ty);
+        builder.set_name(value, ValueName::new(name.to_owned()));
+        if !transposed {
+            return Ok(value);
+        }
+        let swap = TransposeAttrs { permutation: vec![Axis::new(1), Axis::new(0)] };
+        let outputs = builder.add_node(Op::Transpose(swap), vec![value])?;
+        outputs.first().copied().ok_or(SweepError::NoOutput)
+    };
+    let a = operand("x0", &inputs.a, layout.a_transposed())?;
+    let b = operand("x1", &inputs.b, layout.b_transposed())?;
+    let outputs = builder.add_node(product, vec![a, b])?;
+    for &output in &outputs {
+        builder.set_name(output, ValueName::new("y0".to_owned()));
+    }
+    Ok(builder.finish(outputs)?)
 }
 
 /// `y0 = Gemm(x0, x1)`, each input transposed as `layout` stores it.

@@ -46,6 +46,37 @@ fn no_cases_have_no_fastest() {
     assert_eq!(fastest(Vec::new()), None);
 }
 
+#[test]
+fn each_type_compiles_its_own_product_transposing_what_its_layout_stores_transposed() {
+    use super::data::Inputs;
+    use super::frameworks::graph;
+    use super::problems::id;
+    use ptxc_core::DType;
+    use ptxc_graph::Op;
+
+    let built = |name: &str| {
+        let problem = problems().into_iter().find(|&problem| id(problem) == name).unwrap();
+        let graph = graph(problem, &Inputs::new(problem).unwrap()).unwrap();
+        let ops: Vec<&'static str> = graph
+            .nodes()
+            .map(|(_, node)| match node.op() {
+                Op::Transpose(_) => "transpose",
+                Op::QMatMul(_) => "qmatmul",
+                Op::MatMulInteger(_) => "matmul_integer",
+                Op::Gemm(_) => "gemm",
+                _ => "other",
+            })
+            .collect();
+        let output = graph.value(*graph.outputs().iter().next().unwrap()).ty().dtype();
+        (ops, output)
+    };
+
+    assert_eq!(built("gemm/e4m3/NN/256x256x256"), (vec!["qmatmul"], DType::F32));
+    assert_eq!(built("gemm/e4m3/NT/256x256x256"), (vec!["transpose", "qmatmul"], DType::F32));
+    assert_eq!(built("gemm/i8/TN/256x256x256"), (vec!["transpose", "matmul_integer"], DType::I32));
+    assert_eq!(built("gemm/f16/NT/256x256x256"), (vec!["gemm"], DType::F16));
+}
+
 #[cfg(feature = "gpu")]
 mod gpu {
     use crate::cublas::{Handle, lt};
@@ -83,6 +114,31 @@ mod gpu {
             assert_eq!(cases[0]["id"], "gemm/f32/NN/256x256x256");
             assert_eq!(cases[0]["verified"], true);
             assert!(cases[0]["median_us"].as_f64().unwrap() > 0.0);
+        }
+    }
+
+    #[test]
+    fn ptxcs_e4m3_and_int8_rows_pass_their_checks_in_every_layout() {
+        use crate::suites::gemm::data::check;
+        use crate::suites::gemm::frameworks::ptxc;
+
+        let _gpu = crate::timing::exclusive_gpu();
+        let device = Driver::load().unwrap().device(DeviceOrdinal::new(0)).unwrap();
+        let stream = device.primary_context().stream().unwrap();
+        let quantized = problems().into_iter().filter(|&problem| {
+            let name = id(problem);
+            (name.contains("/e4m3/") || name.contains("/i8/")) && name.ends_with("/256x256x256")
+        });
+
+        for problem in quantized {
+            let inputs = Inputs::new(problem).unwrap();
+            let executor = ptxc(problem, &device, &inputs).unwrap();
+            let bound = executor.bind(&[inputs.a.clone(), inputs.b.clone()]).unwrap();
+            bound.enqueue(&stream).unwrap();
+            stream.synchronize().unwrap();
+            let outputs = bound.outputs().unwrap();
+
+            assert_eq!(check(problem, outputs[0].data()), Ok(()), "{}", id(problem));
         }
     }
 

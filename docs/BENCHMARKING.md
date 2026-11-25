@@ -118,9 +118,14 @@ passed 152 W or 69 °C. With the SM clock locked, the memory clock reads
   `gemm-cublas.json` (the default heuristic: `GemmEx`, or cuBLASLt's first
   algorithm for E4M3 and int8) and `gemm-cublas-best-of-8.json`. A cuBLAS
   file records cuBLAS's version; its `commit` is the harness's.
-- ptxc compiles each problem as an ONNX `Gemm`, with A and B transposed as
-  the layout stores them. Its E4M3 and int8 rows wait for the quantized
-  matmul (#107).
+- ptxc compiles each problem from an ONNX graph: a `Gemm` with A and B
+  transposed as the layout stores them for the float types; a
+  `MatMulInteger` for int8 to i32; and, for E4M3, the quantized matmul
+  with unit scales and an f32 result that `DequantizeLinear` feeding
+  `MatMul` folds into (D72). Neither quantized product takes a transpose,
+  so a transposed A or B is a `Transpose` node before it, which runs as a
+  kernel of its own, and is timed with the product, until fusion (M4)
+  folds it into the product's reads (#176).
 
 ### Convolution (`ptxc-bench conv`, M3)
 

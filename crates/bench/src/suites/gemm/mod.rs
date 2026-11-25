@@ -48,6 +48,8 @@ pub(crate) enum SweepError {
     Tensor(#[from] ptxc_core::TensorError),
     #[error(transparent)]
     Bytes(#[from] ptxc_core::BytesError),
+    #[error(transparent)]
+    Quant(#[from] ptxc_core::QuantError),
     #[error("a problem is too large for this host")]
     TooLarge,
     #[error("ptxc's GEMM program has no output")]
@@ -108,16 +110,15 @@ fn run_problem(
     let context = device.primary_context();
     let on = Timing { context: &context, stream };
     let inputs = Inputs::new(problem)?;
-    if let Some(executor) = frameworks::ptxc(problem, device, &inputs)? {
-        let bound = executor.bind(&[inputs.a.clone(), inputs.b.clone()])?;
-        bound.enqueue(stream)?;
-        stream.synchronize()?;
-        let output = bound.outputs()?;
-        let data = output.first().ok_or(SweepError::NoOutput)?.data();
-        let enqueue = || Ok(bound.enqueue(stream)?);
-        if let Some(case) = on.timed((problem, None), check(problem, data), collected, enqueue)? {
-            collected.ptxc.push(case);
-        }
+    let executor = frameworks::ptxc(problem, device, &inputs)?;
+    let bound = executor.bind(&[inputs.a.clone(), inputs.b.clone()])?;
+    bound.enqueue(stream)?;
+    stream.synchronize()?;
+    let output = bound.outputs()?;
+    let data = output.first().ok_or(SweepError::NoOutput)?.data();
+    let enqueue = || Ok(bound.enqueue(stream)?);
+    if let Some(case) = on.timed((problem, None), check(problem, data), collected, enqueue)? {
+        collected.ptxc.push(case);
     }
     let mut operands = Operands::new(device, problem, &inputs)?;
     let workspace = context.alloc(lt::MAX_WORKSPACE)?;
