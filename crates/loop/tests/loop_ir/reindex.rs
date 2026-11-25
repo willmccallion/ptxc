@@ -297,6 +297,27 @@ fn a_run_stops_at_its_axis_where_the_input_row_runs_on() {
     assert_eq!(ints(&run(&lower(schedule), &inputs).unwrap()[0]), ints(&expected[0]));
 }
 
+#[test]
+fn a_group_of_unit_axes_fused_keeps_the_fused_loops_index() {
+    // One input channel and a 1 by 1 kernel: `c`, `r` and `s` each have one
+    // value, so their row-major combination is 0 everywhere they range, but
+    // the tile's depth must still step with the fused loop's splits.
+    let single = Conv { channels: 1, kernel: 1, pad: 0, ..PADDED };
+    let compute = conv(single, Channels::Last);
+    let (mut schedule, _) = open(&compute);
+    let taps = axes(&compute, &TAPS);
+    schedule.apply(Primitive::Reindex { tensor: w(), groups: vec![taps] }).unwrap();
+    let own = |name| schedule.loops().loop_of(axis(&compute, name)).unwrap();
+    let loops = vec![own("r"), own("s"), own("c")];
+    schedule.apply(Primitive::Reorder { order: loops.clone() }).unwrap();
+
+    let fused = schedule.fuse(loops).unwrap();
+
+    let coordinate = schedule.loops().reindexed()[0].coordinates[0];
+    let expected = ptxc_loop::Expr::Var(ptxc_loop::VarId::new(fused.index()));
+    assert_eq!(schedule.loops().exprs().get(coordinate), expected);
+}
+
 fn conv_shape() -> impl Strategy<Value = Conv> {
     (1_u64..=2, 1_u64..=6, 1_u64..=6, 1_u64..=5, 1_u64..=3, 1_u64..=2, 1_u64..=2, 0_u64..=2)
         .prop_filter_map("a window the padded input holds", |shape| {
