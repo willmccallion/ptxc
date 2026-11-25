@@ -51,6 +51,9 @@ exclude_re = [
     # the constant distributed, or multiplied whole; only the grouping of
     # its operations differs.
     "replace match guard constant_factor\\(self.kernel.exprs\\(\\), a, b\\).is_some\\(\\) with false in Selector<'_>::computed_index",
+    # fuse_once returns before a factor of zero reaches merged_quotient, so
+    # `factor >= 0` rejects the negative factors `factor > 0` does.
+    "replace > with >= in merged_quotient",
     # Writes generated.rs; what it writes is checked by xtask's test.
     "replace run -> Result<\\(\\), ProtoError> with Ok\\(\\(\\)\\)",
     # The step's direction picks the clamp range; SliceStep rejects zero, so
