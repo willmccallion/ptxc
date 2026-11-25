@@ -9,7 +9,7 @@
 {
 	.reg .pred %p<19>;
 	.reg .b32 %r<3>;
-	.reg .b64 %rd<43>;
+	.reg .b64 %rd<29>;
 	.reg .f32 %f<30>;
 	.shared .align 16 .b8 shared_0[1024];
 	ld.param.u64 %rd0, [rows_param_0];
@@ -33,10 +33,12 @@ $L__1:
 	mov.b32 %f1, %r2;
 	mul.lo.s64 %rd9, %rd4, 300;
 	add.s64 %rd10, %rd9, %rd5;
-	add.s64 %rd11, %rd10, %rd7;
-	mul.lo.s64 %rd12, %rd11, 4;
-	add.s64 %rd13, %rd1, %rd12;
-	ld.global.f32 %f2, [%rd13];
+	mul.lo.s64 %rd11, %rd6, 256;
+	mul.lo.s64 %rd12, %rd10, 4;
+	mul.lo.s64 %rd13, %rd11, 4;
+	add.s64 %rd14, %rd1, %rd12;
+	add.s64 %rd15, %rd14, %rd13;
+	ld.global.f32 %f2, [%rd15];
 	add.rn.f32 %f3, %f1, %f2;
 	mov.b32 %r2, %f3;
 $L__3:
@@ -44,22 +46,20 @@ $L__3:
 	bra.uni $L__1;
 $L__2:
 	mov.b32 %f4, %r2;
-	mul.lo.s64 %rd14, %rd5, 4;
-	mov.u64 %rd15, shared_0;
-	add.s64 %rd16, %rd15, %rd14;
-	st.shared.f32 [%rd16], %f4;
+	mul.lo.s64 %rd16, %rd5, 4;
+	mov.u64 %rd17, shared_0;
+	add.s64 %rd18, %rd17, %rd16;
+	st.shared.f32 [%rd18], %f4;
 	bar.sync 0;
 	setp.ge.s64 %p2, %rd5, 128;
 	@%p2 bra $L__4;
-	add.s64 %rd17, %rd5, 128;
-	setp.ge.s64 %p3, %rd17, 256;
+	add.s64 %rd19, %rd5, 128;
+	setp.ge.s64 %p3, %rd19, 256;
 	@%p3 bra $L__5;
-	ld.shared.f32 %f5, [%rd16];
-	mul.lo.s64 %rd18, %rd17, 4;
-	add.s64 %rd19, %rd15, %rd18;
-	ld.shared.f32 %f6, [%rd19];
+	ld.shared.f32 %f5, [%rd18];
+	ld.shared.f32 %f6, [%rd18+512];
 	add.rn.f32 %f7, %f5, %f6;
-	st.shared.f32 [%rd16], %f7;
+	st.shared.f32 [%rd18], %f7;
 $L__5:
 $L__4:
 	bar.sync 0;
@@ -68,105 +68,91 @@ $L__4:
 	add.s64 %rd20, %rd5, 64;
 	setp.ge.s64 %p5, %rd20, 256;
 	@%p5 bra $L__7;
-	ld.shared.f32 %f8, [%rd16];
-	mul.lo.s64 %rd21, %rd20, 4;
-	add.s64 %rd22, %rd15, %rd21;
-	ld.shared.f32 %f9, [%rd22];
+	ld.shared.f32 %f8, [%rd18];
+	ld.shared.f32 %f9, [%rd18+256];
 	add.rn.f32 %f10, %f8, %f9;
-	st.shared.f32 [%rd16], %f10;
+	st.shared.f32 [%rd18], %f10;
 $L__7:
 $L__6:
 	bar.sync 0;
 	setp.ge.s64 %p6, %rd5, 32;
 	@%p6 bra $L__8;
-	add.s64 %rd23, %rd5, 32;
-	setp.ge.s64 %p7, %rd23, 256;
+	add.s64 %rd21, %rd5, 32;
+	setp.ge.s64 %p7, %rd21, 256;
 	@%p7 bra $L__9;
-	ld.shared.f32 %f11, [%rd16];
-	mul.lo.s64 %rd24, %rd23, 4;
-	add.s64 %rd25, %rd15, %rd24;
-	ld.shared.f32 %f12, [%rd25];
+	ld.shared.f32 %f11, [%rd18];
+	ld.shared.f32 %f12, [%rd18+128];
 	add.rn.f32 %f13, %f11, %f12;
-	st.shared.f32 [%rd16], %f13;
+	st.shared.f32 [%rd18], %f13;
 $L__9:
 $L__8:
 	bar.sync 0;
 	setp.ge.s64 %p8, %rd5, 16;
 	@%p8 bra $L__10;
-	add.s64 %rd26, %rd5, 16;
-	setp.ge.s64 %p9, %rd26, 256;
+	add.s64 %rd22, %rd5, 16;
+	setp.ge.s64 %p9, %rd22, 256;
 	@%p9 bra $L__11;
-	ld.shared.f32 %f14, [%rd16];
-	mul.lo.s64 %rd27, %rd26, 4;
-	add.s64 %rd28, %rd15, %rd27;
-	ld.shared.f32 %f15, [%rd28];
+	ld.shared.f32 %f14, [%rd18];
+	ld.shared.f32 %f15, [%rd18+64];
 	add.rn.f32 %f16, %f14, %f15;
-	st.shared.f32 [%rd16], %f16;
+	st.shared.f32 [%rd18], %f16;
 $L__11:
 $L__10:
 	bar.sync 0;
 	setp.ge.s64 %p10, %rd5, 8;
 	@%p10 bra $L__12;
-	add.s64 %rd29, %rd5, 8;
-	setp.ge.s64 %p11, %rd29, 256;
+	add.s64 %rd23, %rd5, 8;
+	setp.ge.s64 %p11, %rd23, 256;
 	@%p11 bra $L__13;
-	ld.shared.f32 %f17, [%rd16];
-	mul.lo.s64 %rd30, %rd29, 4;
-	add.s64 %rd31, %rd15, %rd30;
-	ld.shared.f32 %f18, [%rd31];
+	ld.shared.f32 %f17, [%rd18];
+	ld.shared.f32 %f18, [%rd18+32];
 	add.rn.f32 %f19, %f17, %f18;
-	st.shared.f32 [%rd16], %f19;
+	st.shared.f32 [%rd18], %f19;
 $L__13:
 $L__12:
 	bar.sync 0;
 	setp.ge.s64 %p12, %rd5, 4;
 	@%p12 bra $L__14;
-	add.s64 %rd32, %rd5, 4;
-	setp.ge.s64 %p13, %rd32, 256;
+	add.s64 %rd24, %rd5, 4;
+	setp.ge.s64 %p13, %rd24, 256;
 	@%p13 bra $L__15;
-	ld.shared.f32 %f20, [%rd16];
-	mul.lo.s64 %rd33, %rd32, 4;
-	add.s64 %rd34, %rd15, %rd33;
-	ld.shared.f32 %f21, [%rd34];
+	ld.shared.f32 %f20, [%rd18];
+	ld.shared.f32 %f21, [%rd18+16];
 	add.rn.f32 %f22, %f20, %f21;
-	st.shared.f32 [%rd16], %f22;
+	st.shared.f32 [%rd18], %f22;
 $L__15:
 $L__14:
 	bar.sync 0;
 	setp.ge.s64 %p14, %rd5, 2;
 	@%p14 bra $L__16;
-	add.s64 %rd35, %rd5, 2;
-	setp.ge.s64 %p15, %rd35, 256;
+	add.s64 %rd25, %rd5, 2;
+	setp.ge.s64 %p15, %rd25, 256;
 	@%p15 bra $L__17;
-	ld.shared.f32 %f23, [%rd16];
-	mul.lo.s64 %rd36, %rd35, 4;
-	add.s64 %rd37, %rd15, %rd36;
-	ld.shared.f32 %f24, [%rd37];
+	ld.shared.f32 %f23, [%rd18];
+	ld.shared.f32 %f24, [%rd18+8];
 	add.rn.f32 %f25, %f23, %f24;
-	st.shared.f32 [%rd16], %f25;
+	st.shared.f32 [%rd18], %f25;
 $L__17:
 $L__16:
 	bar.sync 0;
 	setp.ge.s64 %p16, %rd5, 1;
 	@%p16 bra $L__18;
-	add.s64 %rd38, %rd5, 1;
-	setp.ge.s64 %p17, %rd38, 256;
+	add.s64 %rd26, %rd5, 1;
+	setp.ge.s64 %p17, %rd26, 256;
 	@%p17 bra $L__19;
-	ld.shared.f32 %f26, [%rd16];
-	mul.lo.s64 %rd39, %rd38, 4;
-	add.s64 %rd40, %rd15, %rd39;
-	ld.shared.f32 %f27, [%rd40];
+	ld.shared.f32 %f26, [%rd18];
+	ld.shared.f32 %f27, [%rd18+4];
 	add.rn.f32 %f28, %f26, %f27;
-	st.shared.f32 [%rd16], %f28;
+	st.shared.f32 [%rd18], %f28;
 $L__19:
 $L__18:
 	bar.sync 0;
 	setp.ge.s64 %p18, %rd5, 1;
 	@%p18 bra $L__20;
-	ld.shared.f32 %f29, [%rd16];
-	mul.lo.s64 %rd41, %rd4, 4;
-	add.s64 %rd42, %rd3, %rd41;
-	st.global.f32 [%rd42], %f29;
+	ld.shared.f32 %f29, [%rd18];
+	mul.lo.s64 %rd27, %rd4, 4;
+	add.s64 %rd28, %rd3, %rd27;
+	st.global.f32 [%rd28], %f29;
 $L__20:
 	ret;
 }

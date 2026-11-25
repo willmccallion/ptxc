@@ -337,3 +337,22 @@ fn a_row_argmax_compares_each_loaded_element_once() {
     assemble(&module);
     golden::check("row_argmax.ptx", &module.to_string()).unwrap();
 }
+
+#[test]
+fn an_index_multiplying_two_variables_multiplies_their_registers() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("products"));
+    let x = compute.input(TensorName::new("x"), DType::F32, shape(&[64]));
+    let (_, row) = compute.spatial(VarName::new("row"), Dim::new(8));
+    let (_, column) = compute.spatial(VarName::new("column"), Dim::new(8));
+    let product = compute.exprs().mul(row, column);
+    compute.output(TensorName::new("y"), TensorExpr::Load { tensor: x, index: vec![product] });
+
+    let module = emitted(Arc::new(compute.finish().unwrap())).to_string();
+
+    let products = module.lines().filter(|line| {
+        let operands: Vec<&str> = line.trim().trim_end_matches(';').split(", ").collect();
+        line.contains("mul.lo.s64")
+            && operands.iter().skip(1).all(|operand| operand.starts_with("%rd"))
+    });
+    assert_eq!(products.count(), 1, "{module}");
+}

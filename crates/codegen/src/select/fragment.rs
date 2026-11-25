@@ -5,6 +5,7 @@
 
 use super::lanes::{GROUP_LANES, LaneCoordinate, LaneLayout, Role};
 use super::memory::{Place, Storage, place_in};
+use super::position::Ranked;
 use super::{CodegenError, Selector};
 use crate::ast::{
     Address, B64, BinaryOp, CvtMode, PtxType, Reg, Signedness, Space, Special, Value,
@@ -177,14 +178,15 @@ impl Selector<'_> {
         at: TileAccess,
         place: [Reg<B64>; 2],
     ) -> Result<(Space, Address), CodegenError> {
-        let (origin, constant) = self.swizzle_split(source, at.origin);
-        let position = self.tile_position(TileAccess { origin, ..at }, place)?;
-        self.address_at(source, (position, constant))
+        let within = self.within_tile(at, place)?;
+        let within = Ranked { rank: 0, value: within };
+        let position = self.position_with(source, at.origin, Some(within))?;
+        self.address_at(source, position)
     }
 
-    /// The position of the tile's element at `row` and `column` in the
-    /// buffer `at` places the tile in.
-    fn tile_position(
+    /// How far the tile's element at `row` and `column` is from its origin
+    /// in the buffer `at` places the tile in.
+    fn within_tile(
         &mut self,
         at: TileAccess,
         [row, column]: [Reg<B64>; 2],
@@ -194,11 +196,9 @@ impl Selector<'_> {
             TileOrder::Transposed => (column, row),
         };
         let stride = Value::<B64>::int(signed(at.stride.get())?);
-        let origin = self.index_operand(at.origin)?;
         let signedness = Signedness::Signed;
         let scaled = self.index_op(BinaryOp::Mul, signedness, outer.into(), stride);
-        let within = self.index_op(BinaryOp::Add, signedness, scaled.into(), inner.into());
-        Ok(self.index_op(BinaryOp::Add, signedness, within.into(), origin))
+        Ok(self.index_op(BinaryOp::Add, signedness, scaled.into(), inner.into()))
     }
 
     /// Sets each of the lane's elements of `fragment`'s tile to `value`.

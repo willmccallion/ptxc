@@ -15,6 +15,7 @@ mod math;
 mod memory;
 mod mma;
 mod ops;
+mod position;
 mod registers;
 mod swizzle;
 mod values;
@@ -86,6 +87,9 @@ struct Selector<'k> {
     lane: Option<Lane>,
     /// The values each variable bound so far takes.
     ranges: VarRanges,
+    /// The depth of each serial loop being selected, by its variable, the
+    /// outermost 1.
+    loop_depths: HashMap<VarId, u32>,
     /// The local and fragment arrays held in registers.
     registers: HashSet<BufferId>,
 }
@@ -103,6 +107,7 @@ impl<'k> Selector<'k> {
             elements: HashMap::new(),
             lane: None,
             ranges: kernel.thread_ranges(),
+            loop_depths: HashMap::new(),
             registers: registers::register_arrays(kernel),
         }
     }

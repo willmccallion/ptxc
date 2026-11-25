@@ -119,6 +119,9 @@ impl Selector<'_> {
         let counter = self.builder.variable();
         self.builder.assign(counter, PtxType::S64, Value::<B64>::int(0));
         let _previous = self.vars.insert(var, counter.reg());
+        let depth =
+            u32::try_from(self.loop_depths.len() + 1).map_err(|_| CodegenError::TooLarge)?;
+        let _outer = self.loop_depths.insert(var, depth);
         let outer = self.known.clone();
         self.known.forget_values();
         let (top, exit) = (self.builder.label(), self.builder.label());
@@ -137,6 +140,7 @@ impl Selector<'_> {
         self.builder.increment(counter);
         self.builder.branch(top, None);
         self.builder.place(exit);
+        let _depth = self.loop_depths.remove(&var);
         self.known.leave(outer);
         Ok(())
     }

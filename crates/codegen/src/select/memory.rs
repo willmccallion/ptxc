@@ -1,6 +1,7 @@
 //! Where each buffer lives, element addresses, and loads and stores.
 
 use super::lanes::WARP_LANES;
+use super::position::{Position, Ranked};
 use super::registers::{WORD_BYTES, WordByte, register_place};
 use super::values::{Held, Narrow, Stored, memory_type, stored};
 use super::{CodegenError, Selector};
@@ -116,43 +117,22 @@ impl Selector<'_> {
             let offset = self.swizzled_constant(buffer, offset)?;
             return place_in(self.storage.get(&buffer).ok_or(CodegenError::Unbound)?, offset);
         }
-        let (rest, constant) = self.swizzle_split(buffer, index);
-        let position = self.index(rest)?;
-        let (space, addr) = self.address_at(buffer, (position, constant))?;
+        let position = self.position(buffer, index)?;
+        let (space, addr) = self.address_at(buffer, position)?;
         Ok(Place::Memory(space, addr))
     }
 
-    /// `index` as an index and a constant: where `buffer` is swizzled, a
-    /// sum's constant addend split off for its address to fold in apart
-    /// from the rest (D67); elsewhere the whole of `index` and 0.
-    pub(super) fn swizzle_split(&self, buffer: BufferId, index: ExprId) -> (ExprId, i64) {
-        let exprs = self.kernel.exprs();
-        let Expr::Add(rest, last) = exprs.get(index) else { return (index, 0) };
-        if self.swizzle_of(buffer).is_none() {
-            return (index, 0);
-        }
-        match (exprs.get(rest), exprs.get(last)) {
-            (_, Expr::Const(constant)) => (rest, constant),
-            (Expr::Const(constant), _) => (last, constant),
-            _ => (index, 0),
-        }
-    }
-
-    /// The address of element `position + constant` of `buffer`, and its
-    /// space, the constant an immediate offset where the buffer's layout
-    /// allows.
+    /// The address of the element of `buffer` at `position`, and its
+    /// space: the buffer's start plus each part in bytes, outermost rank
+    /// first, and an immediate offset.
     pub(super) fn address_at(
         &mut self,
         buffer: BufferId,
-        (position, constant): (Reg<B64>, i64),
+        position: Position,
     ) -> Result<(Space, Address), CodegenError> {
-        let dtype = self.kernel.buffers()[buffer].dtype;
-        let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
         let storage = self.storage.get(&buffer).ok_or(CodegenError::Unbound)?.clone();
-        let signed = Signedness::Signed;
-        let bytes = self.index_op(BinaryOp::Mul, signed, position.into(), Value::<B64>::int(size));
-        let constant = constant.checked_mul(size).ok_or(CodegenError::TooLarge)?;
-        let (offset, immediate) = self.placed_offset(buffer, bytes, constant)?;
+        let (mut parts, immediate) = self.byte_parts(buffer, position)?;
+        parts.sort_by_key(|part| part.rank);
         let (space, base) = match storage {
             Storage::Global(base) => (Space::Global, base),
             Storage::Array { space, name } => (space, self.array_address(&name)),
@@ -160,8 +140,44 @@ impl Selector<'_> {
                 return Err(CodegenError::Unsupported { op: "a computed index into registers" });
             }
         };
-        let at = self.index_op(BinaryOp::Add, signed, base.into(), offset.into());
+        let mut at = base;
+        for part in parts {
+            at = self.added(at, part.value);
+        }
         Ok((space, Address::Reg { base: at.id(), offset: immediate }))
+    }
+
+    /// `position`'s parts as byte offsets into `buffer`, the placed one
+    /// where the buffer's layout places it, and the immediate offset.
+    fn byte_parts(
+        &mut self,
+        buffer: BufferId,
+        position: Position,
+    ) -> Result<(Vec<Ranked>, i64), CodegenError> {
+        let dtype = self.kernel.buffers()[buffer].dtype;
+        let size = i64::try_from(dtype.element_size().get()).map_err(|_| CodegenError::TooLarge)?;
+        let constant = position.constant.checked_mul(size).ok_or(CodegenError::TooLarge)?;
+        let mut parts = Vec::new();
+        let immediate = match position.placed {
+            Some(Ranked { rank, value }) => {
+                let bytes = self.bytes(value, size);
+                let (offset, immediate) = self.placed_offset(buffer, bytes, constant)?;
+                parts.push(Ranked { rank, value: offset });
+                immediate
+            }
+            None => self.swizzled_constant(buffer, constant)?,
+        };
+        for Ranked { rank, value } in position.shifted {
+            let bytes = self.bytes(value, size);
+            parts.push(Ranked { rank, value: bytes });
+        }
+        Ok((parts, immediate))
+    }
+
+    /// `elements` of `size` bytes each, in bytes.
+    fn bytes(&mut self, elements: Reg<B64>, size: i64) -> Reg<B64> {
+        let size = Value::<B64>::int(size);
+        self.index_op(BinaryOp::Mul, Signedness::Signed, elements.into(), size)
     }
 
     /// Element `index` of `buffer`, as a held value.
