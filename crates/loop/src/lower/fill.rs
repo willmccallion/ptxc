@@ -75,11 +75,13 @@ impl Lowerer<'_> {
     /// divides the tile's innermost extent and its origin's innermost
     /// coordinate, so a run lies in one row of the tile, aligned, and whose
     /// elements are adjacent in one row of the input, aligned; and one
-    /// element where none is, or where the tile's padding is not zero,
-    /// which an asynchronous copy cannot fill.
+    /// element where none is, where the tile's padding is not zero, which
+    /// an asynchronous copy cannot fill, or where the input is empty, so
+    /// every element is padding.
     pub(super) fn run(&self, tile: &Tile) -> Run {
         let dtype = self.compute.inputs()[tile.tensor].dtype;
-        if tile.padding.is_some_and(|padding| padding != Scalar::zero(dtype)) {
+        let nonzero_padding = tile.padding.is_some_and(|padding| padding != Scalar::zero(dtype));
+        if nonzero_padding || self.empty_input(tile) {
             return Run { length: 1, copy: RunCopy::Direct };
         }
         let element = dtype.element_size().get();
@@ -140,7 +142,8 @@ impl Lowerer<'_> {
     /// one of `in_input` holds. A padded load's element is first set to its
     /// padding, which the load reads outside the input; in a tensorized nest
     /// any other is first cleared, so an `mma` over a tile overhanging its
-    /// input multiplies zeros there.
+    /// input multiplies zeros there. From an empty input only that is
+    /// stored, as there is nothing to copy.
     fn element_copy(
         &self,
         tile: &Tile,
@@ -155,7 +158,12 @@ impl Lowerer<'_> {
         let Some(outside) = outside else { return guarded };
         let set =
             Stmt::Store { buffer: tile.buffer, index: first, value: ValueExpr::Const(outside) };
-        Stmt::Seq(vec![set, guarded])
+        if self.empty_input(tile) { set } else { Stmt::Seq(vec![set, guarded]) }
+    }
+
+    /// Whether `tile`'s input has an empty axis, so holds no element.
+    fn empty_input(&self, tile: &Tile) -> bool {
+        self.compute.inputs()[tile.tensor].shape.dims().iter().any(|dim| dim.get() == 0)
     }
 
     /// `id * factor`, left unsimplified for `id`'s guard to bound it.
