@@ -10,7 +10,7 @@ use ptxc_core::float::Overflow;
 use ptxc_core::{DType, Dim, Shape};
 use ptxc_loop::{
     ArgKind, BinaryOp, ComputeBuilder, ComputeDef, ComputeName, InfSign, IterVarId, ReduceOp,
-    Scalar, TensorExpr, TensorName, TieBreak, UnaryOp, VarName,
+    Scalar, Schedule, TensorExpr, TensorName, TieBreak, UnaryOp, VarName,
 };
 use ptxc_testkit::golden;
 use std::fmt::Write;
@@ -355,4 +355,22 @@ fn an_index_multiplying_two_variables_multiplies_their_registers() {
             && operands.iter().skip(1).all(|operand| operand.starts_with("%rd"))
     });
     assert_eq!(products.count(), 1, "{module}");
+}
+
+#[test]
+fn accumulators_a_serial_loop_allocates_are_addressed_only_inside_it() {
+    let argmin = |axis, body| TensorExpr::ArgReduce {
+        kind: ArgKind::Min,
+        tie: TieBreak::First,
+        axis,
+        body: Box::new(body),
+    };
+    // Unscheduled, the rows run one after another, each allocating its
+    // accumulators inside the row loop.
+    let kernel =
+        Schedule::new(row_reduction(DType::I8, argmin)).validate(&target()).unwrap().lower();
+
+    let module = generate(&kernel, &target()).unwrap();
+
+    assemble(&module);
 }

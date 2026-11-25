@@ -122,6 +122,7 @@ impl Selector<'_> {
         let depth =
             u32::try_from(self.loop_depths.len() + 1).map_err(|_| CodegenError::TooLarge)?;
         let _outer = self.loop_depths.insert(var, depth);
+        self.hoist_addresses(body, depth)?;
         let outer = self.known.clone();
         self.known.forget_values();
         let (top, exit) = (self.builder.label(), self.builder.label());

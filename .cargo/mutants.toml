@@ -47,6 +47,10 @@ exclude_re = [
     # XOR in their place gives the same result. The OR setting those upper
     # bits is not equivalent; sum_bits's unit test pins it.
     "replace \\| with \\^ in sum_bits",
+    # A product by a constant has one value whether it is summed as terms,
+    # the constant distributed, or multiplied whole; only the grouping of
+    # its operations differs.
+    "replace match guard constant_factor\\(self.kernel.exprs\\(\\), a, b\\).is_some\\(\\) with false in Selector<'_>::computed_index",
     # Writes generated.rs; what it writes is checked by xtask's test.
     "replace run -> Result<\\(\\), ProtoError> with Ok\\(\\(\\)\\)",
     # The step's direction picks the clamp range; SliceStep rejects zero, so

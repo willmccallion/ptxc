@@ -130,21 +130,43 @@ impl Selector<'_> {
         buffer: BufferId,
         position: Position,
     ) -> Result<(Space, Address), CodegenError> {
+        let space = self.space_of(buffer)?;
+        let (at, immediate) = self.address_from(buffer, position)?;
+        Ok((space, Address::Reg { base: at.id(), offset: immediate }))
+    }
+
+    /// The register `address_at` adds an immediate offset to, and the
+    /// offset.
+    pub(super) fn address_from(
+        &mut self,
+        buffer: BufferId,
+        position: Position,
+    ) -> Result<(Reg<B64>, i64), CodegenError> {
         let storage = self.storage.get(&buffer).ok_or(CodegenError::Unbound)?.clone();
         let (mut parts, immediate) = self.byte_parts(buffer, position)?;
         parts.sort_by_key(|part| part.rank);
-        let (space, base) = match storage {
-            Storage::Global(base) => (Space::Global, base),
-            Storage::Array { space, name } => (space, self.array_address(&name)),
+        let mut at = match storage {
+            Storage::Global(base) => base,
+            Storage::Array { name, .. } => self.array_address(&name),
             Storage::Registers(_) => {
                 return Err(CodegenError::Unsupported { op: "a computed index into registers" });
             }
         };
-        let mut at = base;
         for part in parts {
             at = self.added(at, part.value);
         }
-        Ok((space, Address::Reg { base: at.id(), offset: immediate }))
+        Ok((at, immediate))
+    }
+
+    /// The space `buffer`'s elements are in, if they are in memory.
+    fn space_of(&self, buffer: BufferId) -> Result<Space, CodegenError> {
+        match self.storage.get(&buffer).ok_or(CodegenError::Unbound)? {
+            Storage::Global(_) => Ok(Space::Global),
+            Storage::Array { space, .. } => Ok(*space),
+            Storage::Registers(_) => {
+                Err(CodegenError::Unsupported { op: "a computed index into registers" })
+            }
+        }
     }
 
     /// `position`'s parts as byte offsets into `buffer`, the placed one

@@ -1,12 +1,13 @@
 //! An element's position in its buffer, split as its address puts it
-//! together. The index is taken apart into terms, constant factors
+//! together (D69). The index is taken apart into terms, constant factors
 //! distributed over sums, and the constant becomes the address's immediate
 //! offset. In a swizzled buffer, terms that are whole multiples of the
 //! swizzle's period, such as a pipeline slot's or a warp's tile origin, are
 //! added after the swizzle, which moves them unchanged, and the constant is
 //! folded in after it (D67); only the rest is swizzled. The parts are added
 //! outermost loop first, as LLVM's Reassociate ranks operands, so the part
-//! of an address a loop does not change is a sum of its own.
+//! of an address a loop does not change is a sum of its own, which
+//! `hoist_addresses` computes before the loop.
 
 use super::{CodegenError, Selector};
 use crate::ast::{B64, BinaryOp, PtxType, Reg, Signedness, Value};
@@ -54,24 +55,31 @@ impl Selector<'_> {
         buffer: BufferId,
         index: ExprId,
     ) -> Result<Position, CodegenError> {
-        self.position_with(buffer, index, None)
+        self.position_with(buffer, index, None, |_| true)
     }
 
     /// Where element `index` of `buffer` is, plus `within`, which the
-    /// buffer's layout places with the index's placed terms.
+    /// buffer's layout places with the index's placed terms; or the part of
+    /// that whose ranks `keep` keeps: the placed part only if it keeps
+    /// every placed term's, and the constant with it.
     pub(super) fn position_with(
         &mut self,
         buffer: BufferId,
         index: ExprId,
         within: Option<Ranked>,
+        keep: impl Fn(u32) -> bool,
     ) -> Result<Position, CodegenError> {
         let terms = self.terms(buffer, index)?;
-        let placed = self.placed_sum(within, &terms.placed)?;
+        let whole_placed = terms.placed.iter().all(|term| keep(self.rank(term.expr)));
+        let placed = if whole_placed { self.placed_sum(within, &terms.placed)? } else { None };
         let mut shifted = Vec::new();
-        for group in self.by_rank(&terms.shifted).values() {
-            shifted.extend(self.ranked_sum(group)?);
+        for (rank, group) in self.by_rank(&terms.shifted) {
+            if keep(rank) {
+                shifted.extend(self.ranked_sum(&group)?);
+            }
         }
-        Ok(Position { placed, shifted, constant: terms.constant })
+        let constant = if whole_placed { terms.constant } else { 0 };
+        Ok(Position { placed, shifted, constant })
     }
 
     /// `within` plus the sum of `placed`, if either is given.

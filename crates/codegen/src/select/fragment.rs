@@ -161,7 +161,7 @@ impl Selector<'_> {
     }
 
     /// The row and column of this lane's `element` under `layout`.
-    fn lane_place(
+    pub(super) fn lane_place(
         &mut self,
         layout: LaneLayout,
         element: u64,
@@ -180,13 +180,13 @@ impl Selector<'_> {
     ) -> Result<(Space, Address), CodegenError> {
         let within = self.within_tile(at, place)?;
         let within = Ranked { rank: 0, value: within };
-        let position = self.position_with(source, at.origin, Some(within))?;
+        let position = self.position_with(source, at.origin, Some(within), |_| true)?;
         self.address_at(source, position)
     }
 
     /// How far the tile's element at `row` and `column` is from its origin
     /// in the buffer `at` places the tile in.
-    fn within_tile(
+    pub(super) fn within_tile(
         &mut self,
         at: TileAccess,
         [row, column]: [Reg<B64>; 2],
