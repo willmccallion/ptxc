@@ -1,0 +1,14 @@
+compute gemm_partial(%a: f16[3, 4, 3], %b: f16[4, 3, 4]) {
+  %k_slice = spatial 3
+  %i = spatial 3
+  %j = spatial 4
+  %k = reduce 4
+  %out: f32[3, 3, 4] = sum[%k](mul(cast<f32>(%a[%k_slice, %k, %i]), cast<f32>(%b[%j, %k_slice, %k])))
+}
+
+compute gemm(%partials: f32[3, 3, 4], %bias: f16[4]) {
+  %i = spatial 3
+  %j = spatial 4
+  %k_slice = reduce 3
+  %out: f16[3, 4] = cast<f16>(add(mul(2.0:f32, sum[%k_slice](%partials[%k_slice, %i, %j])), cast<f32>(%bias[%j])))
+}

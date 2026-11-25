@@ -92,6 +92,17 @@ impl TensorExpr {
         Self::Load { tensor, index, padding: None }
     }
 
+    /// The expressions `self` operates on, in order.
+    pub(crate) fn operands(&self) -> Vec<&Self> {
+        match self {
+            Self::Load { .. } | Self::Const(_) | Self::Index { .. } => Vec::new(),
+            Self::Unary(_, value) | Self::Cast { value, .. } => vec![value],
+            Self::Binary(_, lhs, rhs) => vec![lhs, rhs],
+            Self::Select { condition, then, otherwise } => vec![condition, then, otherwise],
+            Self::Reduce { body, .. } | Self::ArgReduce { body, .. } => vec![body],
+        }
+    }
+
     /// The one reduction node in `self`, if it holds one (D40).
     pub fn reduction(&self) -> Option<&Self> {
         match self {

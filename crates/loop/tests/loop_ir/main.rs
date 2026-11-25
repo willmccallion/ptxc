@@ -14,6 +14,7 @@ mod lower;
 mod padding;
 mod pipeline;
 mod reindex;
+mod rfactor;
 mod schedule_properties;
 mod schedule_rules;
 mod schedule_support;

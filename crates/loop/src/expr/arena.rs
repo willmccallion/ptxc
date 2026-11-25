@@ -85,6 +85,48 @@ impl ExprArena {
         }
     }
 
+    /// `id`, an expression of `from`, built in this arena with each variable
+    /// it reads replaced by `var`'s expression for it; or the first variable
+    /// `var` has none for.
+    pub(crate) fn import(
+        &mut self,
+        from: &Self,
+        id: ExprId,
+        var: &impl Fn(VarId) -> Option<ExprId>,
+    ) -> Result<ExprId, VarId> {
+        let pair = |this: &mut Self, a, b| -> Result<_, VarId> {
+            Ok((this.import(from, a, var)?, this.import(from, b, var)?))
+        };
+        Ok(match from.get(id) {
+            Expr::Var(read) => var(read).ok_or(read)?,
+            Expr::Const(value) => self.constant(value),
+            Expr::Add(a, b) => {
+                let (a, b) = pair(self, a, b)?;
+                self.add(a, b)
+            }
+            Expr::Mul(a, b) => {
+                let (a, b) = pair(self, a, b)?;
+                self.mul(a, b)
+            }
+            Expr::FloorDiv(a, b) => {
+                let (a, b) = pair(self, a, b)?;
+                self.floor_div(a, b)
+            }
+            Expr::FloorMod(a, b) => {
+                let (a, b) = pair(self, a, b)?;
+                self.floor_mod(a, b)
+            }
+            Expr::Min(a, b) => {
+                let (a, b) = pair(self, a, b)?;
+                self.min(a, b)
+            }
+            Expr::Max(a, b) => {
+                let (a, b) = pair(self, a, b)?;
+                self.max(a, b)
+            }
+        })
+    }
+
     /// The expression `id` names.
     pub fn get(&self, id: ExprId) -> Expr {
         self.exprs[id]
@@ -144,5 +186,36 @@ mod tests {
         let sum = arena.add(x, product);
 
         assert_eq!(arena.vars(sum), [VarId::new(0), VarId::new(1)]);
+    }
+
+    #[test]
+    fn an_imported_expression_reads_the_variables_it_is_given() {
+        let mut from = ExprArena::new();
+        let (x, y) = (from.var(VarId::new(0)), from.var(VarId::new(1)));
+        let three = from.constant(3);
+        let scaled = from.mul(x, three);
+        let parts = [from.add(scaled, y), from.floor_div(x, y), from.floor_mod(x, y)];
+        let parts = [parts[0], parts[1], parts[2], from.min(x, y), from.max(x, y)];
+        let mut to = ExprArena::new();
+        let (a, b) = (to.var(VarId::new(7)), to.var(VarId::new(8)));
+        let renamed = |var: VarId| [a, b].get(var.index()).copied();
+
+        let imported = parts.map(|part| to.import(&from, part, &renamed).unwrap());
+
+        let three = to.constant(3);
+        let scaled = to.mul(a, three);
+        let expected = [to.add(scaled, b), to.floor_div(a, b), to.floor_mod(a, b)];
+        assert_eq!(imported, [expected[0], expected[1], expected[2], to.min(a, b), to.max(a, b)]);
+    }
+
+    #[test]
+    fn an_import_names_the_variable_it_has_no_expression_for() {
+        let mut from = ExprArena::new();
+        let (x, y) = (from.var(VarId::new(0)), from.var(VarId::new(1)));
+        let sum = from.add(x, y);
+        let mut to = ExprArena::new();
+        let only_x = |var: VarId| (var == VarId::new(0)).then_some(ExprId::new(0));
+
+        assert_eq!(to.import(&from, sum, &only_x), Err(VarId::new(1)));
     }
 }
