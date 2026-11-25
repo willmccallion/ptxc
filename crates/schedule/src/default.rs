@@ -4,6 +4,7 @@
 //! blocks of threads, and any other reduction gives each output row a
 //! block whose threads combine through shared memory.
 
+use crate::rules::matmul_loops::product_loops;
 use crate::rules::{elementwise, matmul_mma, matmul_shape, matmul_simt, reduction};
 use ptxc_loop::{ComputeDef, IterKind, Schedule, ScheduleError, Validated};
 use ptxc_target::Target;
@@ -22,10 +23,12 @@ pub fn default_schedule(
     let mut schedule = Schedule::new(compute);
     match (product, instruction) {
         (Some(product), Some(instruction)) => {
-            matmul_mma::tiled_on_tensor_cores(&mut schedule, product, (instruction, target))?;
+            let loops = product_loops(&schedule, product)?;
+            matmul_mma::tiled_on_tensor_cores(&mut schedule, &loops, (instruction, target))?;
         }
         (Some(product), None) => {
-            matmul_simt::tiled_on_cuda_cores(&mut schedule, product, target)?;
+            let loops = product_loops(&schedule, product)?;
+            matmul_simt::tiled_on_cuda_cores(&mut schedule, &loops, target)?;
         }
         (None, _) if reduces => reduction::one_block_per_row(&mut schedule)?,
         (None, _) => elementwise::flatten_over_blocks(&mut schedule)?,

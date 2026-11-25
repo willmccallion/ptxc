@@ -4,8 +4,7 @@
 //! slices of both operands in shared memory.
 
 use super::bind;
-use super::matmul_loops::{batch_loops, bind_blocks, parts, pipeline_step, stage_operands};
-use super::matmul_shape::Product;
+use super::matmul_loops::{GemmLoops, bind_blocks, parts, pipeline_step, stage_operands};
 use crate::tiling::{BlockTile, TileShape};
 use ptxc_loop::{Open, Primitive, Schedule, ScheduleError, StageCount, ThreadAxis};
 use ptxc_target::Target;
@@ -20,32 +19,31 @@ const TILE: BlockTile = BlockTile {
     stages: StageCount::new(4),
 };
 
-/// Tiles `product`'s nest: the batch axes and the block rows and columns
-/// fused onto `blockIdx.x`, which no grid limit binds; the block's threads
-/// on `threadIdx.y` and `threadIdx.x`, a thread's columns innermost; and
-/// the reduction split into staged, pipelined steps, inside which a thread
-/// sums its tile with the step's depth and its own rows and columns
-/// unrolled.
+/// Tiles a matrix product's `loops`: the batch loops and the block rows
+/// and columns fused onto `blockIdx.x`, which no grid limit binds; the
+/// block's threads on `threadIdx.y` and `threadIdx.x`, a thread's columns
+/// innermost; and the reduction split into staged, pipelined steps, inside
+/// which a thread sums its tile with the step's depth and its own rows and
+/// columns unrolled.
 pub(crate) fn tiled_on_cuda_cores(
     schedule: &mut Schedule<Open>,
-    product: Product,
+    loops: &GemmLoops,
     target: &Target,
 ) -> Result<(), ScheduleError> {
-    let batch = batch_loops(schedule, product);
     let [row_block, row_thread, row_own] =
-        parts(schedule, product.row, &[TILE.threads.rows, TILE.per_thread.rows])?;
+        parts(schedule, loops.row, &[TILE.threads.rows, TILE.per_thread.rows])?;
     let [column_block, column_thread, column_own] =
-        parts(schedule, product.column, &[TILE.threads.columns, TILE.per_thread.columns])?;
-    let [step, step_depth] = parts(schedule, product.depth, &[TILE.depth])?;
-    let mut order = batch.clone();
+        parts(schedule, loops.column, &[TILE.threads.columns, TILE.per_thread.columns])?;
+    let [step, step_depth] = parts(schedule, loops.depth, &[TILE.depth])?;
+    let mut order = loops.batch.clone();
     order.extend([row_block, column_block, row_thread, column_thread]);
     order.extend([step, step_depth, row_own, column_own]);
     schedule.apply(Primitive::Reorder { order })?;
-    bind_blocks(schedule, &batch, [row_block, column_block])?;
+    bind_blocks(schedule, &loops.batch, [row_block, column_block])?;
     bind(schedule, row_thread, ThreadAxis::ThreadY)?;
     bind(schedule, column_thread, ThreadAxis::ThreadX)?;
-    stage_operands(schedule, product, step)?;
-    pipeline_step(schedule, product, (step, TILE.step()), target)?;
+    stage_operands(schedule, loops.operands, step)?;
+    pipeline_step(schedule, loops.operands, (step, TILE.step()), target)?;
     for loop_ in [step_depth, row_own, column_own] {
         schedule.apply(Primitive::Unroll { loop_ })?;
     }

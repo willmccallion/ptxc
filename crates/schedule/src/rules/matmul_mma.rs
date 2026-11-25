@@ -5,13 +5,13 @@
 //! the warps load their fragments (D58).
 
 use super::bind;
-use super::matmul_loops::{batch_loops, bind_blocks, parts, pipeline_step, stage_operands};
+use super::matmul_loops::{GemmLoops, bind_blocks, parts, pipeline_step, stage_operands};
 use super::matmul_shape::Product;
 use crate::tiling::{TensorCoreTile, TileShape};
 use ptxc_core::Dim;
 use ptxc_loop::{
-    ComputeDef, IterVarId, Open, Primitive, Schedule, ScheduleError, StageCount, Swizzle,
-    TensorExpr, ThreadAxis,
+    ComputeDef, LoopId, Open, Primitive, Schedule, ScheduleError, StageCount, Swizzle, TensorExpr,
+    TensorParamId, ThreadAxis,
 };
 use ptxc_target::{MmaInstruction, MmaShape, Target};
 
@@ -64,64 +64,63 @@ pub(crate) fn instruction(
     target.mma().iter().find(matches).copied().filter(|_| same_operands)
 }
 
-/// Tiles `product`'s nest for `instruction` of `target`: the batch axes
-/// and the block rows and columns fused onto `blockIdx.x`; the block's
-/// warps on `threadIdx.y` and `threadIdx.z`, their lanes on
+/// Tiles a matrix product's `loops` for `instruction` of `target`: the
+/// batch loops and the block rows and columns fused onto `blockIdx.x`; the
+/// block's warps on `threadIdx.y` and `threadIdx.z`, their lanes on
 /// `threadIdx.x`; and the reduction split into staged, pipelined steps,
 /// inside which each warp multiplies its tiles with the steps and tiles
 /// unrolled and the innermost `mma` tile tensorized.
 pub(crate) fn tiled_on_tensor_cores(
     schedule: &mut Schedule<Open>,
-    product: Product,
+    loops: &GemmLoops,
     (instruction, target): (MmaInstruction, &Target),
 ) -> Result<(), ScheduleError> {
     let shape = instruction.shape;
-    let tile = tile_for(schedule, product, shape);
-    let batch = batch_loops(schedule, product);
+    let tile = tile_for(schedule, loops, shape);
     let row_factors = [tile.warps.rows, tile.per_warp.rows, shape.m.get()];
-    let [row_block, row_warp, row_tile, m] = parts(schedule, product.row, &row_factors)?;
+    let [row_block, row_warp, row_tile, m] = parts(schedule, loops.row, &row_factors)?;
     let column_factors = [tile.warps.columns, tile.per_warp.columns, shape.n.get()];
     let [column_block, column_warp, column_tile, n] =
-        parts(schedule, product.column, &column_factors)?;
-    let [step, step_depth, k] = parts(schedule, product.depth, &[tile.steps, shape.k.get()])?;
-    let mut order = batch.clone();
+        parts(schedule, loops.column, &column_factors)?;
+    let [step, step_depth, k] = parts(schedule, loops.depth, &[tile.steps, shape.k.get()])?;
+    let mut order = loops.batch.clone();
     order.extend([row_block, column_block, row_warp, column_warp]);
     order.extend([step, step_depth, row_tile, column_tile, m, n, k]);
     schedule.apply(Primitive::Reorder { order })?;
-    bind_blocks(schedule, &batch, [row_block, column_block])?;
+    bind_blocks(schedule, &loops.batch, [row_block, column_block])?;
     bind(schedule, row_warp, ThreadAxis::ThreadY)?;
     bind(schedule, column_warp, ThreadAxis::ThreadZ)?;
-    stage_operands(schedule, product, step)?;
-    swizzle_tiles(schedule, product)?;
-    pipeline_step(schedule, product, (step, tile.step(shape)), target)?;
+    stage_operands(schedule, loops.operands, step)?;
+    swizzle_tiles(schedule, loops.operands)?;
+    pipeline_step(schedule, loops.operands, (step, tile.step(shape)), target)?;
     for loop_ in [step_depth, row_tile, column_tile] {
         schedule.apply(Primitive::Unroll { loop_ })?;
     }
     schedule.apply(Primitive::Tensorize { m, n, k, instruction })
 }
 
-/// The large tile where `product`, in `schedule`'s default nest, has at
-/// least `FULL_GRID` of them with `shape`'s `mma`, and the small one
-/// otherwise.
-fn tile_for(schedule: &Schedule<Open>, product: Product, shape: MmaShape) -> TensorCoreTile {
-    let extent = |axis: IterVarId| schedule.compute().iter_vars()[axis].extent.get();
-    let loops = schedule.loops().loops();
-    let batch: u64 =
-        batch_loops(schedule, product).iter().map(|&id| loops[id].extent.get()).product();
+/// The large tile where the product of `loops`, unsplit, has at least
+/// `FULL_GRID` of them with `shape`'s `mma`, and the small one otherwise.
+fn tile_for(schedule: &Schedule<Open>, loops: &GemmLoops, shape: MmaShape) -> TensorCoreTile {
+    let extent = |id: LoopId| schedule.loops().loops()[id].extent.get();
+    let batch: u64 = loops.batch.iter().map(|&id| extent(id)).product();
     let blocks = |extent: u64, warps: u64, per_warp: u64, mma: Dim| {
         extent.div_ceil(warps * per_warp * mma.get())
     };
-    let rows = blocks(extent(product.row), LARGE.warps.rows, LARGE.per_warp.rows, shape.m);
+    let rows = blocks(extent(loops.row), LARGE.warps.rows, LARGE.per_warp.rows, shape.m);
     let columns =
-        blocks(extent(product.column), LARGE.warps.columns, LARGE.per_warp.columns, shape.n);
+        blocks(extent(loops.column), LARGE.warps.columns, LARGE.per_warp.columns, shape.n);
     if batch * rows * columns >= FULL_GRID { LARGE } else { SMALL }
 }
 
-/// Both of `product`'s staged tiles swizzled as CUTLASS's layouts are, so
-/// the rows an `ldmatrix` reads fall in different banks: each whose rows
-/// have a swizzle and that holds whole blocks of it.
-fn swizzle_tiles(schedule: &mut Schedule<Open>, product: Product) -> Result<(), ScheduleError> {
-    for tensor in [product.lhs, product.rhs] {
+/// Both `operands`' staged tiles swizzled as CUTLASS's layouts are, so the
+/// rows an `ldmatrix` reads fall in different banks: each whose rows have
+/// a swizzle and that holds whole blocks of it.
+fn swizzle_tiles(
+    schedule: &mut Schedule<Open>,
+    operands: [TensorParamId; 2],
+) -> Result<(), ScheduleError> {
+    for tensor in operands {
         let Some(extents) = schedule.staged_extents(tensor)? else { continue };
         let element = schedule.compute().inputs()[tensor].dtype.element_size().get();
         if let Some(swizzle) = Swizzle::for_tile(&extents, element) {
