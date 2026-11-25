@@ -27,7 +27,8 @@ upgrade shows up in the data.
 - **Clocks.** Locked by hand around a published series (see Clock
   locking below). The harness records the actual SM and memory clocks,
   temperature and throttle reasons (`nvidia-smi --query-gpu`) before and
-  after each series, and marks a series invalid if the clocks moved.
+  after each timed series, once its warmup has run, and marks a series
+  invalid if the clocks moved.
 - **Timing.**
   - A warmup of at least 20 iterations and 1 s, each between CUDA events on
     one stream.
@@ -225,9 +226,10 @@ One file per suite and framework:
 - `dirty` records uncommitted changes in the working tree; published
   results come only from committed code.
 - `clocks` is the GPU's state just before and just after the case's
-  series. `events` are the reasons `nvidia-smi` gives for holding the
-  clocks down, named as its `clocks_event_reasons` fields are. `held` is
-  whether the SM and memory clocks were the same before and after.
+  timed series, after its warmup. `events` are the reasons `nvidia-smi`
+  gives for holding the clocks down, named as its `clocks_event_reasons`
+  fields are. `held` is whether the SM and memory clocks were the same
+  before and after.
 - Whether clocks were locked is not recorded: the harness cannot read it.
   Clocks that held are what locking is for.
 
