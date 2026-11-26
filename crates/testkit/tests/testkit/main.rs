@@ -6,6 +6,7 @@ mod bounded;
 mod compare;
 mod convolution;
 mod data;
+mod families;
 mod generate;
 mod golden;
 mod onnx_tests;
