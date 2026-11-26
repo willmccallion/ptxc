@@ -198,6 +198,34 @@ fn a_producer_held_by_two_inputs_inlines_into_both_at_once() {
 }
 
 #[test]
+fn a_broadcast_read_of_an_axis_of_one_element_is_the_consumers_own() {
+    let product = product(1, 4, 5);
+    let zeroed = consumer([1, 5], &[], |compute, inputs, [_, j]| {
+        let zero = compute.exprs().constant(0);
+        binary(BinaryOp::Add, load(inputs[0], &[zero, j]), int(1))
+    });
+    let operands = [tensor(&[1, 4], values(4, 10)), tensor(&[4, 5], values(20, 11))];
+
+    let inlined = inline(&zeroed, &[TensorParamId::new(0)], &product).unwrap();
+
+    let fused = run(&inlined.compute, &inlined_inputs(&inlined.inputs, &[], &operands));
+    assert_eq!(fused, in_turn(&product, &operands, &zeroed, &[]));
+}
+
+#[test]
+fn a_constant_read_of_an_axis_of_several_elements_is_refused() {
+    let product = product(3, 2, 4);
+    let first_row = consumer([3, 4], &[], |compute, inputs, [_, j]| {
+        let zero = compute.exprs().constant(0);
+        load(inputs[0], &[zero, j])
+    });
+
+    let refused = inline(&first_row, &[TensorParamId::new(0)], &product).unwrap_err();
+
+    assert_eq!(refused, InlineError::NotAnEpilogue);
+}
+
+#[test]
 fn a_product_read_away_from_the_consumers_own_element_is_refused() {
     let product = product(4, 2, 4);
     let transposed = consumer([4, 4], &[], |_, inputs, [i, j]| load(inputs[0], &[j, i]));
