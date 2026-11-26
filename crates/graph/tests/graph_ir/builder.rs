@@ -34,6 +34,22 @@ fn constant_values_refer_to_their_tensor() {
 }
 
 #[test]
+fn values_are_listed_in_id_order_with_their_definitions() {
+    let mut builder = GraphBuilder::new();
+    let x = builder.add_input(f32_type(&[3]));
+    let c = builder.add_constant(f32_constant(&[3]));
+    let sum = add_one(&mut builder, binary(BinaryOp::Add), &[x, c]);
+    let graph = builder.finish(vec![sum]).unwrap();
+
+    let values: Vec<(ValueId, bool)> = graph
+        .values()
+        .map(|(id, value)| (id, matches!(value.def(), ValueDef::Constant(_))))
+        .collect();
+
+    assert_eq!(values, [(x, false), (c, true), (sum, false)]);
+}
+
+#[test]
 fn reading_a_value_twice_records_two_uses() {
     let mut builder = GraphBuilder::new();
     let x = builder.add_input(f32_type(&[4]));

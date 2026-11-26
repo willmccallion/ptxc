@@ -48,6 +48,11 @@ impl Graph {
         self.nodes.iter_enumerated().filter_map(|(id, slot)| Some((id, slot.live()?)))
     }
 
+    /// Every value in id order, those of erased nodes included.
+    pub fn values(&self) -> impl Iterator<Item = (ValueId, &Value)> {
+        self.values.iter_enumerated()
+    }
+
     /// The value `id`, which must come from this graph.
     pub fn value(&self, id: ValueId) -> &Value {
         &self.values[id]

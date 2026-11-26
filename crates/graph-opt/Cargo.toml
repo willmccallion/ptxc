@@ -18,3 +18,4 @@ workspace = true
 ptxc-core.workspace = true
 ptxc-graph.workspace = true
 ptxc-interp.workspace = true
+thiserror.workspace = true

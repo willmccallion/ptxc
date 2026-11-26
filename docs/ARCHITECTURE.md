@@ -191,7 +191,12 @@ them, lowering gives a reshape a copy stage like any other op.
 - **In and out:** `Graph`. Partitioning goes from `Graph` to `Partitioned`.
 - `Pass` trait: `fn run(&self, graph: &mut Graph) -> Result<PassReport, PassError>`.
   `PassManager` runs passes in order and runs the verifier after each one
-  when `cfg(debug_assertions)` is on or a test asks for it.
+  when `cfg(debug_assertions)` is on or a test asks for it, naming the pass
+  that failed or left the graph invalid. `Compilation::optimize` runs
+  `PassManager::standard()`.
+- **DCE** removes the nodes no graph output depends on, as XLA's `HloDCE`;
+  a node stays while any of its outputs is read. Compaction then drops
+  constants nothing reads.
 - **Rewrite rules are data:**
   `RewriteRule { name, lhs: Pattern, rhs: Template, guard: Guard }`.
   `RewriteEngine` is a trait. `GreedyEngine` (a worklist, as in MLIR's
