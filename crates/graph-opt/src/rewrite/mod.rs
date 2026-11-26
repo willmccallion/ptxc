@@ -6,3 +6,7 @@ mod pattern;
 mod rule;
 mod rules;
 mod template;
+
+pub(crate) use engine::RewriteEngine;
+pub(crate) use greedy::GreedyEngine;
+pub(crate) use rules::canonical;

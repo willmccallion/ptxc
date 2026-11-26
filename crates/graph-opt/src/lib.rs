@@ -8,4 +8,4 @@ mod rewrite;
 
 pub use fusion::{GreedyPartitioner, OneNodePerGroup, Partitioner};
 pub use pass::{Pass, PassError, PassManager, PassReport, PipelineError};
-pub use passes::{ConstFold, Cse, Dce};
+pub use passes::{Canonicalize, ConstFold, Cse, Dce};

@@ -204,8 +204,10 @@ them, lowering gives a reshape a copy stage like any other op.
   read (D79).
 - **Rewrite rules are data:**
   `RewriteRule { name, lhs: Pattern, rhs: Template, guard: Guard }`.
-  `RewriteEngine` is a trait. `GreedyEngine` (a worklist, as in MLIR's
-  greedy pattern driver) is the v0.1.0 implementation. An `EGraphEngine`
+  `RewriteEngine` is a trait. `GreedyEngine` (one sweep in topological
+  order, as MLIR's greedy pattern driver, D83) is the v0.1.0
+  implementation. The `canonical` rules remove a reshape, transpose or cast
+  that leaves its input as it was. An `EGraphEngine`
   (equality saturation in the style of `egg`, plus cost-based extraction)
   can be added in `rewrite/egraph.rs` and consume the same rule sets. Rules
   are never closures, so no rule needs rewriting to switch engines.
@@ -216,7 +218,8 @@ them, lowering gives a reshape a copy stage like any other op.
   more bytes than the constants only that node reads, which folding frees,
   or 4 KiB, whichever is more. It never materialises a broadcast, widens a
   weight's type or copies a weight another node still reads. The standard
-  passes fold, then eliminate common subexpressions, then dead code.
+  passes fold, then canonicalise, then eliminate common subexpressions,
+  then dead code.
 - **QDQ folding** (`rules/qdq.rs`) turns a `Dequantize → MatMul/Conv →
   Quantize` chain into `QMatMul`/`QConv`, as TensorRT's explicit
   quantization does, and a `Dequantize → MatMul` chain into a `QMatMul`
