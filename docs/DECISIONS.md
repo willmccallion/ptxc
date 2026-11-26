@@ -1860,3 +1860,37 @@ the old one.
   keeps every fused stage one the default schedules tile as before. The
   rules are the ones XLA starts from; which ops fuse with which becomes a
   cost the M5 search can weigh.
+
+## D83. Rewrite rules match by op name and guard with data
+
+- **Context:** ARCHITECTURE.md describes rewrite rules as data
+  (`RewriteRule { name, lhs, rhs, guard }`), so an e-graph engine can apply
+  the same rule sets later, and a greedy engine as MLIR's worklist driver.
+  The first rule set removes ops that leave their input as it was.
+- **Options:**
+  - match ops by an enum of op kinds, or by the text format's mnemonic;
+  - guards as closures, or as an enum of named conditions;
+  - a worklist that re-adds what each rewrite touches, or one sweep.
+- **Choice:**
+  - A `Pattern` is a value bound to a capture, or the only output of a
+    node whose op has a given mnemonic, reading operands that match in
+    order. A capture used twice must bind one value.
+  - A `Guard` is an enum of conditions on bound values: `SameType` and
+    `IdentityTranspose` so far. A transpose that swaps a square tensor's
+    axes keeps its type, so the type alone cannot say it is the identity.
+  - A `Template` is a bound value so far; building nodes comes with the
+    rules that need it (#200, #201).
+  - `GreedyEngine` sweeps the nodes once in topological order, applying the
+    first rule that rewrites each. A pattern matches a node by what it
+    reads, and a rewrite changes only the readers of the value it
+    replaces, which come later, so one sweep reaches a fixed point. MLIR
+    re-adds ops to a worklist because its rewrites create ops anywhere; a
+    `NOTE` in `greedy.rs` records it.
+  - `Canonicalize` runs the `canonical` rules (a reshape to its input's
+    shape, a transpose keeping every axis, a cast to its input's type)
+    between constant folding and CSE.
+- **Reason:** the mnemonic is the op's name every graph already prints, so
+  a rule reads as the text it matches and needs no second list of op kinds.
+  An enum of guards keeps rules comparable and printable, which closures
+  are not. The sweep is the worklist's fixed point without the bookkeeping
+  until a template can add nodes.

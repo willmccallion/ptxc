@@ -2,7 +2,7 @@ use crate::graph;
 use ptxc_core::Idx;
 use ptxc_graph::{CycleError, Graph, NodeId, NodeOutputIndex, VerifyError};
 use ptxc_graph_opt::{
-    ConstFold, Cse, Dce, Pass, PassError, PassManager, PassReport, PipelineError,
+    Canonicalize, ConstFold, Cse, Dce, Pass, PassError, PassManager, PassReport, PipelineError,
 };
 
 /// Makes the first node's output read the second node's, closing a cycle,
@@ -86,8 +86,12 @@ fn a_pass_that_fails_is_named_and_stops_the_rest() {
 
 #[test]
 fn a_pass_on_a_graph_with_a_cycle_fails_under_its_own_name() {
-    let passes: [(Box<dyn Pass>, &str); 3] =
-        [(Box::new(ConstFold), "const-fold"), (Box::new(Cse), "cse"), (Box::new(Dce), "dce")];
+    let passes: [(Box<dyn Pass>, &str); 4] = [
+        (Box::new(ConstFold), "const-fold"),
+        (Box::new(Canonicalize), "canonicalize"),
+        (Box::new(Cse), "cse"),
+        (Box::new(Dce), "dce"),
+    ];
     for (refusing, name) in passes {
         let mut chain = graph(CHAIN);
         let _invalid = PassManager::new(vec![Box::new(CloseACycle)]).run(&mut chain);
