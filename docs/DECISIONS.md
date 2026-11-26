@@ -1819,3 +1819,44 @@ the old one.
   the terms cancel. Where they don't cancel it is narrower than one step
   of an f16 or bf16 result, and a few steps of an f32 one.
 - **Supersedes:** D72's tolerance for the lowering's f32 sum.
+
+## D82. Groups grow from the last, absorbing producers only they read
+
+- **Context:** the compiler ran every node as its own kernel. Lowering
+  can now merge a group's stages (D80); a partitioner decides the groups.
+  ResNet-50 and BERT are chains of products and convolutions with bias,
+  activation and residual epilogues, normalisations fed by elementwise
+  ops, and GELU, which reads its product twice through a chain.
+- **Options:**
+  - fusing forward: each elementwise node joins its producer's group. GELU
+    blocks it: the product's value is read by both the division and the
+    final multiply, so neither may take it first;
+  - XLA's producer-consumer fusion, from the last: a group absorbs a
+    producer once every reader of the producer's outputs is in it, so
+    GELU's chain gathers back to the product;
+  - a cost-model search over partitions, as the autotuner's (M5).
+- **Choice:** greedy producer-consumer fusion. Groups, from the last node
+  back, each absorb producer groups to a fixed point, when:
+  - nothing outside the group reads what the producer computes, and no
+    graph output is among it;
+  - a producer with a product, convolution, window or reduction joins
+    only a group that has none, whose readers of it are elementwise ops of
+    its shape: its reduction becomes their epilogue;
+  - a producer without one is inlined into its readers' loads, except
+    into a product, which takes only transposes (any arithmetic in its
+    operands would lose its tiling), and never into a convolution or pool,
+    which read their input padded, a gather or the other data movement.
+  Gathers, reshapes and the other data movement, and ops of several
+  outputs, stay in groups of their own. `OneNodePerGroup` keeps M2's
+  partition for tests and comparison.
+- **Result:** ResNet-50 at batch 16 runs 58 kernels where it ran 123,
+  BERT-base 334 where it ran 507, GPT-2 428 where it ran 578, all matching
+  ONNX Runtime as before. The loop interpreter's reference runs, as the
+  compiler does, the standard passes and this partition, so the GPU still
+  matches it bit for bit: a product fused into a reduction's body rounds
+  once in a multiply-add (D57) on both.
+- **Reason:** absorbing only producers no one else reads never computes a
+  value twice, never makes groups depend on each other in a cycle, and
+  keeps every fused stage one the default schedules tile as before. The
+  rules are the ones XLA starts from; which ops fuse with which becomes a
+  cost the M5 search can weigh.

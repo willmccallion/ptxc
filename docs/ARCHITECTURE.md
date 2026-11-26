@@ -224,10 +224,14 @@ them, lowering gives a reshape a copy stage like any other op.
 - **Layout** chooses NHWC or NCHW per convolution chain and pushes
   transposes to group boundaries. A layout is part of `TensorType`, never an
   implicit convention.
-- **Partitioners** implement `Partitioner`. The greedy one fuses injective
-  consumers into their producer's epilogue and elementwise ops into
-  reductions, following XLA's producer-consumer fusion. The attention matcher
-  (M6) runs first and claims whole attention subgraphs.
+- **Partitioners** implement `Partitioner`. The greedy one follows XLA's
+  producer-consumer fusion (D82): from the last node back, a group absorbs a
+  producer group once every reader of its outputs is in it. A producer with
+  a product, convolution or reduction joins only elementwise readers of its
+  shape, as their epilogue's reduction; one without is inlined into its
+  readers' loads, a product taking only transposes and a convolution none.
+  `OneNodePerGroup` runs each node alone, for tests and comparison. The
+  attention matcher (M6) runs first and claims whole attention subgraphs.
 
 ### Reference interpreter (`ptxc-interp`)
 
