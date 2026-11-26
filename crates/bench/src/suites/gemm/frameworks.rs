@@ -60,8 +60,7 @@ fn unit_fp8() -> Result<QMatMulAttrs, SweepError> {
 
 /// `y0 = product(x0, x1)`, `product` a quantized matmul, which takes no
 /// transposes: an input stored transposed is transposed back by a
-/// `Transpose` node, a kernel of its own until fusion (M4) folds it into
-/// the product's reads.
+/// `Transpose` node, which fusion folds into the product's reads (D82).
 fn quantized_graph(layout: Layout, inputs: &Inputs, product: Op) -> Result<Graph, SweepError> {
     let mut builder = GraphBuilder::new();
     let mut operand = |name: &str, tensor: &HostTensor, transposed: bool| {
