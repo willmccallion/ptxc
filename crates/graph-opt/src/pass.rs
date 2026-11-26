@@ -92,7 +92,7 @@ impl PassManager {
     /// `self`, verifying the graph after every pass in release builds too.
     #[must_use]
     pub fn verifying_each_pass(self) -> Self {
-        Self { verification: Verification::Always, ..self }
+        Self { passes: self.passes, verification: Verification::Always }
     }
 
     /// Runs each pass over `graph`, in order; each pass's report.
