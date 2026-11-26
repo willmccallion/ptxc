@@ -11,6 +11,7 @@ use ptxc_loop::{ComputeDef, TileOrder};
 use ptxc_target::{MmaInstruction, MmaShape};
 use ptxc_testkit::golden;
 use ptxc_testkit::tensorized::{Layout, ONE_TILE, Operands, TileLoops, product, tensorized};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 const UNROLLED: Layout = Layout { tile_loops: TileLoops::Unrolled, ..ONE_TILE };
@@ -198,4 +199,44 @@ fn a_grid_of_uneven_block_counts_divides_once_in_32_bits() {
         |op: &str| text.lines().any(|line| line.contains(op) && line.ends_with(", 12;"));
     assert!(by_column_blocks("div.u32") && by_column_blocks("rem.u32"), "{text}");
     assemble(&module);
+}
+
+/// The registers of the accumulator tile each `mma` in `module` updates:
+/// those its results are moved back into.
+fn accumulator_tiles(module: &PtxModule) -> Vec<Vec<String>> {
+    let text = module.to_string();
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let results = |line: &str| -> Vec<String> {
+        let (_, rest) = line.split_once('{').unwrap();
+        let (registers, _) = rest.split_once('}').unwrap();
+        registers.split(',').map(|register| register.trim().to_owned()).collect()
+    };
+    let stored_into = |after: usize, result: &str| -> String {
+        let source = format!(", {result};");
+        let line = lines[after..]
+            .iter()
+            .find(|line| line.starts_with("mov.b32") && line.ends_with(&source));
+        let (_, operands) = line.unwrap().split_once(' ').unwrap();
+        operands.split(',').next().unwrap().trim().to_owned()
+    };
+    let mmas = (0..lines.len()).filter(|&at| lines[at].starts_with("mma.sync.aligned"));
+    mmas.map(|at| results(lines[at]).iter().map(|result| stored_into(at, result)).collect())
+        .collect()
+}
+
+#[test]
+fn each_accumulator_tile_of_a_warp_has_registers_of_its_own() {
+    let instruction = f16_mma();
+    let extents = [128, 768, 768];
+    let compute = product(instruction, extents, Operands::matmul(extents, TileOrder::RowMajor));
+    let kernel = ptxc_schedule::default_schedule(compute, &target()).unwrap().lower();
+
+    let module = generate(&kernel, &target()).unwrap();
+
+    // A warp's 2 by 4 tiles, each 4 f32 registers a lane, updated by both
+    // `mma` steps of a stage.
+    let tiles: BTreeSet<Vec<String>> = accumulator_tiles(&module).into_iter().collect();
+    let registers: BTreeSet<&String> = tiles.iter().flatten().collect();
+    assert_eq!(tiles.len(), 8, "{module}");
+    assert_eq!(registers.len(), 8 * 4, "{module}");
 }
