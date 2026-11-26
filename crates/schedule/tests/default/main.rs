@@ -124,7 +124,9 @@ fn an_arg_reduction_shares_its_tree_too() {
 
 #[test]
 fn empty_and_scalar_stages_stay_serial() {
-    for compute in [stage(&[0, 4], 0, None), stage(&[], 0, None), stage(&[0, 5], 1, Some(sum))] {
+    // Rows of 5 take a thread each; rows of 40, longer than a warp, a block each.
+    let empty = [stage(&[0, 5], 1, Some(sum)), stage(&[0, 40], 1, Some(sum))];
+    for compute in [vec![stage(&[0, 4], 0, None), stage(&[], 0, None)], empty.to_vec()].concat() {
         let (_, launch) = scheduled(compute);
 
         assert_eq!(launch_dims(launch), ([1, 1, 1], [1, 1, 1]));
