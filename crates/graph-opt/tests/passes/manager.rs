@@ -1,0 +1,116 @@
+use crate::graph;
+use ptxc_core::Idx;
+use ptxc_graph::{CycleError, Graph, NodeId, NodeOutputIndex, VerifyError};
+use ptxc_graph_opt::{Dce, Pass, PassError, PassManager, PassReport, PipelineError};
+
+/// Makes the first node's output read the second node's, closing a cycle,
+/// which the rewriter allows and the verifier refuses.
+#[derive(Debug)]
+struct CloseACycle;
+
+impl Pass for CloseACycle {
+    fn name(&self) -> &'static str {
+        "close-a-cycle"
+    }
+
+    fn run(&self, graph: &mut Graph) -> Result<PassReport, PassError> {
+        let outputs: Vec<_> =
+            graph.nodes().map(|(_, node)| node.outputs()[NodeOutputIndex::new(0)]).collect();
+        graph.rewriter().replace_all_uses(outputs[0], outputs[1])?;
+        Ok(PassReport { changed: true })
+    }
+}
+
+/// Fails as soon as it runs.
+#[derive(Debug)]
+struct Refuse;
+
+impl Pass for Refuse {
+    fn name(&self) -> &'static str {
+        "refuse"
+    }
+
+    fn run(&self, _: &mut Graph) -> Result<PassReport, PassError> {
+        Err(PassError::Cycle(CycleError(NodeId::new(0))))
+    }
+}
+
+const CHAIN: &str = "\
+graph(%x: f32[4]) {
+  %0 = neg %x : f32[4]
+  %1 = abs %0 : f32[4]
+  return %1
+}
+";
+
+#[test]
+fn passes_run_in_order_each_reporting() {
+    let mut chain = graph(CHAIN);
+    let manager = PassManager::new(vec![Box::new(Dce), Box::new(Dce)]).verifying_each_pass();
+
+    let reports = manager.run(&mut chain).unwrap();
+
+    assert_eq!(reports, [PassReport { changed: false }; 2]);
+}
+
+#[test]
+fn a_pass_that_leaves_an_invalid_graph_is_named() {
+    let mut chain = graph(CHAIN);
+    let manager = PassManager::new(vec![Box::new(CloseACycle)]).verifying_each_pass();
+
+    let error = manager.run(&mut chain).unwrap_err();
+
+    let PipelineError::Invalid { pass, source: VerifyError::Cycle(_) } = error else {
+        panic!("{error:?}")
+    };
+    assert_eq!(pass, "close-a-cycle");
+}
+
+#[test]
+fn a_pass_that_fails_is_named_and_stops_the_rest() {
+    let mut chain = graph(CHAIN);
+    let manager = PassManager::new(vec![Box::new(Refuse), Box::new(CloseACycle)]);
+
+    let error = manager.run(&mut chain).unwrap_err();
+
+    assert_eq!(
+        error,
+        PipelineError::Failed {
+            pass: "refuse",
+            source: PassError::Cycle(CycleError(NodeId::new(0)))
+        }
+    );
+    assert_eq!(chain.verify(), Ok(()));
+}
+
+#[test]
+fn dce_refuses_a_graph_with_a_cycle_by_name() {
+    let mut chain = graph(CHAIN);
+    let cycle = PassManager::new(vec![Box::new(CloseACycle)]);
+    let _invalid = cycle.run(&mut chain);
+
+    let error = PassManager::new(vec![Box::new(Dce)]).run(&mut chain).unwrap_err();
+
+    let PipelineError::Failed { pass, source: PassError::Cycle(_) } = error else {
+        panic!("{error:?}")
+    };
+    assert_eq!(pass, "dce");
+}
+
+/// Release builds verify only when asked; debug builds always do, so this
+/// runs only under `--release`.
+#[cfg(not(debug_assertions))]
+#[test]
+fn release_builds_verify_after_each_pass_only_when_asked() {
+    let unverified = PassManager::new(vec![Box::new(CloseACycle)]);
+    let verified = PassManager::new(vec![Box::new(CloseACycle)]).verifying_each_pass();
+
+    let unchecked = unverified.run(&mut graph(CHAIN));
+    let checked = verified.run(&mut graph(CHAIN));
+
+    assert_eq!(unchecked, Ok(vec![PassReport { changed: true }]));
+    assert!(
+        matches!(checked, Err(PipelineError::Invalid { pass: "close-a-cycle", .. })),
+        "{checked:?}"
+    );
+}

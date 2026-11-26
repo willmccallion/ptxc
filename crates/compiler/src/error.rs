@@ -4,6 +4,7 @@
 use ptxc_codegen::CodegenError;
 use ptxc_core::SizeError;
 use ptxc_graph::{CycleError, ValueId};
+use ptxc_graph_opt::PipelineError;
 use ptxc_loop::ScheduleError;
 use ptxc_lower::LowerError;
 use ptxc_onnx::ImportError;
@@ -16,6 +17,9 @@ pub enum CompileError {
     /// The ONNX model did not import.
     #[error(transparent)]
     Import(#[from] ImportError),
+    /// A graph pass failed.
+    #[error(transparent)]
+    Optimize(#[from] PipelineError),
     /// The graph has a cycle.
     #[error(transparent)]
     Partition(#[from] CycleError),

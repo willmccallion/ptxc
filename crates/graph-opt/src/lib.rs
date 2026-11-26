@@ -5,3 +5,6 @@ mod fusion;
 mod pass;
 mod passes;
 mod rewrite;
+
+pub use pass::{Pass, PassError, PassManager, PassReport, PipelineError};
+pub use passes::Dce;

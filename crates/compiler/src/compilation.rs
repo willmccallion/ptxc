@@ -6,6 +6,7 @@ use crate::emit::emit;
 use crate::error::CompileError;
 use ptxc_core::IndexVec;
 use ptxc_graph::{Graph, GroupId, Partitioned as PartitionedGraph};
+use ptxc_graph_opt::PassManager;
 use ptxc_loop::{ComputeDef, LoweredKernel};
 use ptxc_lower::LoweredGroup;
 use ptxc_onnx::{ImportOptions, import_model};
@@ -70,10 +71,9 @@ impl Compilation<Imported> {
     }
 
     /// The graph after the graph passes.
-    // NOTE: M2 runs no graph passes; constant folding, fusion and the rest
-    // come with M4, as ROADMAP.md plans.
     pub fn optimize(self) -> Result<Compilation<Optimized>, CompileError> {
-        let Imported { graph } = self.state;
+        let Imported { mut graph } = self.state;
+        let _reports = PassManager::standard().run(&mut graph)?;
         Ok(Compilation { state: Optimized { graph }, target: self.target })
     }
 }
