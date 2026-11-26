@@ -50,7 +50,7 @@ pub enum ComputeError {
     #[error("reduction axis {0} is listed twice")]
     ReduceAxisReused(VarName),
     /// A second reduction; each compute definition is one stage with at
-    /// most one (D40).
+    /// most one (D40), which its output may read more than once (D80).
     #[error("a compute definition holds at most one reduction")]
     MultipleReductions,
     /// Several outputs alongside a reduction.

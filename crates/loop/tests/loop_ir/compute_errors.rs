@@ -167,6 +167,17 @@ fn a_definition_is_one_stage_with_at_most_one_reduction() {
     );
     assert_eq!(reject(s, two), ComputeError::MultipleReductions);
 
+    let s = setup();
+    let (x, i, k, k_axis) = (s.x, s.i, s.k, s.k_axis);
+    let summed = sum(vec![k_axis], load(x, &[i, k]));
+    let maxed = TensorExpr::Reduce {
+        op: ReduceOp::Max,
+        axes: vec![k_axis],
+        body: Box::new(load(x, &[i, k])),
+    };
+    let same_axis = binary(BinaryOp::Add, summed, maxed);
+    assert_eq!(reject(s, same_axis), ComputeError::MultipleReductions);
+
     let mut s = setup();
     let (x, i, k, k_axis) = (s.x, s.i, s.k, s.k_axis);
     s.b.output(TensorName::new("extra"), f32_const(1.0));
