@@ -25,7 +25,8 @@ fn window_axis() -> impl Strategy<Value = WindowAxis> {
 }
 
 /// One spatial axis: an input extent that, padded, holds at least one
-/// dilated kernel, the kernel, and how the window moves.
+/// dilated kernel and at most 3 elements more, the kernel, and how the
+/// window moves.
 fn spatial_axis() -> impl Strategy<Value = (u64, u64, WindowAxis)> {
     (1_u64..=3, window_axis(), 0_u64..=3).prop_map(|(kernel, window, extra)| {
         let span = (kernel - 1) * window.dilation.get() + 1;
