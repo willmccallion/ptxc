@@ -64,12 +64,9 @@ fn smallest_gap(
 #[allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 mod tests {
     use super::{GreedyBySize, smallest_gap};
-    use crate::memory_plan::lifetime::{Lifetime, peak_live_bytes};
+    use crate::memory_plan::lifetime::Lifetime;
     use crate::memory_plan::planner::{MemoryPlanner, Request};
-    use crate::memory_plan::verify::{Placed, verify};
-    use proptest::prelude::*;
-    use ptxc_core::{ByteOffset, ByteSize, Idx};
-    use ptxc_program::{BUFFER_ALIGNMENT, BufferId};
+    use ptxc_core::{ByteOffset, ByteSize};
 
     fn request(size: u64, steps: Option<(usize, usize)>) -> Request {
         Request {
@@ -153,44 +150,5 @@ mod tests {
         let placed = [(0, 0..256), (1, 256..512)];
 
         assert_eq!(smallest_gap(&requests, 2, &placed), Some(ByteOffset::new(0)));
-    }
-
-    /// Up to 60 requests of up to 5000 bytes, each live over a few of 40
-    /// steps or never touched.
-    fn requests() -> impl Strategy<Value = Vec<Request>> {
-        let steps = prop::option::weighted(0.9, (0_usize..40, 0_usize..8));
-        let one = (0_u64..5000, steps).prop_map(|(size, steps)| {
-            request(size, steps.map(|(first, length)| (first, first + length)))
-        });
-        prop::collection::vec(one, 0..60)
-    }
-
-    proptest! {
-        #[test]
-        fn a_plan_keeps_live_buffers_apart_in_no_more_than_their_own_regions(
-            requests in requests(),
-        ) {
-            let plan = GreedyBySize.plan(&requests).unwrap();
-
-            let placed: Vec<Placed> = requests
-                .iter()
-                .zip(&plan.offsets)
-                .enumerate()
-                .map(|(index, (request, &offset))| Placed {
-                    buffer: BufferId::new(index),
-                    offset,
-                    size: request.size,
-                    lifetime: request.lifetime,
-                })
-                .collect();
-            prop_assert_eq!(verify(&placed, plan.size), Ok(()));
-            let live = requests.iter().filter_map(|r| Some((r.size, r.lifetime?)));
-            prop_assert!(plan.size >= peak_live_bytes(live).unwrap());
-            let regions: u64 = requests
-                .iter()
-                .map(|r| ByteOffset::new(r.size.get()).align_up(BUFFER_ALIGNMENT).unwrap().get())
-                .sum();
-            prop_assert!(plan.size.get() <= regions, "{:?} > {regions}", plan.size);
-        }
     }
 }

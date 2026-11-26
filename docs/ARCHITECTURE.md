@@ -648,7 +648,10 @@ Memory planning is part of compilation, as in XLA's BufferAssignment.
   whose live ranges overlap never overlap in memory. Emission places the
   arena once every step is emitted. Greedy-by-size, TensorFlow Lite's
   planner, takes buffers from largest to smallest, each into the smallest
-  gap among the buffers live with it; linear scan is the second planner.
+  gap among the buffers live with it. Linear scan takes them in the order
+  they become live, each into the tightest range freed by buffers already
+  dead. Emission keeps the smaller arena: greedy-by-size reaches the lower
+  bound on the target models, and linear scan wins on some lifetimes.
 - The output is checked by an independent verifier, `verify_arena`, in
   tests: no two live buffers overlap, and every buffer is aligned and inside
   the arena.

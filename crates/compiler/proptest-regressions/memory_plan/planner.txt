@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc a86a481b23e3ce2644248211ec1bdb01cbada136f212c02b56fc7f091b29853d # shrinks to requests = [Request { size: ByteSize(2049), lifetime: Some(Lifetime { first: StepIndex(35), last: StepIndex(37) }) }, Request { size: ByteSize(0), lifetime: None }, Request { size: ByteSize(1), lifetime: Some(Lifetime { first: StepIndex(33), last: StepIndex(34) }) }, Request { size: ByteSize(0), lifetime: None }, Request { size: ByteSize(0), lifetime: Some(Lifetime { first: StepIndex(33), last: StepIndex(35) }) }]

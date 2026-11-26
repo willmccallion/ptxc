@@ -13,7 +13,8 @@ pub use verify::ArenaError;
 use crate::error::CompileError;
 use greedy_by_size::GreedyBySize;
 use lifetime::{lifetimes, peak_live_bytes};
-use planner::{MemoryPlanner, Request};
+use linear_scan::LinearScan;
+use planner::{ArenaPlan, MemoryPlanner, Request};
 use ptxc_core::{ByteSize, DType, ElementCount, IndexVec};
 use ptxc_program::{Buffer, BufferId, Location, Program, Step};
 use verify::{Placed, verify};
@@ -39,6 +40,10 @@ pub(crate) struct Unplaced {
     pub(crate) place: Place,
 }
 
+/// The planners `place` runs, keeping the smallest arena; the first wins a
+/// tie.
+const PLANNERS: [&dyn MemoryPlanner; 2] = [&GreedyBySize, &LinearScan];
+
 /// `buffers` located, each `Place::Arena` one in an arena planned so that
 /// buffers `steps` touch at the same step never share a byte; and the
 /// arena's size.
@@ -54,7 +59,7 @@ pub(crate) fn place(
             requests.push(Request { size, lifetime: lifetimes[id] });
         }
     }
-    let plan = GreedyBySize.plan(&requests).ok_or(CompileError::TooLarge)?;
+    let plan = smallest_plan(&requests).ok_or(CompileError::TooLarge)?;
     let mut offsets = plan.offsets.into_iter();
     let located = buffers
         .into_iter()
@@ -90,6 +95,13 @@ pub fn arena_use(program: &Program) -> Result<ArenaUse, ArenaError> {
         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));
     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;
     Ok(ArenaUse { size: program.arena(), lower_bound })
+}
+
+/// The plan for `requests` with the smallest arena, of those `PLANNERS`
+/// make; `None` if none can place them below 2^64.
+fn smallest_plan(requests: &[Request]) -> Option<ArenaPlan> {
+    let plans = PLANNERS.iter().filter_map(|planner| planner.plan(requests));
+    plans.min_by_key(|plan| plan.size)
 }
 
 /// `program`'s arena buffers, with their lifetimes over its steps.

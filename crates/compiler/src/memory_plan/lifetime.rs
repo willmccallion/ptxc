@@ -26,6 +26,16 @@ impl Lifetime {
         self.first <= other.last && other.first <= self.last
     }
 
+    /// The first step touching the buffer.
+    pub(crate) const fn first(self) -> StepIndex {
+        self.first
+    }
+
+    /// The last step touching the buffer.
+    pub(crate) const fn last(self) -> StepIndex {
+        self.last
+    }
+
     /// `self` stretched to include `step`, a step after its first.
     const fn through(self, step: StepIndex) -> Self {
         Self { first: self.first, last: step }
