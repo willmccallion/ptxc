@@ -102,6 +102,13 @@ impl LoweredGroup {
         Self { intermediates, tables, stages }
     }
 
+    /// The intermediates' types, the tables and the stages, taken apart.
+    pub(crate) fn into_parts(
+        self,
+    ) -> (IndexVec<IntermediateId, TensorType>, IndexVec<TableId, HostTensor>, Vec<Stage>) {
+        (self.intermediates, self.tables, self.stages)
+    }
+
     /// The type of each intermediate buffer.
     pub const fn intermediates(&self) -> &IndexVec<IntermediateId, TensorType> {
         &self.intermediates

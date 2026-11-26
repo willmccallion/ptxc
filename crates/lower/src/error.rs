@@ -1,16 +1,24 @@
 //! `LowerError`: a group that cannot be lowered.
 
 use ptxc_core::DType;
-use ptxc_graph::{GroupId, NodeId};
-use ptxc_loop::ComputeError;
+use ptxc_graph::{GroupId, NodeId, ValueId};
+use ptxc_loop::{ComputeError, InlineError};
 use thiserror::Error;
 
 /// A group that cannot be lowered to compute definitions.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum LowerError {
-    /// A group of several nodes, which needs epilogue fusion.
-    #[error("group {0:?} holds several nodes, which cannot be lowered yet")]
-    Fused(GroupId),
+    /// Inlining one of a group's stages into another built an ill-formed
+    /// definition, which is a bug in lowering or inlining.
+    #[error("inlining the stage computing {value:?} in group {group:?} failed: {source}")]
+    Inline {
+        /// The group.
+        group: GroupId,
+        /// The value the inlined stage computes.
+        value: ValueId,
+        /// Why inlining failed.
+        source: InlineError,
+    },
     /// An op on an element type it has no lowering for yet.
     #[error("`{op}` on {} cannot be lowered yet", dtype.name())]
     UnsupportedDType {
