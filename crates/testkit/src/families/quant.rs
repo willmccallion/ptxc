@@ -1,9 +1,9 @@
 //! Quantization onto every grid type, per tensor and per axis, and the
 //! quantized products.
 //!
-//! A requantized product compares within one step, its rescaling f32 where
-//! the reference's is f64; a dequantized one within its float type's
-//! tolerance.
+//! A product of integer operands sums exactly and compares within one step,
+//! its rescaling f32 where the reference's is f64. One of FP8 operands sums
+//! in f32 and is held to that sum's error bound (D81).
 
 use super::values::{Domain, axis_dims, tensor};
 use proptest::collection::vec;

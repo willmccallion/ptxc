@@ -156,6 +156,11 @@ worst element by both measures, with its index.
 | i8 / u8 (quantized outputs) | ± 1 step | — | rounding ties can legitimately differ after rescaling |
 | integer, bool | exact | exact | |
 
+A quantized product of FP8 operands is held to an error bound instead: its
+terms are summed in f32 and may cancel, so the exact value before the last
+rounding is placed within `γₙ Σ|xᵢ|` of an estimate, for `n` f32 roundings
+(D81).
+
 These are starting values, to be calibrated against the observed error of
 ORT and PyTorch on the same graphs during M2 and recorded in DECISIONS.md.
 A tolerance is never loosened to make a single test pass.

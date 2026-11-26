@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e3269f908ed1c8db59b46f527cab5c1b9618966d21fdf5fc4a20f7feb8c138eb # shrinks to case = (QMatMul(QMatMulAttrs { a: QuantParams { dtype: F8E4M3Fn, granularity: PerAxis { axis: Axis(0), maps: [Affine { scale: Scale(0.05), zero_point: ZeroPoint(0) }, Affine { scale: Scale(0.05), zero_point: ZeroPoint(0) }] } }, b: QuantParams { dtype: F8E5M2, granularity: PerTensor(Affine { scale: Scale(0.05), zero_point: ZeroPoint(0) }) }, output: Float(F16) }), [HostTensor { shape: Shape { dims: [Dim(2), Dim(3)], elements: ElementCount(6) }, data: F8E4M3Fn([F8E4M3Fn(0), F8E4M3Fn(0), F8E4M3Fn(0), F8E4M3Fn(4.5), F8E4M3Fn(448), F8E4M3Fn(448)]) }, HostTensor { shape: Shape { dims: [Dim(3), Dim(2)], elements: ElementCount(6) }, data: F8E5M2([F8E5M2(-3.5), F8E5M2(0), F8E5M2(57344), F8E5M2(0), F8E5M2(-57344), F8E5M2(0)]) }])
