@@ -9,6 +9,8 @@ use super::compute_def::{ComputeDef, IndexVar, OutputDef, TensorParam};
 use super::error::ComputeError;
 use super::iter_var::{IterKind, IterVarId};
 use super::names::{ComputeName, TensorName, VarName};
+use super::rebuild::{Rebuild, rebuild};
+use super::scalar::Scalar;
 use super::scalar_op::ReduceOp;
 use super::tensor_expr::{TensorExpr, TensorParamId};
 use crate::expr::{Expr, ExprId, VarId};
@@ -173,7 +175,7 @@ impl<'c> Split<'c> {
             self.positions.iter().filter_map(|(&tensor, &at)| Some((tensor, (at?, slice))));
         let renaming = Renaming { axes, tensors, splits: splits.collect() };
         let mut translator = Translator::new(self.compute, builder, renaming, None);
-        let expr = translator.expr(self.reduction)?;
+        let expr = rebuild(self.reduction, &mut translator)?;
         Ok((translator.finish(self.output.name.clone(), expr)?, inputs))
     }
 
@@ -212,7 +214,7 @@ impl<'c> Split<'c> {
         let reduced = TensorExpr::Reduce { op: self.op, axes: vec![slice_axis], body };
         let renaming = Renaming { axes, tensors, splits: HashMap::new() };
         let mut translator = Translator::new(self.compute, builder, renaming, Some(reduced));
-        let expr = translator.expr(&self.output.expr)?;
+        let expr = rebuild(&self.output.expr, &mut translator)?;
         Ok((translator.finish(self.output.name.clone(), expr)?, inputs))
     }
 
@@ -341,52 +343,12 @@ impl<'c> Translator<'c> {
         Self { from, builder, vars, axes, tensors, splits, reduction }
     }
 
-    fn expr(&mut self, expr: &TensorExpr) -> Result<TensorExpr, RfactorError> {
-        let boxed = |this: &mut Self, value: &TensorExpr| this.expr(value).map(Box::new);
-        Ok(match expr {
-            TensorExpr::Load { tensor, index, padding } => TensorExpr::Load {
-                tensor: self.tensor(*tensor)?,
-                index: self.load_index(*tensor, index)?,
-                padding: *padding,
-            },
-            TensorExpr::Const(scalar) => TensorExpr::Const(*scalar),
-            TensorExpr::Index { index, dtype } => {
-                TensorExpr::Index { index: self.index(*index)?, dtype: *dtype }
-            }
-            TensorExpr::Unary(op, value) => TensorExpr::Unary(*op, boxed(self, value)?),
-            TensorExpr::Binary(op, lhs, rhs) => {
-                TensorExpr::Binary(*op, boxed(self, lhs)?, boxed(self, rhs)?)
-            }
-            TensorExpr::Cast { to, overflow, value } => {
-                TensorExpr::Cast { to: *to, overflow: *overflow, value: boxed(self, value)? }
-            }
-            TensorExpr::Select { condition, then, otherwise } => TensorExpr::Select {
-                condition: boxed(self, condition)?,
-                then: boxed(self, then)?,
-                otherwise: boxed(self, otherwise)?,
-            },
-            TensorExpr::Reduce { op, axes, body } => {
-                if let Some(reduction) = &self.reduction {
-                    return Ok(reduction.clone());
-                }
-                let axes = axes.iter().map(|&axis| self.axis(axis)).collect::<Result<_, _>>()?;
-                TensorExpr::Reduce { op: *op, axes, body: boxed(self, body)? }
-            }
-            TensorExpr::ArgReduce { kind, tie, axis, body } => TensorExpr::ArgReduce {
-                kind: *kind,
-                tie: *tie,
-                axis: self.axis(*axis)?,
-                body: boxed(self, body)?,
-            },
-        })
-    }
-
     /// A load's index, with the slice's index before a split dimension's.
     fn load_index(
         &mut self,
         tensor: TensorParamId,
         index: &[ExprId],
-    ) -> Result<Vec<ExprId>, RfactorError> {
+    ) -> Result<Vec<ExprId>, ComputeError> {
         let split = self.splits.get(&tensor).copied();
         let mut parts = Vec::with_capacity(index.len() + 1);
         for (position, &part) in index.iter().enumerate() {
@@ -400,23 +362,39 @@ impl<'c> Translator<'c> {
         Ok(parts)
     }
 
-    fn index(&mut self, id: ExprId) -> Result<ExprId, RfactorError> {
-        let vars = &self.vars;
-        let imported =
-            self.builder.exprs().import(self.from.exprs(), id, &|var| vars.get(&var).copied());
-        Ok(imported.map_err(ComputeError::UnknownVar)?)
-    }
-
-    fn tensor(&self, tensor: TensorParamId) -> Result<TensorParamId, RfactorError> {
-        Ok(self.tensors.get(&tensor).copied().ok_or(ComputeError::UnknownTensor(tensor))?)
-    }
-
-    fn axis(&self, axis: IterVarId) -> Result<IterVarId, RfactorError> {
-        Ok(self.axes.get(&axis).copied().ok_or(ComputeError::UnknownAxis(axis))?)
+    fn tensor(&self, tensor: TensorParamId) -> Result<TensorParamId, ComputeError> {
+        self.tensors.get(&tensor).copied().ok_or(ComputeError::UnknownTensor(tensor))
     }
 
     fn finish(mut self, name: TensorName, expr: TensorExpr) -> Result<ComputeDef, RfactorError> {
         self.builder.output(name, expr);
         Ok(self.builder.finish()?)
+    }
+}
+
+impl Rebuild for Translator<'_> {
+    fn index(&mut self, id: ExprId) -> Result<ExprId, ComputeError> {
+        let vars = &self.vars;
+        let imported =
+            self.builder.exprs().import(self.from.exprs(), id, &|var| vars.get(&var).copied());
+        imported.map_err(ComputeError::UnknownVar)
+    }
+
+    fn axis(&self, axis: IterVarId) -> Result<IterVarId, ComputeError> {
+        self.axes.get(&axis).copied().ok_or(ComputeError::UnknownAxis(axis))
+    }
+
+    fn load(
+        &mut self,
+        tensor: TensorParamId,
+        index: &[ExprId],
+        padding: Option<Scalar>,
+    ) -> Result<TensorExpr, ComputeError> {
+        let index = self.load_index(tensor, index)?;
+        Ok(TensorExpr::Load { tensor: self.tensor(tensor)?, index, padding })
+    }
+
+    fn reduction(&mut self, _reduction: &TensorExpr) -> Option<TensorExpr> {
+        self.reduction.clone()
     }
 }

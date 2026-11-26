@@ -6,6 +6,7 @@ mod compute_def;
 mod error;
 mod iter_var;
 mod names;
+mod rebuild;
 mod rfactor;
 mod scalar;
 mod scalar_op;
