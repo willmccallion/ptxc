@@ -44,7 +44,7 @@ pub(crate) fn product(compute: &ComputeDef) -> Option<Product> {
     let row = innermost_only_in(&lhs_axes, &rhs_axes)?;
     let column = innermost_only_in(&rhs_axes, &lhs_axes)?;
     let has_work = compute.iter_vars().iter().all(|axis| axis.extent.get() > 0);
-    let read_once = [lhs, rhs].iter().all(|&tensor| loads(&output.expr, tensor) == 1);
+    let read_once = [lhs, rhs].iter().all(|&tensor| read_once(&output.expr, body, tensor));
     let reads_depth = lhs_axes.contains(&depth) && rhs_axes.contains(&depth);
     (lhs != rhs && read_once && reads_depth && has_work).then_some(Product {
         row,
@@ -81,18 +81,39 @@ fn load_axes(compute: &ComputeDef, expr: &TensorExpr) -> Option<(TensorParamId, 
     Some((*tensor, axes))
 }
 
+/// Whether `tensor` is read once in `body`, the body of `expr`'s one
+/// reduction, and nowhere else in `expr`: an epilogue may read the
+/// reduction more than once (D80), each read the same body.
+pub(crate) fn read_once(expr: &TensorExpr, body: &TensorExpr, tensor: TensorParamId) -> bool {
+    loads(body, tensor) == 1 && loads_outside_reductions(expr, tensor) == 0
+}
+
 /// How many loads of `tensor` `expr` holds.
 pub(crate) fn loads(expr: &TensorExpr, tensor: TensorParamId) -> usize {
     match expr {
-        TensorExpr::Load { tensor: read, .. } => usize::from(*read == tensor),
-        TensorExpr::Const(_) | TensorExpr::Index { .. } => 0,
-        TensorExpr::Unary(_, value) | TensorExpr::Cast { value, .. } => loads(value, tensor),
-        TensorExpr::Binary(_, lhs, rhs) => loads(lhs, tensor) + loads(rhs, tensor),
-        TensorExpr::Select { condition, then, otherwise } => {
-            loads(condition, tensor) + loads(then, tensor) + loads(otherwise, tensor)
-        }
         TensorExpr::Reduce { body, .. } | TensorExpr::ArgReduce { body, .. } => loads(body, tensor),
+        other => count_operands(other, tensor, loads),
     }
+}
+
+/// How many loads of `tensor` `expr` holds outside its reductions.
+fn loads_outside_reductions(expr: &TensorExpr, tensor: TensorParamId) -> usize {
+    match expr {
+        TensorExpr::Reduce { .. } | TensorExpr::ArgReduce { .. } => 0,
+        other => count_operands(other, tensor, loads_outside_reductions),
+    }
+}
+
+/// The loads of `tensor` `expr` holds itself, plus those `count` finds in
+/// its operands.
+fn count_operands(
+    expr: &TensorExpr,
+    tensor: TensorParamId,
+    count: fn(&TensorExpr, TensorParamId) -> usize,
+) -> usize {
+    let own = matches!(expr, TensorExpr::Load { tensor: read, .. } if *read == tensor);
+    usize::from(own)
+        + expr.operands().into_iter().map(|operand| count(operand, tensor)).sum::<usize>()
 }
 
 #[cfg(test)]
@@ -121,6 +142,8 @@ mod tests {
         Square,
         /// `x[0, ..]` added to the sum, so `x` is read twice.
         ReadAgain,
+        /// The sum times itself, the one reduction read twice.
+        Squared,
     }
 
     /// `out[b, i, j] = sum over k of x[reads.lhs] * y[reads.rhs]`, every
@@ -161,6 +184,9 @@ mod tests {
         let first = TensorExpr::load(x, vec![zero; reads.lhs.len()]);
         let output = match variant {
             Variant::ReadAgain => TensorExpr::Binary(BinaryOp::Add, Box::new(sum), Box::new(first)),
+            Variant::Squared => {
+                TensorExpr::Binary(BinaryOp::Mul, Box::new(sum.clone()), Box::new(sum))
+            }
             Variant::Plain | Variant::Square => sum,
         };
         compute.output(TensorName::new("out"), output);
@@ -210,6 +236,16 @@ mod tests {
         assert_eq!(product(&compute(&reads, 3, Variant::Square)), None);
         assert_eq!(product(&compute(&reads, 3, Variant::ReadAgain)), None);
         assert_eq!(product(&compute(&reads, 0, Variant::Plain)), None);
+    }
+
+    #[test]
+    fn a_product_its_epilogue_reads_twice_is_still_tiled() {
+        let reads = Reads { lhs: &["b", "i", "k"], rhs: &["b", "k", "j"] };
+
+        let squared = product(&compute(&reads, 3, Variant::Squared));
+
+        assert_eq!(squared, product(&compute(&reads, 3, Variant::Plain)));
+        assert!(squared.is_some());
     }
 
     #[test]
