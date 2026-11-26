@@ -1,4 +1,6 @@
 use crate::common::{add_one, binary, f32_type, unary};
+use ptxc_core::HostTensor;
+use ptxc_graph::text::print;
 use ptxc_graph::{BinaryOp, Graph, GraphBuilder, RewriteError, UnaryOp, Use, ValueId, VerifyError};
 
 /// `out = abs(neg(x))`, returning the graph, `x`, the neg output and `out`.
@@ -128,6 +130,30 @@ fn compact_without_erasures_changes_nothing() {
     assert_eq!(before, after);
     assert_eq!([x, negated, out].map(|value| graph.is_live(value)), [true; 3]);
     assert_eq!(graph.verify(), Ok(()));
+}
+
+/// `x + [3, 4]`, with the constant `[5, 6]` as a second output, and with
+/// `unread`, a constant nothing reads.
+fn sum_and_constant(unread: Option<HostTensor>) -> Graph {
+    let mut builder = GraphBuilder::new();
+    let x = builder.add_input(f32_type(&[2]));
+    if let Some(tensor) = unread {
+        let _unread = builder.add_constant(tensor);
+    }
+    let read = builder.add_constant(HostTensor::vector(vec![3.0_f32, 4.0].into()));
+    let output = builder.add_constant(HostTensor::vector(vec![5.0_f32, 6.0].into()));
+    let sum = add_one(&mut builder, binary(BinaryOp::Add), &[x, read]);
+    builder.finish(vec![sum, output]).unwrap()
+}
+
+#[test]
+fn compact_drops_constants_nothing_reads_and_keeps_those_read() {
+    let mut graph = sum_and_constant(Some(HostTensor::vector(vec![1.0_f32, 2.0].into())));
+
+    graph.rewriter().compact();
+
+    assert_eq!(graph.verify(), Ok(()));
+    assert_eq!(print(&graph), print(&sum_and_constant(None)));
 }
 
 #[test]

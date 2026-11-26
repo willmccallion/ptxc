@@ -112,8 +112,9 @@ impl Rewriter<'_> {
         Ok(())
     }
 
-    /// Removes erased nodes and the values they defined, renumbering every
-    /// node and value id. Ids held from before are invalid afterwards.
+    /// Removes erased nodes, the values they defined and constants nothing
+    /// reads, renumbering every node, value and constant id. Ids held from
+    /// before are invalid afterwards.
     pub fn compact(self) {
         crate::compact::compact(self.graph);
     }
