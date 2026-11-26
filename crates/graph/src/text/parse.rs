@@ -166,17 +166,44 @@ impl Parser<'_> {
         Ok(())
     }
 
-    /// `return %y, %z }` and the end of the text.
+    /// `return %y, %z as %name }` and the end of the text.
     fn finish(mut self) -> Result<Graph, ParseError> {
         let position = self.cursor.position();
-        let mut outputs = vec![self.lookup()?];
+        let mut outputs = vec![self.output()?];
         while self.cursor.eat_punct(',') {
-            outputs.push(self.lookup()?);
+            outputs.push(self.output()?);
         }
         self.cursor.expect_punct('}', "`,` or `}`")?;
         if !self.cursor.at_end() {
             return Err(self.cursor.unexpected("the end of the text"));
         }
-        self.builder.finish(outputs).map_err(|error| ParseError::new(position, error.into()))
+        let (values, renames): (Vec<_>, Vec<_>) = outputs.into_iter().unzip();
+        let mut graph =
+            self.builder.finish(values).map_err(|error| ParseError::new(position, error.into()))?;
+        for (index, rename) in graph.output_names.ids().zip(renames) {
+            if let Some(name) = rename {
+                graph.output_names[index] = Some(name);
+            }
+        }
+        Ok(graph)
+    }
+
+    /// An output, `%y` or `%y as %name`: its value, and the name it is
+    /// given if not its value's.
+    fn output(&mut self) -> Result<(ValueId, Option<ValueName>), ParseError> {
+        let value = self.lookup()?;
+        if !self.cursor.eat_word("as") {
+            return Ok((value, None));
+        }
+        match self.cursor.value()? {
+            (ValueRef::Named(name), _) => Ok((value, Some(ValueName::new(name)))),
+            (ValueRef::Unnamed(_), position) => Err(ParseError::new(
+                position,
+                ParseErrorKind::Unexpected {
+                    expected: "a name such as `%y`",
+                    found: "a number".to_owned(),
+                },
+            )),
+        }
     }
 }

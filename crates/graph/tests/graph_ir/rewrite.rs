@@ -1,7 +1,11 @@
 use crate::common::{add_one, binary, f32_type, unary};
 use ptxc_core::HostTensor;
-use ptxc_graph::text::print;
-use ptxc_graph::{BinaryOp, Graph, GraphBuilder, RewriteError, UnaryOp, Use, ValueId, VerifyError};
+use ptxc_core::Idx;
+use ptxc_graph::text::{parse, print};
+use ptxc_graph::{
+    BinaryOp, Graph, GraphBuilder, GraphOutputIndex, RewriteError, UnaryOp, Use, ValueId,
+    ValueName, VerifyError,
+};
 
 /// `out = abs(neg(x))`, returning the graph, `x`, the neg output and `out`.
 fn chain() -> (Graph, ValueId, ValueId, ValueId) {
@@ -168,4 +172,35 @@ fn a_rewrite_that_closes_a_cycle_is_reported() {
 
     assert!(graph.topological_order().is_err());
     assert!(matches!(graph.verify(), Err(VerifyError::Cycle(_))));
+}
+
+#[test]
+fn an_output_keeps_its_name_whichever_value_it_is_made_to_read() {
+    let text = "\
+graph(%x: f32[4]) {
+  %y0 = neg %x : f32[4]
+  %y1 = neg %x : f32[4]
+  return %y0, %y1
+}
+";
+    let mut graph = parse(text, &[]).unwrap();
+    let [y0, y1] = graph.outputs().iter().copied().collect::<Vec<_>>()[..] else { panic!() };
+
+    graph.rewriter().replace_all_uses(y1, y0).unwrap();
+
+    let second = GraphOutputIndex::new(1);
+    assert_eq!(graph.output_name(second).map(ValueName::as_str), Some("y1"));
+    assert_eq!(graph.outputs()[second], y0);
+    let printed = print(&graph);
+    assert!(printed.ends_with("  return %y0, %y0 as %y1\n}\n"), "{printed}");
+    assert_eq!(print(&parse(&printed, &[]).unwrap()), printed);
+}
+
+#[test]
+fn an_output_can_only_be_named_with_a_name() {
+    let text = "graph(%x: f32[4]) {\n  return %x as %0\n}\n";
+
+    let error = parse(text, &[]).unwrap_err();
+
+    assert!(error.to_string().contains("a name such as `%y`"), "{error}");
 }

@@ -6,7 +6,7 @@ use super::ops::encode;
 use super::tensor_text::{write_data, write_type};
 use crate::graph::Graph;
 use crate::node::NodeId;
-use crate::value::{ValueDef, ValueId, ValueName};
+use crate::value::{GraphOutputIndex, ValueDef, ValueId, ValueName};
 use ptxc_core::IndexVec;
 use std::collections::HashSet;
 
@@ -32,9 +32,26 @@ pub fn print(graph: &Graph) -> String {
         print_node(graph, node, &names, &mut out);
     }
     out.push_str("  return ");
-    out.push_str(&join(graph.outputs.iter().map(|&value| names[value].as_str())));
+    let outputs = graph.outputs.ids().map(|index| output_text(graph, index, &names));
+    out.push_str(&outputs.collect::<Vec<_>>().join(", "));
     out.push_str("\n}\n");
     out
+}
+
+/// Output `index` as `return` writes it: its value, then ` as %name` if
+/// the output is named apart from its value (D79).
+fn output_text(
+    graph: &Graph,
+    index: GraphOutputIndex,
+    names: &IndexVec<ValueId, String>,
+) -> String {
+    let value = graph.outputs[index];
+    match graph.output_names[index].as_ref() {
+        Some(name) if graph.values[value].name.as_ref() != Some(name) => {
+            format!("{} as {}", names[value], format_name(name.as_str()))
+        }
+        _ => names[value].clone(),
+    }
 }
 
 fn print_constants(graph: &Graph, names: &IndexVec<ValueId, String>, out: &mut String) {

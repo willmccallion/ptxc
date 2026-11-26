@@ -44,13 +44,16 @@ impl GraphBuilder {
         self.graph.values[value].name = Some(name);
     }
 
-    /// The finished graph, returning `outputs` in order.
+    /// The finished graph, returning `outputs` in order, each output named
+    /// as its value is.
     pub fn finish(mut self, outputs: Vec<ValueId>) -> Result<Graph, NodeError> {
         for value in outputs {
             if !self.graph.is_live(value) {
                 return Err(NodeError::NotLive(value));
             }
             let index: GraphOutputIndex = self.graph.outputs.push(value);
+            let _: GraphOutputIndex =
+                self.graph.output_names.push(self.graph.values[value].name.clone());
             self.graph.uses[value].push(Use::GraphOutput(index));
         }
         Ok(self.graph)

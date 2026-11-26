@@ -1720,3 +1720,32 @@ the old one.
     at batch 8. Ten, each grouped 7 rows high over 2 to 8 columns, ran
     0.5% to 2.7% slower. Their geometric mean gained 0.5%. The group's
     height is the search's to tune per problem (M5).
+
+## D79. A graph output is named by its slot, not by the value it reads
+
+- **Context:** a graph output's name was the name of the value it reads,
+  which the importer takes from the ONNX output. A rewrite that makes an
+  output read another value took the other value's name, or none. Common
+  subexpression elimination turned `%y0 = neg %x`, `%y1 = neg %x`,
+  `return %y0, %y1` into two outputs named `y0`, and an output moved onto
+  an unnamed value left the program unable to bind it: two of 2,000 fuzz
+  cases failed to compile. Constant folding and the algebraic rewrites
+  (`y = x * 1` becoming `x`) would do the same.
+- **Options:**
+  - names on the output slots, kept whichever value a slot reads, as ONNX
+    names its outputs as part of the graph's interface;
+  - a rule every rewrite keeps, as ONNX Runtime's elimination passes do,
+    of never replacing a value an output reads, which keeps both copies
+    of a repeated output and blocks folding an output;
+  - an identity node in front of each output, which every pass then has
+    to step around.
+- **Choice:** names on the slots. `GraphBuilder::finish` names each output
+  as its value is named; rewrites move the value a slot reads and never
+  its name; `Graph::output_name` gives it, and emission binds program
+  outputs by it. The text format writes an output named apart from its
+  value as `%y0 as %y1`.
+- **Reason:** the name is the interface a caller binds outputs by, and it
+  belongs to the graph, not to whichever value computes the output. With
+  it on the slot no pass needs a rule about outputs, and two outputs that
+  compute the same value share one buffer and a copy, as emission already
+  does for an output repeated in the source.

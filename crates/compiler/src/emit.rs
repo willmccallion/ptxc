@@ -12,7 +12,7 @@ use crate::error::CompileError;
 use crate::memory_plan::{Place, Unplaced, place};
 use ptxc_codegen::generate;
 use ptxc_core::{ByteOffset, DType, HostTensor, Idx, IndexVec, Shape};
-use ptxc_graph::{Graph, ValueDef, ValueId};
+use ptxc_graph::{Graph, ValueDef, ValueId, ValueName};
 use ptxc_loop::{Access, LoweredKernel};
 use ptxc_lower::{Binding, LoweredGroup};
 use ptxc_program::{
@@ -80,7 +80,8 @@ impl<'g> Emitter<'g> {
 
     fn bind_inputs(&mut self) -> Result<(), CompileError> {
         for &value in self.graph.inputs() {
-            let binding = self.io_binding(value, self.buffers.next_id())?;
+            let name = self.graph.value(value).name();
+            let binding = self.io_binding(value, name, self.buffers.next_id())?;
             let location = Location::Input(self.inputs.push(binding));
             let buffer = self.buffer_of(value, location);
             let _new = self.values.insert(value, buffer);
@@ -88,15 +89,16 @@ impl<'g> Emitter<'g> {
         Ok(())
     }
 
-    /// Binds every output, in the graph's order. An output a node produces,
-    /// the first time it appears, is where the node writes; any other
-    /// output, an input, a constant or a repeat, is returned with the value
-    /// to copy into it once the groups have run.
+    /// Binds every output, in the graph's order, by the output's own name
+    /// (D79). An output a node produces, the first time it appears, is
+    /// where the node writes; any other output, an input, a constant or a
+    /// repeat, is returned with the value to copy into it once the groups
+    /// have run.
     fn bind_outputs(&mut self) -> Result<Vec<(ValueId, BufferId)>, CompileError> {
         let mut copies = Vec::new();
-        for &value in self.graph.outputs() {
+        for (index, &value) in self.graph.outputs().iter_enumerated() {
             let produced = matches!(self.graph.value(value).def(), ValueDef::Output { .. });
-            let id = self.output(value)?;
+            let id = self.output(value, self.graph.output_name(index))?;
             if produced && !self.values.contains_key(&value) {
                 let _new = self.values.insert(value, id);
             } else {
@@ -106,17 +108,27 @@ impl<'g> Emitter<'g> {
         Ok(copies)
     }
 
-    /// A new output buffer for `value`, bound as the next output.
-    fn output(&mut self, value: ValueId) -> Result<BufferId, CompileError> {
-        let binding = self.io_binding(value, self.buffers.next_id())?;
+    /// A new output buffer for `value`, bound as the next output, `name`.
+    fn output(
+        &mut self,
+        value: ValueId,
+        name: Option<&ValueName>,
+    ) -> Result<BufferId, CompileError> {
+        let binding = self.io_binding(value, name, self.buffers.next_id())?;
         let location = Location::Output(self.outputs.push(binding));
         Ok(self.buffer_of(value, location))
     }
 
-    fn io_binding(&self, value: ValueId, buffer: BufferId) -> Result<IoBinding, CompileError> {
-        let found = self.graph.value(value);
-        let name = found.name().ok_or(CompileError::Unnamed(value))?.as_str().to_owned();
-        Ok(IoBinding { name, shape: found.ty().shape().clone(), buffer })
+    /// The binding of `value`, an input or output called `name`, to
+    /// `buffer`.
+    fn io_binding(
+        &self,
+        value: ValueId,
+        name: Option<&ValueName>,
+        buffer: BufferId,
+    ) -> Result<IoBinding, CompileError> {
+        let name = name.ok_or(CompileError::Unnamed(value))?.as_str().to_owned();
+        Ok(IoBinding { name, shape: self.graph.value(value).ty().shape().clone(), buffer })
     }
 
     /// A buffer of `value`'s type at `location`.
