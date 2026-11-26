@@ -66,7 +66,7 @@ def random_inputs(model: str, batch: int, sequence: int, seed: int) -> list[np.n
     rng = np.random.default_rng(seed)
     if model == "mlp":
         return [rng.standard_normal((batch, 784), dtype=np.float32)]
-    if model == "resnet50":
+    if model in ("resnet50", "resnet50-unfolded"):
         return [rng.standard_normal((batch, 3, 224, 224), dtype=np.float32)]
     shape = (batch, sequence)
     if model == "bert-base":
