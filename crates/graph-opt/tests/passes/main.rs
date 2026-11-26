@@ -6,6 +6,7 @@ mod const_fold;
 mod cse;
 mod dce;
 mod manager;
+mod partition;
 
 use ptxc_graph::Graph;
 use ptxc_graph::text::{parse, print};
