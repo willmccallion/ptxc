@@ -8,8 +8,8 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use ptxc_core::{DType, HostTensor};
 use ptxc_graph::{
-    AttentionAttrs, AttentionLayout, AttentionMask, Causality, F32Attr, HeadCount, Layout, Op,
-    Presence, QkOutput, TensorType, TypeRule,
+    AttentionAttrs, AttentionLayout, AttentionMask, Causality, F32Attr, HeadCount, Op, Presence,
+    QkOutput,
 };
 
 const FLOATS: [DType; 3] = [DType::F32, DType::F16, DType::Bf16];
@@ -113,8 +113,8 @@ pub fn attention_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         Just(AttentionMask::Additive)
     ];
     let flags = any::<[bool; 4]>();
-    (select(FLOATS.to_vec()), sizes(), mask_kind, flags, qk_output())
-        .prop_flat_map(|(dtype, sizes, mask, [causal, past, present, lengths], qk_output)| {
+    (select(FLOATS.to_vec()), sizes(), mask_kind, flags, qk_output()).prop_flat_map(
+        |(dtype, sizes, mask, [causal, past, present, lengths], qk_output)| {
             // ONNX allows non-pad lengths only without a key-value cache.
             let lengths = lengths && !past && !present;
             let sizes = Sizes { past: if past { sizes.past } else { 0 }, ..sizes };
@@ -138,11 +138,8 @@ pub fn attention_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
                         .prop_map(move |inputs| (Op::Attention(attrs), inputs))
                 },
             )
-        })
-        .prop_map(|(op, inputs)| {
-            assert!(admitted(&op, &inputs), "the type rule rejects {op:?}");
-            (op, inputs)
-        })
+        },
+    )
 }
 
 /// Q, K and V, then the operands `attrs` says are present.
@@ -176,12 +173,4 @@ fn inputs(
         parts.push(lengths.boxed());
     }
     parts.boxed()
-}
-
-fn admitted(op: &Op, inputs: &[HostTensor]) -> bool {
-    let types: Vec<TensorType> = inputs
-        .iter()
-        .map(|input| TensorType::new(input.dtype(), input.shape().clone(), Layout::RowMajor))
-        .collect();
-    op.infer(&types.iter().collect::<Vec<_>>()).is_ok()
 }

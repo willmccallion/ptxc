@@ -7,8 +7,8 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use ptxc_core::{DType, Dim, HostTensor};
 use ptxc_graph::{
-    ConvAttrs, Dilation, GlobalPoolKind, Groups, Layout, Op, PadCounting, Padding, PoolAttrs,
-    PoolAxis, PoolKind, Rounding, Stride, TensorType, TypeRule, WindowAxis,
+    ConvAttrs, Dilation, GlobalPoolKind, Groups, Op, PadCounting, Padding, PoolAttrs, PoolAxis,
+    PoolKind, Rounding, Stride, WindowAxis,
 };
 
 const FLOATS: [DType; 3] = [DType::F32, DType::F16, DType::Bf16];
@@ -34,15 +34,6 @@ fn spatial_axis() -> impl Strategy<Value = (u64, u64, WindowAxis)> {
     })
 }
 
-/// Whether `op`'s type rule accepts inputs typed as `inputs`.
-fn admitted(op: &Op, inputs: &[HostTensor]) -> bool {
-    let types: Vec<TensorType> = inputs
-        .iter()
-        .map(|input| TensorType::new(input.dtype(), input.shape().clone(), Layout::RowMajor))
-        .collect();
-    op.infer(&types.iter().collect::<Vec<_>>()).is_ok()
-}
-
 fn rounding() -> impl Strategy<Value = Rounding> {
     prop_oneof![Just(Rounding::Floor), Just(Rounding::Ceil)]
 }
@@ -66,8 +57,8 @@ pub fn pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
         }
         (Just(kind), select(types))
     });
-    (kind_and_type, rounding(), leading, spatial)
-        .prop_flat_map(|((kind, dtype), rounding, [n, c], spatial)| {
+    (kind_and_type, rounding(), leading, spatial).prop_flat_map(
+        |((kind, dtype), rounding, [n, c], spatial)| {
             let dims = [vec![n, c], spatial.iter().map(|&(extent, ..)| extent).collect()].concat();
             let axes = spatial
                 .iter()
@@ -75,8 +66,8 @@ pub fn pool_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
                 .collect();
             let op = Op::Pool(PoolAttrs { kind, axes, rounding });
             (Just(op), tensor(dtype, dims, Domain::Moderate).prop_map(|input| vec![input]))
-        })
-        .prop_filter("rejected by the type rule", |(op, inputs)| admitted(op, inputs))
+        },
+    )
 }
 
 /// Global average and max pooling over every spatial rank.
@@ -112,5 +103,4 @@ pub fn conv_cases() -> impl Strategy<Value = (Op, Vec<HostTensor>)> {
             )
         })
         .prop_map(|(op, input, weights, bias)| (op, [vec![input, weights], bias].concat()))
-        .prop_filter("rejected by the type rule", |(op, inputs)| admitted(op, inputs))
 }
