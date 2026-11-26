@@ -5,10 +5,10 @@
 
 use super::library::Library;
 use super::types::{
-    CuContext, CuDevice, CuDevicePtr, CuEvent, CuFunction, CuJitOption, CuModule, CuResult,
-    CuStream,
+    CuContext, CuDevice, CuDevicePtr, CuEvent, CuFunction, CuGraph, CuGraphExec, CuJitOption,
+    CuModule, CuResult, CuStream, CuStreamCaptureMode,
 };
-use std::ffi::{c_char, c_int, c_uint, c_void};
+use std::ffi::{c_char, c_int, c_uint, c_ulonglong, c_void};
 
 macro_rules! api {
     ($($(#[$doc:meta])* $field:ident = $symbol:literal: fn($($arg:ty),* $(,)?);)*) => {
@@ -83,6 +83,18 @@ api! {
     stream_destroy = c"cuStreamDestroy_v2": fn(CuStream);
     /// `cuStreamSynchronize`.
     stream_synchronize = c"cuStreamSynchronize": fn(CuStream);
+    /// `cuStreamBeginCapture`.
+    stream_begin_capture = c"cuStreamBeginCapture_v2": fn(CuStream, CuStreamCaptureMode);
+    /// `cuStreamEndCapture`.
+    stream_end_capture = c"cuStreamEndCapture": fn(CuStream, *mut CuGraph);
+    /// `cuGraphInstantiate`.
+    graph_instantiate = c"cuGraphInstantiateWithFlags": fn(*mut CuGraphExec, CuGraph, c_ulonglong);
+    /// `cuGraphLaunch`.
+    graph_launch = c"cuGraphLaunch": fn(CuGraphExec, CuStream);
+    /// `cuGraphExecDestroy`.
+    graph_exec_destroy = c"cuGraphExecDestroy": fn(CuGraphExec);
+    /// `cuGraphDestroy`.
+    graph_destroy = c"cuGraphDestroy": fn(CuGraph);
     /// `cuEventCreate`.
     event_create = c"cuEventCreate": fn(*mut CuEvent, c_uint);
     /// `cuEventDestroy`.

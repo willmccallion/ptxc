@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
 mod device;
+mod graph;
 mod launch;
 mod memory;
 mod module;

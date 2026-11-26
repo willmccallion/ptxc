@@ -19,9 +19,10 @@ exclude_re = [
     "replace (onnx_tests|imagenet_v2|fetch) -> Result<\\(\\), FetchError> with Ok\\(\\(\\)\\)",
     # Debug output is for diagnostics; no behaviour depends on it.
     "replace <impl (fmt::)?Debug for .*>::fmt -> (fmt::)?Result with Ok\\(Default::default\\(\\)\\)",
-    # Leaking a stream, event, module or the primary context shows in no
-    # public behaviour; a leaked buffer does, and is tested.
-    "replace <impl Drop for (Stream|Event|ModuleInner|ContextInner)>::drop with \\(\\)",
+    # Leaking a stream, event, module, captured or executable graph, or the
+    # primary context shows in no public behaviour; a leaked buffer does,
+    # and is tested.
+    "replace <impl Drop for (Stream|Event|ModuleInner|ContextInner|CapturedGraph|GraphExec)>::drop with \\(\\)",
     # One device has one primary context, which every retain returns, so
     # every context check passes until a second device is supported.
     "replace Context::is -> bool with true",

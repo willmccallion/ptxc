@@ -29,6 +29,7 @@ pub use device::{ComputeCapability, Device, DeviceOrdinal};
 pub use driver::Driver;
 pub use error::CudaError;
 pub use event::Event;
+pub use graph::{CapturedGraph, GraphCapture, GraphExec};
 pub use launch::{BlockDim, GridDim, KernelArg, Launch, Unset};
 pub use memory::{DeviceAddress, DeviceBuffer, DeviceSlice};
 pub use module::{Function, Module};
