@@ -1894,3 +1894,36 @@ the old one.
   An enum of guards keeps rules comparable and printable, which closures
   are not. The sweep is the worklist's fixed point without the bookkeeping
   until a template can add nodes.
+
+## D84. Templates build nodes, and a rewrite erases what it leaves unread
+
+- **Context:** batch normalisation after a convolution folds into the
+  convolution's weights and bias (#200), which needs a template that
+  builds new nodes, not only forwards a value (D83). Folding then has to
+  compute the new weights, and constant folding refuses to copy a weight
+  another node still reads.
+- **Options:** fold the weights in the rewrite, computing tensors in
+  `graph-opt`; or build the arithmetic as nodes and leave it to constant
+  folding, which evaluates them with the reference interpreter.
+- **Choice:** build nodes.
+  - A `Template` may be a new node: an exact op, the op of a captured
+    node, a reshape of a per-channel vector to `[C, 1, ..., 1]` of a
+    captured value's rank, or the composition of two captured transposes.
+    A batch normalisation's epsilon becomes a scalar of the variance's type.
+  - Guards gain `SameElementType`, `SoleReader`, `Filled` (a constant all
+    zero or all one) and `All`; `All` of none always holds.
+  - After a rewrite, the engine erases the matched nodes left unread, as
+    MLIR's greedy driver removes trivially dead ops. A folded convolution's
+    old weights then have one reader, so constant folding computes the new
+    ones in place.
+  - `Simplify` runs the `algebraic` rules first in the standard passes, so
+    constant folding computes what they build: batch normalisation into a
+    convolution it alone reads, with parameters of the weights' type; `x *
+    1` and `x + 0` where the constant does not broadcast `x`; a transpose
+    of a transpose and a reshape of a reshape merged. A `NOTE` records that
+    dropping `x + 0` keeps a `-0` input where IEEE addition gives `+0`, as
+    XLA's simplifier does.
+- **Reason:** the arithmetic of a fold is then computed by the golden
+  model, as all folding is (D12), and checked like any other subgraph; a
+  rule stays data. ResNet-50 exported without the exporter's optimiser has
+  53 batch normalisations, and all fold.

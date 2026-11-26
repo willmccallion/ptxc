@@ -1,20 +1,21 @@
 //! `GreedyEngine`: applies rules in one topological sweep, to a fixed point.
 
 use super::engine::RewriteEngine;
+use super::pattern::Bindings;
 use super::rule::RewriteRule;
 use crate::pass::PassError;
-use ptxc_graph::{Graph, NodeId, ValueId};
+use ptxc_graph::{Graph, NodeId, Rewriter, ValueId};
 
 /// Rewrites each node's output with the first rule that applies, as MLIR's
-/// greedy pattern rewrite driver does, moving the output's readers to the
-/// replacement and erasing the node.
+/// greedy pattern rewrite driver does: the output's readers move to the
+/// replacement, and the matched nodes left unread are erased.
 // NOTE: MLIR's driver keeps a worklist, re-adding the ops a rewrite
 // touches, since its rewrites may create ops anywhere. A pattern here
 // matches a node by what it reads, and a rewrite only changes the readers
 // of the value it replaces, which come after it; so one sweep in
 // topological order visits each node after every rewrite that can change
-// its match, and ends at a fixed point. Templates that add nodes would
-// need them visited too.
+// its match. The nodes a template builds are not visited: no rule set yet
+// matches what another rule builds.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct GreedyEngine;
 
@@ -28,10 +29,15 @@ impl RewriteEngine for GreedyEngine {
         let mut applied = Vec::new();
         let mut rewriter = graph.rewriter();
         for node in order {
-            let Some(rewrite) = first_rewrite(rewriter.graph(), node, rules) else { continue };
-            rewriter.replace_all_uses(rewrite.output, rewrite.replacement)?;
-            rewriter.erase_node(node)?;
-            applied.push(rewrite.rule);
+            let Some((rule, output, bindings)) = first_match(rewriter.graph(), node, rules) else {
+                continue;
+            };
+            let replacement = rule.rhs.instantiate(&mut rewriter, &bindings)?;
+            let Some(replacement) = replacement.filter(|&value| value != output) else { continue };
+            let matched = rule.lhs.nodes(rewriter.graph(), &bindings);
+            rewriter.replace_all_uses(output, replacement)?;
+            erase_unread(&mut rewriter, &matched)?;
+            applied.push(rule.name);
         }
         if !applied.is_empty() {
             rewriter.compact();
@@ -40,29 +46,33 @@ impl RewriteEngine for GreedyEngine {
     }
 }
 
-/// A rule's rewrite of a node's output.
-struct Rewrite {
-    /// The rule's name.
-    rule: &'static str,
-    /// The value replaced.
-    output: ValueId,
-    /// The value its readers read instead.
-    replacement: ValueId,
-}
-
-/// The rewrite of `node`'s only output by the first of `rules` that
-/// matches it, whose guard holds and whose template gives another value.
-fn first_rewrite(graph: &Graph, node: NodeId, rules: &[RewriteRule]) -> Option<Rewrite> {
+/// The first of `rules` whose pattern matches `node`'s only output and
+/// whose guard holds, with that output and the match's bindings.
+fn first_match<'r>(
+    graph: &Graph,
+    node: NodeId,
+    rules: &'r [RewriteRule],
+) -> Option<(&'r RewriteRule, ValueId, Bindings)> {
     let mut outputs = graph.node(node)?.outputs().iter();
     let (Some(&output), None) = (outputs.next(), outputs.next()) else { return None };
     rules.iter().find_map(|rule| {
         let bindings = rule.lhs.matches(graph, output)?;
-        if !rule.guard.holds(graph, &bindings) {
-            return None;
-        }
-        let replacement = rule.rhs.instantiate(&bindings).filter(|&value| value != output)?;
-        Some(Rewrite { rule: rule.name, output, replacement })
+        rule.guard.holds(graph, &bindings).then_some((rule, output, bindings))
     })
+}
+
+/// Erases each of `nodes` none of whose outputs is read any more, in
+/// order, so a node goes before the nodes it reads.
+fn erase_unread(rewriter: &mut Rewriter<'_>, nodes: &[NodeId]) -> Result<(), PassError> {
+    for &node in nodes {
+        let Some(contents) = rewriter.graph().node(node) else { continue };
+        let unread =
+            contents.outputs().iter().all(|&output| rewriter.graph().uses(output).is_empty());
+        if unread {
+            rewriter.erase_node(node)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

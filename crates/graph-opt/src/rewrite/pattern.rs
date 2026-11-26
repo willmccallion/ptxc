@@ -1,6 +1,6 @@
 //! `Pattern`: the left-hand side of a rule, matched against the graph.
 
-use ptxc_graph::{Graph, ValueId};
+use ptxc_graph::{Graph, NodeId, ValueId};
 use std::collections::HashMap;
 
 /// A name a pattern binds a value to, for the guard and template to read.
@@ -34,6 +34,22 @@ impl Pattern {
     pub(crate) fn matches(&self, graph: &Graph, value: ValueId) -> Option<Bindings> {
         let mut bindings = Bindings::new();
         self.bind(graph, value, &mut bindings).then_some(bindings)
+    }
+
+    /// The nodes a match with `bindings` covers, each before the nodes it
+    /// reads.
+    pub(crate) fn nodes(&self, graph: &Graph, bindings: &Bindings) -> Vec<NodeId> {
+        let mut nodes = Vec::new();
+        self.collect_nodes(graph, bindings, &mut nodes);
+        nodes
+    }
+
+    fn collect_nodes(&self, graph: &Graph, bindings: &Bindings, nodes: &mut Vec<NodeId>) {
+        let Self::Op { operands, capture, .. } = self else { return };
+        nodes.extend(bindings.get(capture).and_then(|&value| graph.producer(value)));
+        for operand in operands {
+            operand.collect_nodes(graph, bindings, nodes);
+        }
     }
 
     fn bind(&self, graph: &Graph, value: ValueId, bindings: &mut Bindings) -> bool {
