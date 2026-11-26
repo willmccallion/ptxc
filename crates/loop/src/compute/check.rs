@@ -5,6 +5,7 @@
 use super::compute_def::{IndexVar, TensorParam};
 use super::error::ComputeError;
 use super::iter_var::{IterKind, IterVar, IterVarId};
+use super::scalar::Scalar;
 use super::tensor_expr::{TensorExpr, TensorParamId};
 use super::types;
 use crate::expr::{ExprArena, ExprId, Interval, VarId, VarRanges};
@@ -18,6 +19,9 @@ pub(super) struct Checker<'a> {
     iter_vars: &'a IndexVec<IterVarId, IterVar>,
     inputs: &'a IndexVec<TensorParamId, TensorParam>,
     reduced: HashSet<IterVarId>,
+    /// The definition's reduction and its element type, once checked: an
+    /// output may read it again, as the same expression.
+    reduction: Option<(TensorExpr, DType)>,
     ranges: VarRanges,
 }
 
@@ -39,7 +43,7 @@ impl<'a> Checker<'a> {
                 ranges.insert(var, range);
             }
         }
-        Self { exprs, vars, iter_vars, inputs, reduced: HashSet::new(), ranges }
+        Self { exprs, vars, iter_vars, inputs, reduced: HashSet::new(), reduction: None, ranges }
     }
 
     /// Whether the outputs read a reduction.
@@ -69,20 +73,7 @@ impl<'a> Checker<'a> {
     fn dtype(&mut self, expr: &TensorExpr, scope: &[IterVarId]) -> Result<DType, ComputeError> {
         match expr {
             TensorExpr::Load { tensor, index, padding } => {
-                self.check_index(*tensor, index, scope)?;
-                let param = self.input(*tensor)?;
-                match padding {
-                    None => self.check_inside(*tensor, index)?,
-                    Some(value) if value.dtype() != param.dtype => {
-                        return Err(ComputeError::PaddingType {
-                            tensor: param.name.clone(),
-                            expected: param.dtype,
-                            actual: value.dtype(),
-                        });
-                    }
-                    Some(_) => {}
-                }
-                Ok(param.dtype)
+                self.load(*tensor, index, *padding, scope)
             }
             TensorExpr::Const(scalar) => Ok(scalar.dtype()),
             TensorExpr::Index { index, dtype } => {
@@ -109,19 +100,64 @@ impl<'a> Checker<'a> {
                 }
             }
             TensorExpr::Reduce { op, axes, body } => {
+                if let Some(dtype) = self.repeated(expr) {
+                    return Ok(dtype);
+                }
                 let inner = self.bind_axes(axes, scope)?;
-                types::reduce(*op, self.dtype(body, &inner)?)
+                let dtype = types::reduce(*op, self.dtype(body, &inner)?)?;
+                Ok(self.remember(expr, dtype))
             }
             TensorExpr::ArgReduce { kind, axis, body, .. } => {
+                if let Some(dtype) = self.repeated(expr) {
+                    return Ok(dtype);
+                }
                 let inner = self.bind_axes(&[*axis], scope)?;
                 let dtype = self.dtype(body, &inner)?;
-                if types::arg_comparable(dtype) {
-                    Ok(DType::I64)
-                } else {
-                    Err(ComputeError::UnsupportedDType { op: kind.name(), dtype })
+                if !types::arg_comparable(dtype) {
+                    return Err(ComputeError::UnsupportedDType { op: kind.name(), dtype });
                 }
+                Ok(self.remember(expr, DType::I64))
             }
         }
+    }
+
+    /// The element type of a load of `tensor` at `index`, `padding` outside
+    /// it, under the reduction axes `scope`.
+    fn load(
+        &self,
+        tensor: TensorParamId,
+        index: &[ExprId],
+        padding: Option<Scalar>,
+        scope: &[IterVarId],
+    ) -> Result<DType, ComputeError> {
+        self.check_index(tensor, index, scope)?;
+        let param = self.input(tensor)?;
+        match padding {
+            None => self.check_inside(tensor, index)?,
+            Some(value) if value.dtype() != param.dtype => {
+                return Err(ComputeError::PaddingType {
+                    tensor: param.name.clone(),
+                    expected: param.dtype,
+                    actual: value.dtype(),
+                });
+            }
+            Some(_) => {}
+        }
+        Ok(param.dtype)
+    }
+
+    /// The element type of `reduction` if it repeats the definition's one
+    /// reduction, which an output may read more than once (D80).
+    fn repeated(&self, reduction: &TensorExpr) -> Option<DType> {
+        let (checked, dtype) = self.reduction.as_ref()?;
+        (checked == reduction).then_some(*dtype)
+    }
+
+    /// `dtype`, after noting `reduction`, of that type, as the definition's
+    /// one reduction.
+    fn remember(&mut self, reduction: &TensorExpr, dtype: DType) -> DType {
+        self.reduction = Some((reduction.clone(), dtype));
+        dtype
     }
 
     /// `scope` with `axes` added, after checking this is the definition's

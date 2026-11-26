@@ -1749,3 +1749,42 @@ the old one.
   it on the slot no pass needs a rule about outputs, and two outputs that
   compute the same value share one buffer and a copy, as emission already
   does for an output repeated in the source.
+
+## D80. Fusion inlines one compute definition into another
+
+- **Context:** each node lowered to definitions of its own (D40), each a
+  kernel, so every intermediate went to memory and back. M4 fuses
+  producers and consumers: an injective consumer into its producer's
+  epilogue, injective producers into their consumer's reads.
+- **Options:**
+  - lowering a group's nodes into one stage, substituting the expression
+    of an operand computed in the group for its load: every op family's
+    lowering would have to compose, and an operand read through a
+    broadcast would need its expression re-indexed anyway;
+  - inlining definitions in the loop IR, as TVM's `compute_inline`
+    substitutes a producer's body for its consumer's reads: each node
+    lowers as before, and fusion is one operation on definitions;
+  - computing the producer into a tile inside the consumer's loops, as
+    Halide's `compute_at` does: a kernel of several stages, which the loop
+    IR does not have.
+- **Choice:** inlining. `inline(consumer, input, producer)` rebuilds the
+  consumer with each read of `input` replaced by the producer's output at
+  that read's index, the producer's spatial variables taking the read's
+  index; the inputs are the consumer's others, then the producer's.
+  - A producer without a reduction inlines at every read, at any index,
+    and is computed again at each.
+  - A producer that reduces inlines only where the consumer reads it at
+    the consumer's own element and reduces nothing itself: its reduction
+    stays the definition's one (D40), and the consumer becomes its
+    epilogue.
+  - An output may read its one reduction more than once, each read the
+    same expression: GELU after a product reads the product twice. Kernel
+    lowering already takes every `Reduce` in an output for the one
+    accumulated value.
+  - A padded read of the producer, a producer of several outputs and a
+    definition with loaded indices (a gather) are refused.
+- **Reason:** the definitions stay the one statement of what each op
+  computes; fusion needs no op family's help and its result is checked by
+  the same checker and run by the same rules and interpreter as any
+  definition. The refusals keep every inlined definition one the default
+  schedules and kernel lowering already handle.

@@ -69,6 +69,27 @@ pub(crate) fn run_default(
 }
 
 #[test]
+fn an_output_may_read_its_one_reduction_more_than_once() {
+    let mut compute = ComputeBuilder::new(ComputeName::new("square_of_sum"));
+    let x = compute.input(TensorName::new("x"), DType::I32, shape(&[3, 4]));
+    let (_, i) = compute.spatial(VarName::new("i"), Dim::new(3));
+    let (k_axis, k) = compute.reduce_axis(VarName::new("k"), Dim::new(4));
+    let sum = TensorExpr::Reduce {
+        op: ReduceOp::Sum,
+        axes: vec![k_axis],
+        body: Box::new(load(x, &[i, k])),
+    };
+    let squared = binary(BinaryOp::Mul, sum.clone(), sum);
+    compute.output(TensorName::new("out"), squared);
+    let compute = Arc::new(compute.finish().unwrap());
+    let values: Vec<i32> = (0..12).collect();
+
+    let outputs = run_default(&compute, &[tensor(&[3, 4], values)]).unwrap();
+
+    assert_eq!(ints(&outputs[0]), [36, 484, 1444]);
+}
+
+#[test]
 fn an_elementwise_kernel_computes_each_element_once() {
     let mut compute = ComputeBuilder::new(ComputeName::new("add"));
     let left = compute.input(TensorName::new("x"), DType::F32, shape(&[5]));
