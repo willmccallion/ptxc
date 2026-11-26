@@ -23,9 +23,19 @@ exclude_re = [
     # primary context shows in no public behaviour; a leaked buffer does,
     # and is tested.
     "replace <impl Drop for (Stream|Event|ModuleInner|ContextInner|CapturedGraph|GraphExec)>::drop with \\(\\)",
+    # Which cuBLAS handles, plans and layouts are destroyed: a leak, or a
+    # destroy call on null whose status `drop` ignores, shows in no
+    # behaviour.
+    "replace <impl Drop for (Handle<'_>|LtHandle<'_>|Plan)>::drop with \\(\\)",
+    "delete ! in <impl Drop for Plan>::drop",
+    # cuBLAS's algorithm 1 in place of its heuristic computes the same
+    # product; only timing, which no test asserts, tells them apart. The
+    # constant is the file's only negation.
+    "bench/src/cublas/sys/cublas.rs:[0-9]+:[0-9]+: delete -$",
     # One device has one primary context, which every retain returns, so
     # every context check passes until a second device is supported.
     "replace Context::is -> bool with true",
+    "replace \\|\\| with && in Stream::copy",
     # The driver sets the name to NULL exactly when the lookup fails, so the
     # two conditions always agree.
     "replace \\|\\| with && in error_name",
@@ -79,4 +89,16 @@ exclude_re = [
     "replace \\| with \\^ in non_finite_on_overflow",
     # Loop IR's type rules admit no unary operation on bool but Not.
     "replace match guard op == UnaryOp::Not with true in Selector<'_>::unary",
+    # Whether to verify after each pass differs only in release builds,
+    # which are otherwise unverified: `release_builds_verify_after_each_pass_only_when_asked`
+    # catches this, but runs only under `--release`, and mutants build in
+    # debug, since release links with fat LTO.
+    "replace == with != in PassManager::run",
+    # Admits a constant divisor of 0, which no valid kernel has: division by
+    # zero is undefined in loop IR, and the interpreter refuses it.
+    "replace > with >= in Selector<'_>::unsigned_divisor",
+    # The arm before it takes `n == node`, so `>` and `>=` select alike.
+    "replace > with >= in bypassed",
+    # The input removed is one nothing reads, so no operand equals it.
+    "replace > with >= in without_input",
 ]
