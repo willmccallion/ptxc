@@ -38,6 +38,15 @@ impl Lifetime {
     }
 }
 
+/// Whether two buffers with these lifetimes are live at some step together;
+/// a buffer no step touches is never live.
+pub(crate) fn live_together(first: Option<Lifetime>, second: Option<Lifetime>) -> bool {
+    match (first, second) {
+        (Some(first), Some(second)) => first.overlaps(second),
+        _ => false,
+    }
+}
+
 /// The lifetime of each of `buffers`, `None` for one `steps` never touch.
 pub(crate) fn lifetimes<T>(
     steps: &[Step],

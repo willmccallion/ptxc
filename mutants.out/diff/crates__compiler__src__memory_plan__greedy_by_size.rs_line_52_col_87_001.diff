@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/greedy_by_size.rs
++++ replace < with > in smallest_gap
+@@ -44,17 +44,17 @@
+     let mut best: Option<(u64, ByteOffset)> = None;
+     let mut taken_to = ByteOffset::new(0);
+     for (other, bytes) in placed {
+         if !live_together(request.lifetime, requests[*other].lifetime) {
+             continue;
+         }
+         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;
+         let end = start.get().checked_add(request.size.get())?;
+-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {
++        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() > /* ~ changed by cargo-mutants ~ */ gap) {
+             best = Some((bytes.start - start.get(), start));
+         }
+         taken_to = taken_to.max(ByteOffset::new(bytes.end));
+     }
+     match best {
+         Some((_, start)) => Some(start),
+         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),
+     }

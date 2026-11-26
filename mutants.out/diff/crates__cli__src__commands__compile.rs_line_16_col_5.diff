@@ -1,0 +1,28 @@
+--- crates/cli/src/commands/compile.rs
++++ replace run -> anyhow::Result<ExitCode> with Ok(Default::default())
+@@ -8,24 +8,17 @@
+ use ptxc_onnx::ImportOptions;
+ use ptxc_program::Program;
+ use ptxc_target::{SmVersion, preset};
+ use std::path::Path;
+ use std::process::ExitCode;
+ 
+ /// Compiles `args.model` and writes the program file.
+ pub(crate) fn run(args: &CompileArgs) -> anyhow::Result<ExitCode> {
+-    ui::section("Compile");
+-    ui::header("Model", &args.model.display().to_string());
+-    let program = compile_model(&args.model, &args.dims)?;
+-    let bytes = ptxc_program::save(&program).context("encoding the program")?;
+-    std::fs::write(&args.out, &bytes).with_context(|| format!("writing {}", args.out.display()))?;
+-    describe(&program)?;
+-    ui::stat("Written", &args.out.display().to_string());
+-    Ok(ExitCode::SUCCESS)
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// The program for the ONNX model at `path`, its symbolic dimensions sized
+ /// by `dims`, for `sm_89`.
+ pub(crate) fn compile_model(path: &Path, dims: &[(String, Dim)]) -> anyhow::Result<Program> {
+     let onnx = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+     let options = ImportOptions {
+         symbolic_dims: dims.iter().cloned().collect(),

@@ -1,0 +1,47 @@
+--- crates/compiler/src/emit.rs
++++ replace Emitter<'g>::group -> Result<(), CompileError> with Ok(())
+@@ -166,43 +166,11 @@
+ 
+     /// Each of `group`'s stages as a kernel and a launch.
+     fn group(
+         &mut self,
+         group: &LoweredGroup,
+         kernels: &[LoweredKernel],
+         target: &Target,
+     ) -> Result<(), CompileError> {
+-        let tables = group
+-            .tables()
+-            .iter()
+-            .map(|table| self.constant(table))
+-            .collect::<Result<Vec<_>, _>>()?;
+-        let intermediates: Vec<_> = group
+-            .intermediates()
+-            .iter()
+-            .map(|ty| self.arena_buffer(ty.dtype(), ty.shape()))
+-            .collect();
+-        for (stage, kernel) in group.stages().iter().zip(kernels) {
+-            let mut reads = stage.inputs().iter();
+-            let mut writes = stage.outputs().iter();
+-            let mut args = Vec::new();
+-            for param in kernel.params() {
+-                let binding = match param.access {
+-                    Access::Read => reads.next(),
+-                    Access::Write => writes.next(),
+-                };
+-                let binding = *binding.ok_or(CompileError::StageArity)?;
+-                let buffer = match binding {
+-                    Binding::Value(value) => Some(self.value_buffer(value)?),
+-                    Binding::Intermediate(id) => intermediates.get(id.index()).copied(),
+-                    Binding::Table(id) => tables.get(id.index()).copied(),
+-                };
+-                args.push(buffer.ok_or(CompileError::StageArity)?);
+-            }
+-            let launch = LaunchConfig { grid: kernel.launch().grid, block: kernel.launch().block };
+-            let ptx = generate(kernel, target)?.to_string();
+-            let spec = KernelSpec { name: kernel.name().clone(), ptx, launch };
+-            self.steps.push(Step::Launch { kernel: self.kernels.push(spec), args });
+-        }
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ }

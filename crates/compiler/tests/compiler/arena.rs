@@ -75,7 +75,7 @@ fn a_copy_keeps_its_source_live_until_it_runs() {
 }
 
 #[test]
-fn the_lower_bound_counts_only_the_bytes_live_together() {
+fn a_chain_reuses_the_bytes_of_values_it_no_longer_reads() {
     let program = compile(graph(|b, x, y| {
         let first = add(b, x, y);
         let second = add(b, first, x);
@@ -84,8 +84,19 @@ fn the_lower_bound_counts_only_the_bytes_live_together() {
     }))
     .unwrap();
 
+    let written: Vec<Location> = program
+        .steps()
+        .iter()
+        .filter_map(|step| match step {
+            Step::Launch { args, .. } => Some(program.buffers()[args[2]].location),
+            Step::Copy { .. } => None,
+        })
+        .collect();
+    let arena = |offset| Location::Arena(ByteOffset::new(offset));
+    assert_eq!(written[..3], [arena(0), arena(256), arena(0)]);
     assert_eq!(verify_arena(&program), Ok(()));
-    let ArenaUse { size, lower_bound } = arena_use(&program).unwrap();
-    assert_eq!(lower_bound, ByteSize::new(40));
-    assert!(size >= lower_bound, "{size:?} < {lower_bound:?}");
+    assert_eq!(
+        arena_use(&program),
+        Ok(ArenaUse { size: ByteSize::new(276), lower_bound: ByteSize::new(40) })
+    );
 }

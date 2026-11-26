@@ -11,7 +11,7 @@
      for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {
 -        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {
 +        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index * /* ~ changed by cargo-mutants ~ */ 1) {
-             if live_together(first, second) && share(first_bytes, second_bytes) {
+             if live_together(first.lifetime, second.lifetime) && share(first_bytes, second_bytes) {
                  return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });
              }
          }

@@ -41,6 +41,10 @@ pub enum CompileError {
     /// A graph input or output has no name to bind it by.
     #[error("graph input or output {0:?} has no name")]
     Unnamed(ValueId),
+    /// The memory plan gave fewer offsets than it had buffers to place,
+    /// which is a compiler bug.
+    #[error("the memory plan left an arena buffer without an offset")]
+    Unplaced,
     /// The emitted pieces do not form a program, which is a compiler bug.
     #[error("the compiler emitted an inconsistent program: {0}")]
     Program(#[from] ProgramError),

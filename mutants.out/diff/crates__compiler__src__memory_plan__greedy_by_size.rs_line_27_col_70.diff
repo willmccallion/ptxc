@@ -1,0 +1,21 @@
+--- crates/compiler/src/memory_plan/greedy_by_size.rs
++++ replace <= with > in <impl MemoryPlanner for GreedyBySize>::plan
+@@ -19,17 +19,17 @@
+         let mut order: Vec<usize> = (0..requests.len()).collect();
+         order.sort_by_key(|&index| (Reverse(requests[index].size), index));
+         let mut offsets = vec![ByteOffset::new(0); requests.len()];
+         let mut placed: Vec<(usize, Range<u64>)> = Vec::new();
+         for index in order {
+             let offset = smallest_gap(requests, index, &placed)?;
+             let end = offset.get().checked_add(requests[index].size.get())?;
+             offsets[index] = offset;
+-            let at = placed.partition_point(|(_, bytes)| bytes.start <= offset.get());
++            let at = placed.partition_point(|(_, bytes)| bytes.start > /* ~ changed by cargo-mutants ~ */ offset.get());
+             placed.insert(at, (index, offset.get()..end));
+         }
+         let size = placed.iter().map(|(_, bytes)| bytes.end).max().unwrap_or(0);
+         Some(ArenaPlan { offsets, size: ByteSize::new(size) })
+     }
+ }
+ 
+ /// The offset for request `index`: the start of the smallest gap that fits

@@ -1,0 +1,335 @@
+
+*** crates/cli/src/commands/compile.rs:16:5: replace run -> anyhow::Result<ExitCode> with Ok(Default::default())
+
+*** mutation diff:
+--- crates/cli/src/commands/compile.rs
++++ replace run -> anyhow::Result<ExitCode> with Ok(Default::default())
+@@ -8,24 +8,17 @@
+ use ptxc_onnx::ImportOptions;
+ use ptxc_program::Program;
+ use ptxc_target::{SmVersion, preset};
+ use std::path::Path;
+ use std::process::ExitCode;
+ 
+ /// Compiles `args.model` and writes the program file.
+ pub(crate) fn run(args: &CompileArgs) -> anyhow::Result<ExitCode> {
+-    ui::section("Compile");
+-    ui::header("Model", &args.model.display().to_string());
+-    let program = compile_model(&args.model, &args.dims)?;
+-    let bytes = ptxc_program::save(&program).context("encoding the program")?;
+-    std::fs::write(&args.out, &bytes).with_context(|| format!("writing {}", args.out.display()))?;
+-    describe(&program)?;
+-    ui::stat("Written", &args.out.display().to_string());
+-    Ok(ExitCode::SUCCESS)
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// The program for the ONNX model at `path`, its symbolic dimensions sized
+ /// by `dims`, for `sm_89`.
+ pub(crate) fn compile_model(path: &Path, dims: &[(String, Dim)]) -> anyhow::Result<Program> {
+     let onnx = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+     let options = ImportOptions {
+         symbolic_dims: dims.iter().cloned().collect(),
+
+
+*** /nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo test --no-run --verbose --package=ptxc-cli@0.1.0
+       Fresh unicode-ident v1.0.27
+       Fresh proc-macro2 v1.0.107
+       Fresh quote v1.0.47
+       Fresh syn v3.0.10
+       Fresh thiserror-impl v2.0.21
+       Fresh thiserror v2.0.21
+       Fresh ptxc-core v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/core)
+       Fresh ptxc-target v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/target)
+       Fresh memchr v2.8.3
+       Fresh rand_core v0.10.1
+       Fresh cfg-if v1.0.5
+       Fresh either v1.19.0
+       Fresh ptxc-graph v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/graph)
+       Fresh syn v2.0.119
+       Fresh bytes v1.12.2
+       Fresh regex-syntax v0.8.12
+       Fresh typenum v1.20.1
+       Fresh itertools v0.15.0
+       Fresh ptxc-loop v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/loop)
+       Fresh hybrid-array v0.4.15
+       Fresh serde_derive v1.0.229
+       Fresh bitflags v2.13.2
+       Fresh utf8parse v0.2.2
+       Fresh autocfg v1.5.1
+       Fresh linux-raw-sys v0.12.1
+       Fresh itoa v1.0.19
+       Fresh aho-corasick v1.1.5
+       Fresh cpufeatures v0.3.1
+       Fresh is_terminal_polyfill v1.70.2
+       Fresh anstyle-query v1.1.5
+       Fresh fastrand v2.5.0
+       Fresh once_cell v1.21.4
+       Fresh colorchoice v1.0.5
+       Fresh anstyle v1.0.14
+       Fresh const-oid v0.10.3
+       Fresh quick-error v1.2.3
+       Fresh fnv v1.0.7
+       Fresh libc v0.2.191
+       Fresh anyhow v1.0.104
+       Fresh serde_core v1.0.229
+       Fresh libm v0.2.16
+       Fresh zmij v1.0.23
+       Fresh rustix v1.1.6
+       Fresh anstyle-parse v1.0.0
+       Fresh block-buffer v0.12.1
+       Fresh ptxc-lower v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/lower)
+       Fresh crypto-common v0.2.2
+       Fresh ptxc-schedule v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/schedule)
+       Fresh regex-automata v0.4.19
+       Fresh bit-vec v0.10.2
+       Fresh chacha20 v0.10.2
+       Fresh ptxc-codegen v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/codegen)
+       Fresh rand_xorshift v0.5.0
+       Fresh ptxc-cuda v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cuda)
+       Fresh jiff-core v1.0.1
+       Fresh clap_lex v1.1.2
+       Fresh heck v0.5.0
+       Fresh core_detect v1.0.0
+       Fresh unarray v0.1.4
+       Fresh log v0.4.35
+       Fresh strsim v0.11.1
+       Fresh ptxc-cost-model v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cost-model)
+       Fresh prost-derive v0.14.6
+       Fresh getrandom v0.4.3
+       Fresh ptxc-interp v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/interp)
+       Fresh serde_json v1.0.154
+       Fresh serde v1.0.229
+       Fresh wait-timeout v0.2.1
+       Fresh anstream v1.0.0
+       Fresh digest v0.11.3
+       Fresh regex v1.13.2
+       Fresh bit-set v0.11.1
+       Fresh clap_derive v4.6.9
+       Fresh jiff v1.0.2
+       Fresh is-terminal v0.4.17
+       Fresh prost v0.14.6
+       Fresh ptxc-program v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/program)
+       Fresh tempfile v3.27.0
+       Fresh num-traits v0.2.19
+       Fresh ptxc-graph-opt v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/graph-opt)
+       Fresh rand v0.10.4
+       Fresh sha2 v0.11.1
+       Fresh clap_builder v4.6.7
+       Fresh env_filter v2.1.0
+       Fresh yansi v1.0.1
+       Fresh ptxc-onnx-proto v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/onnx-proto)
+       Fresh rusty-fork v0.3.1
+       Fresh ptxc-runtime v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/runtime)
+       Fresh clap v4.6.9
+       Fresh env_logger v0.11.12
+       Fresh ptxc-onnx v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/onnx)
+       Fresh proptest v1.12.0
+       Fresh ptxc-compiler v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/compiler)
+       Fresh ptxc-testkit v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/testkit)
+       Fresh ptxc-autotune v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/autotune)
+       Dirty ptxc-cli v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cli): the file `crates/cli/src/commands/compile.rs` has changed (1795652224.706828651s, 29s after last build at 1795652195.043925153s)
+   Compiling ptxc-cli v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cli)
+     Running `rustc --crate-name ptxc --edition=2024 crates/cli/src/main.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=66324060310c0773 -C extra-filename=-edf3c7e7f151ec43 --out-dir /tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps -C incremental=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps --extern anyhow=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libanyhow-ed2e3d4c96bf42eb.rlib --extern clap=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libclap-e09d77f315a61a5f.rlib --extern env_logger=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libenv_logger-6851c1a9ea57c850.rlib --extern log=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/liblog-e236491aeb233238.rlib --extern prost=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libprost-aae7b89df225737b.rlib --extern ptxc_autotune=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_autotune-9ae2c40341e0fcb9.rlib --extern ptxc_compiler=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_compiler-1a2836857a30c331.rlib --extern ptxc_core=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_core-cf1684fc99534bcb.rlib --extern ptxc_cuda=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_cuda-d5749cef420581e7.rlib --extern ptxc_graph=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_graph-1605acba5090a242.rlib --extern ptxc_interp=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_interp-a8710e3450355d89.rlib --extern ptxc_loop=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_loop-d0037a0a8774cb05.rlib --extern ptxc_onnx=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_onnx-e51071cc82967198.rlib --extern ptxc_onnx_proto=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_onnx_proto-263db0a2bc5993ff.rlib --extern ptxc_program=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_program-50eeada54e038ad7.rlib --extern ptxc_runtime=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_runtime-616c1a856f48f1fb.rlib --extern ptxc_target=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_target-cb6aef37cfe34092.rlib --extern ptxc_testkit=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_testkit-18d306b1bd295c3e.rlib --extern serde=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libserde-53764ccd2eea3f1b.rlib --extern serde_json=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libserde_json-f40a5ab5b6e7c5a1.rlib --extern tempfile=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libtempfile-df2884b4d7375eb4.rlib --extern yansi=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libyansi-ce494cc6155fdc48.rlib`
+     Running `rustc --crate-name ptxc --edition=2024 crates/cli/src/main.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type bin --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --deny=rust_2018_idioms '--deny=clippy::pedantic' '--deny=clippy::nursery' '--deny=clippy::cargo' '--deny=clippy::unwrap_used' --deny=unused_results --deny=unsafe_op_in_unsafe_fn --deny=unsafe_code --deny=unreachable_pub --deny=unnameable_types '--deny=clippy::unimplemented' '--deny=clippy::undocumented_unsafe_blocks' '--deny=clippy::todo' '--allow=clippy::similar_names' '--allow=clippy::redundant_pub_crate' '--deny=clippy::panic' '--allow=clippy::must_use_candidate' '--deny=clippy::multiple_unsafe_ops_per_block' '--allow=clippy::multiple_crate_versions' '--allow=clippy::module_name_repetitions' '--allow=clippy::missing_errors_doc' --deny=missing_docs --deny=missing_debug_implementations '--deny=rustdoc::missing_crate_level_docs' '--deny=clippy::expect_used' '--deny=clippy::dbg_macro' '--deny=rustdoc::broken_intra_doc_links' '--deny=rustdoc::all' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=1d2d5808514c6914 -C extra-filename=-9de478dffab3ce15 --out-dir /tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps -C incremental=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/incremental -L dependency=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps --extern anyhow=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libanyhow-ed2e3d4c96bf42eb.rlib --extern clap=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libclap-e09d77f315a61a5f.rlib --extern env_logger=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libenv_logger-6851c1a9ea57c850.rlib --extern log=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/liblog-e236491aeb233238.rlib --extern ptxc_autotune=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_autotune-9ae2c40341e0fcb9.rlib --extern ptxc_compiler=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_compiler-1a2836857a30c331.rlib --extern ptxc_core=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_core-cf1684fc99534bcb.rlib --extern ptxc_cuda=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_cuda-d5749cef420581e7.rlib --extern ptxc_graph=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_graph-1605acba5090a242.rlib --extern ptxc_interp=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_interp-a8710e3450355d89.rlib --extern ptxc_loop=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_loop-d0037a0a8774cb05.rlib --extern ptxc_onnx=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_onnx-e51071cc82967198.rlib --extern ptxc_onnx_proto=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_onnx_proto-263db0a2bc5993ff.rlib --extern ptxc_program=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_program-50eeada54e038ad7.rlib --extern ptxc_runtime=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_runtime-616c1a856f48f1fb.rlib --extern ptxc_target=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_target-cb6aef37cfe34092.rlib --extern ptxc_testkit=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libptxc_testkit-18d306b1bd295c3e.rlib --extern serde=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libserde-53764ccd2eea3f1b.rlib --extern serde_json=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libserde_json-f40a5ab5b6e7c5a1.rlib --extern yansi=/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/libyansi-ce494cc6155fdc48.rlib`
+warning: unused variable: `args`
+  --> crates/cli/src/commands/compile.rs:15:19
+   |
+15 | pub(crate) fn run(args: &CompileArgs) -> anyhow::Result<ExitCode> {
+   |                   ^^^^ help: if this is intentional, prefix it with an underscore: `_args`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ptxc-cli` (bin "ptxc" test) generated 1 warning (1 duplicate)
+warning: `ptxc-cli` (bin "ptxc") generated 1 warning (run `cargo fix --bin "ptxc" -p ptxc-cli` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.56s
+  Executable `/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/ptxc-edf3c7e7f151ec43`
+  Executable `/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/conformance-a33a24de1b87bffd`
+  Executable `/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/model-d7c36730a4fb3ef5`
+
+*** result: Success
+
+*** /nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo test --verbose --package=ptxc-cli@0.1.0
+       Fresh unicode-ident v1.0.27
+       Fresh proc-macro2 v1.0.107
+       Fresh quote v1.0.47
+       Fresh syn v3.0.10
+       Fresh thiserror-impl v2.0.21
+       Fresh thiserror v2.0.21
+       Fresh ptxc-core v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/core)
+       Fresh ptxc-target v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/target)
+       Fresh memchr v2.8.3
+       Fresh libc v0.2.191
+       Fresh either v1.19.0
+       Fresh rand_core v0.10.1
+       Fresh cfg-if v1.0.5
+       Fresh itertools v0.15.0
+       Fresh anyhow v1.0.104
+       Fresh ptxc-loop v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/loop)
+       Fresh ptxc-graph v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/graph)
+       Fresh syn v2.0.119
+       Fresh prost-derive v0.14.6
+       Fresh serde_core v1.0.229
+       Fresh regex-syntax v0.8.12
+       Fresh bytes v1.12.2
+       Fresh typenum v1.20.1
+       Fresh hybrid-array v0.4.15
+       Fresh prost v0.14.6
+       Fresh libm v0.2.16
+       Fresh getrandom v0.4.3
+       Fresh zmij v1.0.23
+       Fresh serde_derive v1.0.229
+       Fresh utf8parse v0.2.2
+       Fresh autocfg v1.5.1
+       Fresh linux-raw-sys v0.12.1
+       Fresh itoa v1.0.19
+       Fresh bitflags v2.13.2
+       Fresh ptxc-interp v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/interp)
+       Fresh ptxc-onnx-proto v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/onnx-proto)
+       Fresh aho-corasick v1.1.5
+       Fresh once_cell v1.21.4
+       Fresh colorchoice v1.0.5
+       Fresh anstyle v1.0.14
+       Fresh cpufeatures v0.3.1
+       Fresh fastrand v2.5.0
+       Fresh is_terminal_polyfill v1.70.2
+       Fresh anstyle-query v1.1.5
+       Fresh block-buffer v0.12.1
+       Fresh crypto-common v0.2.2
+       Fresh ptxc-lower v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/lower)
+       Fresh ptxc-schedule v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/schedule)
+       Fresh wait-timeout v0.2.1
+       Fresh const-oid v0.10.3
+       Fresh bit-vec v0.10.2
+       Fresh quick-error v1.2.3
+       Fresh fnv v1.0.7
+       Fresh rand v0.10.4
+       Fresh ptxc-codegen v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/codegen)
+       Fresh rand_xorshift v0.5.0
+       Fresh rustix v1.1.6
+       Fresh serde v1.0.229
+       Fresh anstyle-parse v1.0.0
+       Fresh serde_json v1.0.154
+       Fresh regex-automata v0.4.19
+       Fresh ptxc-onnx v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/onnx)
+       Fresh digest v0.11.3
+       Fresh ptxc-graph-opt v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/graph-opt)
+       Fresh bit-set v0.11.1
+       Fresh chacha20 v0.10.2
+       Fresh ptxc-cuda v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cuda)
+       Fresh log v0.4.35
+       Fresh unarray v0.1.4
+       Fresh jiff-core v1.0.1
+       Fresh strsim v0.11.1
+       Fresh clap_lex v1.1.2
+       Fresh heck v0.5.0
+       Fresh core_detect v1.0.0
+       Fresh ptxc-cost-model v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cost-model)
+       Fresh is-terminal v0.4.17
+       Fresh ptxc-program v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/program)
+       Fresh tempfile v3.27.0
+       Fresh anstream v1.0.0
+       Fresh regex v1.13.2
+       Fresh sha2 v0.11.1
+       Fresh clap_derive v4.6.9
+       Fresh jiff v1.0.2
+       Fresh yansi v1.0.1
+       Fresh num-traits v0.2.19
+       Fresh rusty-fork v0.3.1
+       Fresh ptxc-compiler v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/compiler)
+       Fresh clap_builder v4.6.7
+       Fresh ptxc-runtime v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/runtime)
+       Fresh env_filter v2.1.0
+       Fresh proptest v1.12.0
+       Fresh ptxc-autotune v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/autotune)
+       Fresh clap v4.6.9
+       Fresh env_logger v0.11.12
+       Fresh ptxc-testkit v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/testkit)
+warning: unused variable: `args`
+  --> crates/cli/src/commands/compile.rs:15:19
+   |
+15 | pub(crate) fn run(args: &CompileArgs) -> anyhow::Result<ExitCode> {
+   |                   ^^^^ help: if this is intentional, prefix it with an underscore: `_args`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+       Fresh ptxc-cli v0.1.0 (/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/crates/cli)
+warning: `ptxc-cli` (bin "ptxc" test) generated 1 warning (run `cargo fix --bin "ptxc" -p ptxc-cli --tests` to apply 1 suggestion)
+warning: `ptxc-cli` (bin "ptxc") generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running `/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/ptxc-edf3c7e7f151ec43`
+
+running 17 tests
+test commands::fuzz::export::tests::a_mean_of_no_elements_is_undefined_and_other_reductions_are_not ... ok
+test report::tests::reasons_and_failures_read_as_sentences ... ok
+test report::tests::the_markdown_report_totals_by_status_op_failure_and_reason ... ok
+test commands::fuzz::tests::an_integer_division_by_zero_is_rejected_before_any_backend_runs ... ok
+test commands::fuzz::tests::a_backend_on_tensor_cores_is_compared_only_on_a_continuous_case ... ok
+test commands::fuzz::export::tests::onnx_runtime_has_no_bf16_kernels ... ok
+test report::tests::the_json_report_tags_each_outcome_and_writes_non_finite_values_as_text ... ok
+test commands::fuzz::tests::a_backend_returning_the_wrong_outputs_mismatches ... ok
+test commands::fuzz::export::tests::a_written_case_reads_back_as_its_graph_and_inputs ... ok
+test commands::fuzz::ort::tests::a_case_differing_from_its_cached_outputs_mismatches ... ok
+test commands::fuzz::ort::tests::a_case_without_cached_outputs_is_counted_apart ... ok
+test commands::run::tests::outputs_are_written_in_order_as_named_tensor_protos ... ok
+test commands::fuzz::export::tests::only_a_missing_or_empty_directory_is_written_to ... ok
+test commands::fuzz::ort::tests::a_case_matching_its_cached_outputs_agrees ... ok
+test commands::fuzz::tests::a_tensor_core_case_is_compared_with_the_backend_only_where_it_is_continuous ... ok
+test commands::fuzz::tests::a_failing_backend_mismatches_and_each_seed_is_written_shrunk ... ok
+test commands::fuzz::tests::a_backend_matching_the_loop_interpreter_agrees_on_every_seed ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.42s
+
+     Running `/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/conformance-a33a24de1b87bffd`
+
+running 4 tests
+test a_missing_tests_directory_fails_the_command ... ok
+test a_run_without_failures_succeeds ... ok
+test the_terminal_shows_the_run_its_totals_and_each_failure_uncoloured_when_piped ... ok
+test every_outcome_is_classified_and_any_failure_fails_the_run ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running `/tmp/nix-shell.Ta7Voo/cargo-mutants-ptxc-xbP6mq.tmp/target/debug/deps/model-d7c36730a4fb3ef5`
+
+running 5 tests
+test compile_writes_a_program_that_loads ... FAILED
+test compile_sizes_symbolic_dims_and_reads_external_data_beside_the_model ... FAILED
+test a_missing_model_or_malformed_dim_fails_with_a_message ... FAILED
+test run_reports_a_missing_input_file_before_using_the_gpu ... ok
+test fuzz_runs_its_seeds_on_the_interpreters_and_passes_when_they_agree ... ok
+
+failures:
+
+---- compile_writes_a_program_that_loads stdout ----
+
+thread 'compile_writes_a_program_that_loads' (687633) panicked at crates/cli/tests/model/main.rs:114:5:
+
+  ptxc v0.1.0  ONNX to PTX
+  ------------------------------------------------------------
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- compile_sizes_symbolic_dims_and_reads_external_data_beside_the_model stdout ----
+
+thread 'compile_sizes_symbolic_dims_and_reads_external_data_beside_the_model' (687632) panicked at crates/cli/tests/model/main.rs:208:59:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+
+---- a_missing_model_or_malformed_dim_fails_with_a_message stdout ----
+
+thread 'a_missing_model_or_malformed_dim_fails_with_a_message' (687631) panicked at crates/cli/tests/model/main.rs:138:5:
+assertion `left == right` failed
+  left: Some(0)
+ right: Some(2)
+
+
+failures:
+    a_missing_model_or_malformed_dim_fails_with_a_message
+    compile_sizes_symbolic_dims_and_reads_external_data_beside_the_model
+    compile_writes_a_program_that_loads
+
+test result: FAILED. 2 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.71s
+
+error: test failed, to rerun pass `-p ptxc-cli --test model`
+
+*** result: Failure(101)

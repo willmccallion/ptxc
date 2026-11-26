@@ -10,10 +10,64 @@ mod verify;
 
 pub use verify::ArenaError;
 
+use crate::error::CompileError;
+use greedy_by_size::GreedyBySize;
 use lifetime::{lifetimes, peak_live_bytes};
-use ptxc_core::ByteSize;
-use ptxc_program::{Location, Program};
+use planner::{MemoryPlanner, Request};
+use ptxc_core::{ByteSize, DType, ElementCount, IndexVec};
+use ptxc_program::{Buffer, BufferId, Location, Program, Step};
 use verify::{Placed, verify};
+
+/// Where an emitted buffer is: fixed already, or in the arena wherever the
+/// plan puts it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Place {
+    /// At this location.
+    Fixed(Location),
+    /// In the arena.
+    Arena,
+}
+
+/// A buffer before the arena is planned.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct Unplaced {
+    /// The element type.
+    pub(crate) dtype: DType,
+    /// The number of elements.
+    pub(crate) elements: ElementCount,
+    /// Where it is.
+    pub(crate) place: Place,
+}
+
+/// `buffers` located, each `Place::Arena` one in an arena planned so that
+/// buffers `steps` touch at the same step never share a byte; and the
+/// arena's size.
+pub(crate) fn place(
+    buffers: IndexVec<BufferId, Unplaced>,
+    steps: &[Step],
+) -> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError> {
+    let lifetimes = lifetimes(steps, &buffers);
+    let mut requests = Vec::new();
+    for (id, buffer) in buffers.iter_enumerated() {
+        if buffer.place == Place::Arena {
+            let size = buffer.elements.in_bytes(buffer.dtype)?;
+            requests.push(Request { size, lifetime: lifetimes[id] });
+        }
+    }
+    let plan = GreedyBySize.plan(&requests).ok_or(CompileError::TooLarge)?;
+    let mut offsets = plan.offsets.into_iter();
+    let located = buffers
+        .into_iter()
+        .map(|buffer| {
+            let location = match buffer.place {
+                Place::Fixed(location) => location,
+                Place::Arena => Location::Arena(offsets.next().ok_or(CompileError::Unplaced)?),
+            };
+            Ok(Buffer { dtype: buffer.dtype, elements: buffer.elements, location })
+        })
+        .collect::<Result<_, CompileError>>()?;
+    Ok((located, plan.size))
+}
 
 /// A program's arena against the least any placement of its buffers needs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

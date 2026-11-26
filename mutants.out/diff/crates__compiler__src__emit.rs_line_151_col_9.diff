@@ -1,0 +1,28 @@
+--- crates/compiler/src/emit.rs
++++ replace Emitter<'g>::constant -> Result<BufferId, CompileError> with Ok(Default::default())
+@@ -143,24 +143,17 @@
+             }
+         };
+         let _new = self.values.insert(value, id);
+         Ok(id)
+     }
+ 
+     /// A buffer for `tensor` at the next aligned offset of the blob.
+     fn constant(&mut self, tensor: &HostTensor) -> Result<BufferId, CompileError> {
+-        let length = u64::try_from(self.constants.len()).map_err(|_| CompileError::TooLarge)?;
+-        let offset = ByteOffset::new(length).align_up(BUFFER_ALIGNMENT)?;
+-        let start = usize::try_from(offset.get()).map_err(|_| CompileError::TooLarge)?;
+-        self.constants.resize(start, 0);
+-        self.constants.extend(tensor.data().to_le_bytes());
+-        let elements = tensor.shape().element_count();
+-        let place = Place::Fixed(Location::Constant(offset));
+-        Ok(self.buffers.push(Unplaced { dtype: tensor.dtype(), elements, place }))
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// A buffer of `dtype` and `shape` in the arena, placed by the plan.
+     fn arena_buffer(&mut self, dtype: DType, shape: &Shape) -> BufferId {
+         let elements = shape.element_count();
+         self.buffers.push(Unplaced { dtype, elements, place: Place::Arena })
+     }
+ 

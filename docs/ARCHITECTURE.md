@@ -645,8 +645,10 @@ Memory planning is part of compilation, as in XLA's BufferAssignment.
 - The lower bound on the arena is the most bytes live at any one step;
   `arena_use` reports a program's arena against it.
 - A `MemoryPlanner` assigns byte offsets in a single arena so that buffers
-  whose live ranges overlap never overlap in memory. Two planners are
-  planned: greedy-by-size (TensorFlow Lite's planner) and linear scan.
+  whose live ranges overlap never overlap in memory. Emission places the
+  arena once every step is emitted. Greedy-by-size, TensorFlow Lite's
+  planner, takes buffers from largest to smallest, each into the smallest
+  gap among the buffers live with it; linear scan is the second planner.
 - The output is checked by an independent verifier, `verify_arena`, in
   tests: no two live buffers overlap, and every buffer is aligned and inside
   the arena.

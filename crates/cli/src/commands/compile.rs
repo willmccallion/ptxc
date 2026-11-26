@@ -3,7 +3,7 @@
 use crate::args::CompileArgs;
 use crate::ui;
 use anyhow::Context;
-use ptxc_compiler::Compilation;
+use ptxc_compiler::{Compilation, arena_use};
 use ptxc_core::{Dim, Shape};
 use ptxc_onnx::ImportOptions;
 use ptxc_program::Program;
@@ -18,7 +18,7 @@ pub(crate) fn run(args: &CompileArgs) -> anyhow::Result<ExitCode> {
     let program = compile_model(&args.model, &args.dims)?;
     let bytes = ptxc_program::save(&program).context("encoding the program")?;
     std::fs::write(&args.out, &bytes).with_context(|| format!("writing {}", args.out.display()))?;
-    describe(&program);
+    describe(&program)?;
     ui::stat("Written", &args.out.display().to_string());
     Ok(ExitCode::SUCCESS)
 }
@@ -40,9 +40,11 @@ pub(crate) fn compile_model(path: &Path, dims: &[(String, Dim)]) -> anyhow::Resu
 }
 
 /// The program's shape: kernels, memory and bindings.
-pub(crate) fn describe(program: &Program) {
+pub(crate) fn describe(program: &Program) -> anyhow::Result<()> {
     ui::stat("Kernels", &program.kernels().len().to_string());
-    ui::stat("Arena", &format!("{} bytes", program.arena().get()));
+    let arena = arena_use(program).context("measuring the arena")?;
+    ui::stat("Arena", &format!("{} bytes", arena.size.get()));
+    ui::stat("Arena lower bound", &format!("{} bytes", arena.lower_bound.get()));
     ui::stat("Constants", &format!("{} bytes", program.constants().len()));
     for binding in program.inputs() {
         ui::stat("Input", &format!("{} {}", binding.name, extents(&binding.shape)));
@@ -50,6 +52,7 @@ pub(crate) fn describe(program: &Program) {
     for binding in program.outputs() {
         ui::stat("Output", &format!("{} {}", binding.name, extents(&binding.shape)));
     }
+    Ok(())
 }
 
 /// A shape as its extents, such as `[2, 4]`.

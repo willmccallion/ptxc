@@ -2,21 +2,21 @@
 //! and the steps into a `Program`.
 //!
 //! Graph inputs, and outputs a node produces, are bound to the caller's
-//! memory before any group runs, so stages write outputs in place. Other
-//! values and each group's intermediates get their own arena offset, and
-//! constants and tables their own place in the blob.
-// NOTE: one arena allocation per buffer, never reused, is the trivial plan
-// M2 calls for; lifetime-based planners come with M4.
+//! memory before any group runs, so stages write outputs in place.
+//! Constants and tables get their own place in the blob. Other values and
+//! each group's intermediates go in the arena, placed once every step is
+//! emitted, so buffers never live at the same step can share its bytes.
 
 use crate::compilation::Scheduled;
 use crate::error::CompileError;
+use crate::memory_plan::{Place, Unplaced, place};
 use ptxc_codegen::generate;
-use ptxc_core::{ByteOffset, ByteSize, DType, HostTensor, Idx, IndexVec, Shape};
+use ptxc_core::{ByteOffset, DType, HostTensor, Idx, IndexVec, Shape};
 use ptxc_graph::{Graph, ValueDef, ValueId};
 use ptxc_loop::{Access, LoweredKernel};
 use ptxc_lower::{Binding, LoweredGroup};
 use ptxc_program::{
-    BUFFER_ALIGNMENT, Buffer, BufferId, InputIndex, IoBinding, KernelId, KernelSpec, LaunchConfig,
+    BUFFER_ALIGNMENT, BufferId, InputIndex, IoBinding, KernelId, KernelSpec, LaunchConfig,
     Location, OutputIndex, Program, ProgramParts, Step,
 };
 use ptxc_target::Target;
@@ -35,15 +35,14 @@ pub(crate) fn emit(scheduled: &Scheduled, target: &Target) -> Result<Program, Co
         let from = emitter.value_buffer(value)?;
         emitter.steps.push(Step::Copy { from, to: output });
     }
-    Ok(Program::new(emitter.finish(target))?)
+    Ok(Program::new(emitter.finish(target)?)?)
 }
 
 struct Emitter<'g> {
     graph: &'g Graph,
     values: HashMap<ValueId, BufferId>,
-    buffers: IndexVec<BufferId, Buffer>,
+    buffers: IndexVec<BufferId, Unplaced>,
     constants: Vec<u8>,
-    arena: ByteOffset,
     kernels: IndexVec<KernelId, KernelSpec>,
     steps: Vec<Step>,
     inputs: IndexVec<InputIndex, IoBinding>,
@@ -57,7 +56,6 @@ impl<'g> Emitter<'g> {
             values: HashMap::new(),
             buffers: IndexVec::new(),
             constants: Vec::new(),
-            arena: ByteOffset::new(0),
             kernels: IndexVec::new(),
             steps: Vec::new(),
             inputs: IndexVec::new(),
@@ -65,17 +63,19 @@ impl<'g> Emitter<'g> {
         }
     }
 
-    fn finish(self, target: &Target) -> ProgramParts {
-        ProgramParts {
+    /// The program's parts, with the arena planned.
+    fn finish(self, target: &Target) -> Result<ProgramParts, CompileError> {
+        let (buffers, arena) = place(self.buffers, &self.steps)?;
+        Ok(ProgramParts {
             target: target.sm(),
             kernels: self.kernels,
             constants: self.constants,
-            arena: ByteSize::new(self.arena.get()),
-            buffers: self.buffers,
+            arena,
+            buffers,
             steps: self.steps,
             inputs: self.inputs,
             outputs: self.outputs,
-        }
+        })
     }
 
     fn bind_inputs(&mut self) -> Result<(), CompileError> {
@@ -122,10 +122,10 @@ impl<'g> Emitter<'g> {
     /// A buffer of `value`'s type at `location`.
     fn buffer_of(&mut self, value: ValueId, location: Location) -> BufferId {
         let ty = self.graph.value(value).ty();
-        self.buffers.push(Buffer {
+        self.buffers.push(Unplaced {
             dtype: ty.dtype(),
             elements: ty.shape().element_count(),
-            location,
+            place: Place::Fixed(location),
         })
     }
 
@@ -139,7 +139,7 @@ impl<'g> Emitter<'g> {
             ValueDef::Constant(constant) => self.constant(self.graph.constant(constant))?,
             ValueDef::Input(_) | ValueDef::Output { .. } => {
                 let ty = self.graph.value(value).ty();
-                self.arena_buffer(ty.dtype(), ty.shape())?
+                self.arena_buffer(ty.dtype(), ty.shape())
             }
         };
         let _new = self.values.insert(value, id);
@@ -154,17 +154,14 @@ impl<'g> Emitter<'g> {
         self.constants.resize(start, 0);
         self.constants.extend(tensor.data().to_le_bytes());
         let elements = tensor.shape().element_count();
-        let location = Location::Constant(offset);
-        Ok(self.buffers.push(Buffer { dtype: tensor.dtype(), elements, location }))
+        let place = Place::Fixed(Location::Constant(offset));
+        Ok(self.buffers.push(Unplaced { dtype: tensor.dtype(), elements, place }))
     }
 
-    /// A buffer of `dtype` and `shape` at the next aligned arena offset.
-    fn arena_buffer(&mut self, dtype: DType, shape: &Shape) -> Result<BufferId, CompileError> {
+    /// A buffer of `dtype` and `shape` in the arena, placed by the plan.
+    fn arena_buffer(&mut self, dtype: DType, shape: &Shape) -> BufferId {
         let elements = shape.element_count();
-        let offset = self.arena.align_up(BUFFER_ALIGNMENT)?;
-        let end = offset.get().checked_add(elements.in_bytes(dtype)?.get());
-        self.arena = ByteOffset::new(end.ok_or(CompileError::TooLarge)?);
-        Ok(self.buffers.push(Buffer { dtype, elements, location: Location::Arena(offset) }))
+        self.buffers.push(Unplaced { dtype, elements, place: Place::Arena })
     }
 
     /// Each of `group`'s stages as a kernel and a launch.
@@ -179,11 +176,11 @@ impl<'g> Emitter<'g> {
             .iter()
             .map(|table| self.constant(table))
             .collect::<Result<Vec<_>, _>>()?;
-        let intermediates = group
+        let intermediates: Vec<_> = group
             .intermediates()
             .iter()
             .map(|ty| self.arena_buffer(ty.dtype(), ty.shape()))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect();
         for (stage, kernel) in group.stages().iter().zip(kernels) {
             let mut reads = stage.inputs().iter();
             let mut writes = stage.outputs().iter();
