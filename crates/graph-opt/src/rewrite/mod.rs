@@ -9,4 +9,4 @@ mod template;
 
 pub(crate) use engine::RewriteEngine;
 pub(crate) use greedy::GreedyEngine;
-pub(crate) use rules::canonical;
+pub(crate) use rules::{algebraic, canonical};

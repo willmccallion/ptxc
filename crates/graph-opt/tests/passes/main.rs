@@ -8,6 +8,7 @@ mod cse;
 mod dce;
 mod manager;
 mod partition;
+mod simplify;
 
 use ptxc_graph::Graph;
 use ptxc_graph::text::{parse, print};

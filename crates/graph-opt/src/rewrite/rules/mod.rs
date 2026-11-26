@@ -4,4 +4,5 @@ mod algebraic;
 mod canonical;
 mod qdq;
 
+pub(crate) use algebraic::algebraic;
 pub(crate) use canonical::canonical;
