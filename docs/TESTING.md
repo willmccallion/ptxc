@@ -23,7 +23,7 @@ It plays the role spike plays for rvsim.
 
 ```sh
 cargo test                                   # everything that needs no GPU and no downloads
-cargo test --features gpu                    # also the device tests (crates: cuda, runtime, autotune)
+cargo test --features gpu                    # also the device tests (crates: cuda, runtime, autotune, cli)
 cargo test --release -p ptxc-core -- --ignored   # exhaustive float-format checks
 cargo test --release -p ptxc-loop --test math -- --ignored every_sin   # one math program over every f32
 cargo test --release -p ptxc-runtime --features gpu -- --ignored  # every ResNet-50 conv layer on tensor cores

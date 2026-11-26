@@ -20,8 +20,13 @@ struct Run {
 /// Runs the conformance command on `tests` with stderr piped and no colour
 /// settings in the environment.
 fn conformance(tests: &Path, out: &Path) -> Run {
+    conformance_on("interp", tests, out)
+}
+
+/// As `conformance`, on `backend`.
+fn conformance_on(backend: &str, tests: &Path, out: &Path) -> Run {
     let output = Command::new(env!("CARGO_BIN_EXE_ptxc"))
-        .args(["conformance", "--backend", "interp", "--tests"])
+        .args(["conformance", "--backend", backend, "--tests"])
         .arg(tests)
         .arg("--out")
         .arg(out)
@@ -133,4 +138,20 @@ fn the_terminal_shows_the_run_its_totals_and_each_failure_uncoloured_when_piped(
         "{stderr}"
     );
     assert!(!stderr.contains('\u{1b}'), "colour escapes in piped output:\n{stderr}");
+}
+
+/// Needs a GPU: compiled only with `--features gpu`, it fails rather than
+/// skips without one.
+#[cfg(feature = "gpu")]
+#[test]
+fn the_gpu_backend_passes_a_node_test_its_kernels_compute() {
+    let (tests, out) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    cases::relu(tests.path(), "test_relu", &[[1.0, -2.0]], &[[1.0, 0.0]]);
+
+    let run = conformance_on("gpu", tests.path(), out.path());
+
+    assert_eq!(run.code, Some(0), "{}", run.stderr);
+    let report = run.report.unwrap();
+    assert_eq!(report["backend"], "gpu");
+    assert_eq!(report["totals"]["pass"], 1);
 }

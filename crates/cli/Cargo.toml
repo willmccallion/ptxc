@@ -40,6 +40,10 @@ serde.workspace = true
 serde_json.workspace = true
 yansi.workspace = true
 
+[features]
+# Compiles the tests that need a GPU; without a GPU they fail rather than skip.
+gpu = []
+
 [dev-dependencies]
 prost.workspace = true
 tempfile.workspace = true
