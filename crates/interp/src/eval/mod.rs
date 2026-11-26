@@ -16,7 +16,6 @@ mod window;
 
 use crate::error::{InterpError, Malformed};
 use crate::numeric::store_wide;
-use ptxc_core::float::Overflow;
 use ptxc_core::{HostTensor, TensorData};
 use ptxc_graph::{Op, TensorType};
 
@@ -83,5 +82,5 @@ pub(super) fn first<'t>(operands: &[&'t HostTensor]) -> Result<&'t HostTensor, I
 
 /// Accumulated floats rounded into the output's float type.
 pub(super) fn round_to_output(values: &[f64], ty: &TensorType) -> Result<TensorData, InterpError> {
-    store_wide(values, ty.dtype(), Overflow::NonFinite)
+    store_wide(values, ty.dtype())
 }

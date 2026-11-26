@@ -164,7 +164,7 @@ pub(super) fn qmatmul(
                     sum * f64::from(a.scale.get()) * f64::from(b.scale.get())
                 })
                 .collect();
-            store_wide(&real, *dtype, Overflow::NonFinite)
+            store_wide(&real, *dtype)
         }
     }
 }
