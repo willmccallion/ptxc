@@ -22,19 +22,16 @@ impl Facts {
 
     /// Records that `condition` holds, as a cap on its index, and as a
     /// tighter range for `v` when the index is `v + c` for a constant `c`.
+    /// A bare `v` needs no range: the cap bounds it wherever it appears.
     pub(super) fn refine(&mut self, exprs: &ExprArena, condition: Condition) {
         let Expr::Const(bound) = exprs.get(condition.bound) else { return };
         let cap = self.caps.entry(condition.index).or_insert(i64::MAX);
         *cap = (*cap).min(bound.saturating_sub(1));
-        let (var, offset) = match exprs.get(condition.index) {
-            Expr::Var(var) => (var, 0),
-            Expr::Add(a, b) => match (exprs.get(a), exprs.get(b)) {
-                (Expr::Var(var), Expr::Const(offset)) | (Expr::Const(offset), Expr::Var(var)) => {
-                    (var, offset)
-                }
-                _ => return,
-            },
-            _ => return,
+        let Expr::Add(a, b) = exprs.get(condition.index) else { return };
+        let ((Expr::Var(var), Expr::Const(offset)) | (Expr::Const(offset), Expr::Var(var))) =
+            (exprs.get(a), exprs.get(b))
+        else {
+            return;
         };
         let Some(range) = self.ranges.get(var) else { return };
         let below = bound.saturating_sub(offset);
