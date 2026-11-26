@@ -4,7 +4,6 @@
 use crate::error::{InterpError, Malformed};
 use crate::extents::Extents;
 use crate::numeric::{Elements, int_to_f64, store_ints, store_wide, truncate, widen};
-use ptxc_core::float::Overflow;
 use ptxc_core::{DType, HostTensor, TensorData};
 use ptxc_graph::{GemmAttrs, MatMulIntegerAttrs, Orientation, TensorType, ZeroPoints};
 
@@ -108,7 +107,7 @@ pub(super) fn matmul(
     match (values(lhs)?, values(rhs)?) {
         (Values::Float(l), Values::Float(r)) => {
             let out = batched.products(&l, &r, 0.0, f64::mul_add);
-            store_wide(&out, output.dtype(), Overflow::NonFinite)
+            store_wide(&out, output.dtype())
         }
         (Values::Int(l), Values::Int(r)) => {
             let out = batched.products(&l, &r, 0, |x, y, acc| x.wrapping_mul(y).wrapping_add(acc));
@@ -209,7 +208,7 @@ pub(super) fn gemm(
     if matches!(lhs.dtype(), ptxc_core::DType::I32 | ptxc_core::DType::I64) {
         store_ints(&result.into_iter().map(truncate).collect::<Vec<_>>(), output.dtype())
     } else {
-        store_wide(&result, output.dtype(), Overflow::NonFinite)
+        store_wide(&result, output.dtype())
     }
 }
 

@@ -90,23 +90,14 @@ pub(crate) fn store_floats(
     })
 }
 
-/// Accumulated or exact values rounded once, to nearest-even, into `dtype`;
-/// `overflow` decides what an out-of-range value becomes in an FP8 type.
-pub(crate) fn store_wide(
-    values: &[f64],
-    dtype: DType,
-    overflow: Overflow,
-) -> Result<TensorData, InterpError> {
+/// Accumulated or exact values rounded once, to nearest-even, into the
+/// float type `dtype`. FP8 is storage only, so no result stored this way is
+/// FP8.
+pub(crate) fn store_wide(values: &[f64], dtype: DType) -> Result<TensorData, InterpError> {
     Ok(match dtype {
         DType::F32 => values.iter().map(|&v| f64_to_f32(v)).collect::<Vec<_>>().into(),
         DType::F16 => values.iter().map(|&v| F16::from_f64(v)).collect::<Vec<_>>().into(),
         DType::Bf16 => values.iter().map(|&v| Bf16::from_f64(v)).collect::<Vec<_>>().into(),
-        DType::F8E4M3Fn => {
-            values.iter().map(|&v| F8E4M3Fn::from_f64(v, overflow)).collect::<Vec<_>>().into()
-        }
-        DType::F8E5M2 => {
-            values.iter().map(|&v| F8E5M2::from_f64(v, overflow)).collect::<Vec<_>>().into()
-        }
         _ => return Err(Malformed::DType(dtype).into()),
     })
 }

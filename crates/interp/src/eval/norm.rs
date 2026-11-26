@@ -5,7 +5,6 @@ use crate::error::{InterpError, Malformed};
 use crate::eval::first;
 use crate::extents::Extents;
 use crate::numeric::{count_to_f64, store_wide, wide_floats};
-use ptxc_core::float::Overflow;
 use ptxc_core::{HostTensor, TensorData};
 use ptxc_graph::{
     BatchNormAttrs, InstanceNormAttrs, LayerNormAttrs, LayerNormKind, NormOutputs, SoftmaxAttrs,
@@ -109,7 +108,7 @@ pub(super) fn layer_norm(
     if attrs.kind == LayerNormKind::Layer(NormOutputs::WithStatistics) {
         let (means, inverses): (Vec<f64>, Vec<f64>) = statistics.into_iter().unzip();
         for (statistic, ty) in <[_; 2]>::from((means, inverses)).iter().zip(statistic_types) {
-            results.push(result(ty, store_wide(statistic, ty.dtype(), Overflow::NonFinite)?)?);
+            results.push(result(ty, store_wide(statistic, ty.dtype())?)?);
         }
     }
     Ok(results)
