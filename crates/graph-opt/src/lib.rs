@@ -7,4 +7,4 @@ mod passes;
 mod rewrite;
 
 pub use pass::{Pass, PassError, PassManager, PassReport, PipelineError};
-pub use passes::Dce;
+pub use passes::{Cse, Dce};

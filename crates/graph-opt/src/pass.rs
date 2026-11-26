@@ -1,7 +1,7 @@
 //! The `Pass` trait and `PassManager`, which verifies the graph after every
 //! pass in debug builds and in tests.
 
-use crate::passes::Dce;
+use crate::passes::{Cse, Dce};
 use ptxc_graph::{CycleError, Graph, RewriteError, VerifyError};
 use thiserror::Error;
 
@@ -78,7 +78,7 @@ impl PassManager {
 
     /// The passes the compiler runs.
     pub fn standard() -> Self {
-        Self::new(vec![Box::new(Dce)])
+        Self::new(vec![Box::new(Cse), Box::new(Dce)])
     }
 
     /// `self`, verifying the graph after every pass in release builds too.
