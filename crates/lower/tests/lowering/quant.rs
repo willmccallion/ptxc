@@ -7,6 +7,7 @@ use ptxc_graph::{
     QMatMulAttrs, QMatMulOutput, QuantizeAttrs, Stride, WindowAxis,
 };
 use ptxc_loop::print_compute;
+use ptxc_lower::LowerError;
 use ptxc_testkit::golden;
 
 const fn affine(scale: f32, zero_point: i32) -> Affine {
@@ -116,6 +117,34 @@ fn a_float_result_dequantizes_a_sum_of_fp8_products_or_an_exact_integer_one() {
     ];
 
     golden::check("quant/qmatmul_float.txt", &definitions.join("\n")).unwrap();
+}
+
+/// The type rule takes FP8 operands for a quantized convolution, which
+/// has no lowering for them yet.
+#[test]
+fn a_quantized_convolution_of_fp8_operands_is_refused() {
+    let fp8 = per_tensor(QuantDType::F8E4M3Fn, 0.5, 0);
+    let window = WindowAxis {
+        stride: Stride::new(1).unwrap(),
+        dilation: Dilation::new(1).unwrap(),
+        pad_begin: Padding::new(0),
+        pad_end: Padding::new(0),
+    };
+    let attrs = QConvAttrs {
+        conv: ConvAttrs { axes: vec![window], groups: Groups::new(1).unwrap() },
+        input: fp8.clone(),
+        weights: fp8,
+        output: per_tensor(QuantDType::U8, 1.0, 10),
+    };
+    let mut builder = GraphBuilder::new();
+    let x = builder.add_input(tensor_type(DType::F8E4M3Fn, &[1, 1, 4]));
+    let w = builder.add_input(tensor_type(DType::F8E4M3Fn, &[2, 1, 2]));
+    let out = builder.add_node(Op::QConv(attrs), vec![x, w]).unwrap();
+    let graph = builder.finish(out).unwrap();
+
+    let refused = stages(graph).unwrap_err();
+
+    assert_eq!(refused, LowerError::UnsupportedDType { op: "qconv", dtype: DType::F8E4M3Fn });
 }
 
 #[test]
