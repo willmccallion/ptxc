@@ -102,16 +102,24 @@ fn gathers(compute: &ComputeDef) -> bool {
 }
 
 /// Whether `consumer` reduces nothing and reads `inputs` only at its own
-/// element, each index its own variable in order.
+/// element: each index its own axis's variable in order, or 0 on an axis
+/// of extent 1, as a broadcast reads one.
 fn is_epilogue(consumer: &ComputeDef, inputs: &[TensorParamId]) -> bool {
     if consumer.outputs().iter().any(|output| output.expr.reduction().is_some()) {
         return false;
     }
-    let own: Vec<VarId> =
-        consumer.iter_vars().ids().filter_map(|axis| consumer.axis_var(axis)).collect();
+    let own: Vec<(VarId, bool)> = consumer
+        .iter_vars()
+        .iter_enumerated()
+        .filter_map(|(axis, iter)| Some((consumer.axis_var(axis)?, iter.extent.get() == 1)))
+        .collect();
     let at_own = |read: &[ExprId], _: bool| {
         read.len() == own.len()
-            && read.iter().zip(&own).all(|(&id, &var)| consumer.exprs().get(id) == Expr::Var(var))
+            && read.iter().zip(&own).all(|(&id, &(var, single))| match consumer.exprs().get(id) {
+                Expr::Var(read) => read == var,
+                Expr::Const(0) => single,
+                _ => false,
+            })
     };
     consumer.outputs().iter().all(|output| every_read(&output.expr, inputs, &at_own))
 }
