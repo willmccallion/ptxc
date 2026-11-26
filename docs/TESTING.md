@@ -198,7 +198,7 @@ The target models are checked against ORT by ignored tests in
 
 ```
 cargo xtask fetch imagenetv2
-uv run --project baselines ptxc-baselines export --model resnet50     # also mlp, bert-base, gpt2
+uv run --project baselines ptxc-baselines export --model resnet50     # also resnet50-unfolded, mlp, bert-base, gpt2
 uv run --project baselines ptxc-baselines images --source imagenetv2 --count 16
 uv run --project baselines ptxc-baselines random --model gpt2 --batch 1 --sequence 128 --seed 0
 uv run --project baselines ptxc-baselines reference --model resnet50 --inputs imagenetv2-16

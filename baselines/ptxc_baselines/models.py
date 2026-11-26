@@ -1,6 +1,7 @@
 """The target models (MLP, ResNet-50, BERT-base, GPT-2), exported to ONNX
 with named `batch` and `sequence` dims that ptxc binds at import (D3)."""
 
+import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,9 @@ class Export:
     output_names: list[str]
     #: For each input, the axes that are symbolic, by name.
     dims: list[dict[int, str]]
+    #: Whether the exporter's optimiser runs, which among other things
+    #: folds each batch normalisation into the convolution before it.
+    optimize: bool = True
 
 
 class Mlp(torch.nn.Module):
@@ -91,6 +95,11 @@ def resnet50() -> Export:
     return Export(module, (image,), ["image"], ["logits"], [{0: "batch"}])
 
 
+def resnet50_unfolded() -> Export:
+    """ResNet-50 with its batch normalisations kept, for ptxc to fold."""
+    return dataclasses.replace(resnet50(), optimize=False)
+
+
 def tokens() -> torch.Tensor:
     return torch.randint(0, 1000, (EXAMPLE_BATCH, EXAMPLE_SEQUENCE))
 
@@ -129,6 +138,7 @@ def gpt2() -> Export:
 MODELS: dict[str, Callable[[], Export]] = {
     "mlp": mlp,
     "resnet50": resnet50,
+    "resnet50-unfolded": resnet50_unfolded,
     "bert-base": bert_base,
     "gpt2": gpt2,
 }
@@ -149,5 +159,6 @@ def export(spec: Export, path: Path) -> None:
             input_names=spec.input_names,
             output_names=spec.output_names,
             dynamic_shapes=dynamic,
+            optimize=spec.optimize,
         )
     program.save(str(path), external_data=False)
