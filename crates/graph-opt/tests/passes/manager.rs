@@ -118,3 +118,18 @@ fn release_builds_verify_after_each_pass_only_when_asked() {
         "{checked:?}"
     );
 }
+
+/// Debug builds verify after every pass unasked; this runs only without
+/// `--release`.
+#[cfg(debug_assertions)]
+#[test]
+fn debug_builds_verify_after_each_pass_unasked() {
+    let unasked = PassManager::new(vec![Box::new(CloseACycle)]);
+
+    let checked = unasked.run(&mut graph(CHAIN));
+
+    assert!(
+        matches!(checked, Err(PipelineError::Invalid { pass: "close-a-cycle", .. })),
+        "{checked:?}"
+    );
+}
