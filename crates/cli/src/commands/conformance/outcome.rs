@@ -134,3 +134,35 @@ fn worst(worst: &compare::Worst) -> Worst {
         error: worst.error,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::agrees_with_loop_interpreter;
+    use ptxc_core::{DType, Dim, HostTensor, Shape};
+    use ptxc_graph::{GraphBuilder, Layout, Op, TensorType, UnaryOp};
+    use ptxc_testkit::onnx_tests::Runnable;
+
+    fn vector(values: Vec<f32>) -> HostTensor {
+        HostTensor::vector(values.into())
+    }
+
+    /// Negating `[1, -2]`.
+    fn negation() -> Runnable {
+        let mut builder = GraphBuilder::new();
+        let shape = Shape::new(vec![Dim::new(2)]).unwrap();
+        let x = builder.add_input(TensorType::new(DType::F32, shape, Layout::RowMajor));
+        let y = builder.add_node(Op::Unary(UnaryOp::Neg), vec![x]).unwrap();
+        Runnable { graph: builder.finish(y).unwrap(), inputs: vec![vector(vec![1.0, -2.0])] }
+    }
+
+    #[test]
+    fn a_gpu_result_the_loop_interpreter_does_not_give_is_refused() {
+        let runnable = negation();
+
+        let given = agrees_with_loop_interpreter(&runnable, &[vector(vec![-1.0, 2.0])]);
+        let other = agrees_with_loop_interpreter(&runnable, &[vector(vec![-1.0, 3.0])]);
+
+        assert_eq!(given, Ok(()));
+        assert!(other.is_err());
+    }
+}
