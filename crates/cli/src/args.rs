@@ -99,6 +99,18 @@ pub(crate) struct RunArgs {
     /// A size for a symbolic dimension, when compiling a model.
     #[arg(long = "dim", value_name = "NAME=SIZE", value_parser = parse_dim)]
     pub(crate) dims: Vec<(String, Dim)>,
+    /// How the program runs.
+    #[arg(long, value_enum, default_value_t = ExecutorKind::Eager)]
+    pub(crate) executor: ExecutorKind,
+}
+
+/// How `ptxc run` runs a program.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ExecutorKind {
+    /// Each step launched in turn.
+    Eager,
+    /// Every step recorded once into a CUDA graph and replayed.
+    Graphed,
 }
 
 /// `name=size`, as `--dim` takes it.

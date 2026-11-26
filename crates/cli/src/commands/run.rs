@@ -1,10 +1,10 @@
 //! `ptxc run`: executes a model on given inputs, on GPU 0.
 
-use crate::args::RunArgs;
+use crate::args::{ExecutorKind, RunArgs};
 use crate::commands::compile::{compile_model, describe, extents};
 use crate::ui;
 use anyhow::Context;
-use ptxc_core::{Evaluate, HostTensor};
+use ptxc_core::HostTensor;
 use ptxc_cuda::{DeviceOrdinal, Driver};
 use ptxc_program::{FormatError, Program};
 use ptxc_runtime::{Executor, load};
@@ -22,8 +22,11 @@ pub(crate) fn run(args: &RunArgs) -> anyhow::Result<ExitCode> {
         args.inputs.iter().map(|path| read_tensor(path)).collect::<anyhow::Result<Vec<_>>>()?;
     let device = Driver::load()?.device(DeviceOrdinal::new(0))?;
     let names: Vec<String> = program.outputs().iter().map(|binding| binding.name.clone()).collect();
-    let mut executor = Executor::eager(load(program, &device)?);
-    let outputs = executor.evaluate(&inputs)?;
+    let eager = Executor::eager(load(program, &device)?);
+    let outputs = match args.executor {
+        ExecutorKind::Eager => eager.run(&inputs)?,
+        ExecutorKind::Graphed => eager.capture()?.run(&inputs)?,
+    };
     for (name, output) in names.iter().zip(&outputs) {
         ui::stat(name, &format!("{} {}", output.dtype().name(), extents(output.shape())));
     }
