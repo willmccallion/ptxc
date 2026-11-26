@@ -75,3 +75,12 @@ pub(super) fn expected(shape: GemmShape) -> Vec<i64> {
         .flat_map(|i| (0..n).map(move |j| (0..k).map(|p| entry(i, p, 7) * entry(p, j, 3)).sum()))
         .collect()
 }
+
+#[test]
+fn the_matrices_vary_along_rows_and_columns_in_every_layout() {
+    let row_major = stored(2, 3, 7, false);
+    let transposed = stored(2, 3, 7, true);
+
+    assert_eq!(row_major, [-2, -1, 0, 0, 1, 2]);
+    assert_eq!(transposed, [-2, 0, -1, 1, 0, 2]);
+}
