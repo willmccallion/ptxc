@@ -13,3 +13,4 @@ mod ptxas;
 mod reference;
 mod shrink;
 mod sums;
+mod tensorized;
