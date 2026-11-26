@@ -16,9 +16,9 @@ mod test_kernels;
 
 pub use compute::{
     ArgKind, BinaryOp, CombineInput, ComputeBuilder, ComputeDef, ComputeError, ComputeName,
-    Constant, IndexVar, InfSign, IterKind, IterVar, IterVarId, OutputDef, ReduceOp, RfactorError,
-    Rfactored, Scalar, Slices, TensorExpr, TensorName, TensorParam, TensorParamId, TieBreak,
-    UnaryOp, VarName, rfactor,
+    Constant, IndexVar, InfSign, InlineError, Inlined, InlinedInput, IterKind, IterVar, IterVarId,
+    OutputDef, ReduceOp, RfactorError, Rfactored, Scalar, Slices, TensorExpr, TensorName,
+    TensorParam, TensorParamId, TieBreak, UnaryOp, VarName, inline, rfactor,
 };
 pub use expr::{Expr, ExprArena, ExprId, Interval, Simplifier, VarId, VarRanges};
 pub use interp::{RunError, run};

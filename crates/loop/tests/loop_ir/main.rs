@@ -9,6 +9,7 @@ mod compute_errors;
 mod compute_types;
 mod expressions;
 mod fused;
+mod inline;
 mod interp;
 mod lower;
 mod padding;
