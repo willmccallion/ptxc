@@ -207,21 +207,28 @@ fn write(
     collected: Collected,
 ) -> Result<(), SweepError> {
     let gpu = GpuIdentity::read()?;
-    let ptxc = Framework::ptxc(repository)?;
+    let files = result_files(&Framework::ptxc(repository)?, version);
+    let cases = [collected.ptxc, collected.cublas, collected.best];
+    for ((file, framework), cases) in files.into_iter().zip(cases) {
+        Results::new("gemm", framework, gpu.clone(), cases).write(&out.join(file))?;
+    }
+    if collected.failed.is_empty() { Ok(()) } else { Err(SweepError::Failed(collected.failed)) }
+}
+
+/// The file each framework's results go to, and the framework they record:
+/// ptxc as built, and cuBLAS's default and its best of 8 at `version`, from
+/// ptxc's commit.
+fn result_files(ptxc: &Framework, version: &str) -> [(&'static str, Framework); 3] {
     let cublas = |name: &str| Framework {
         name: name.to_owned(),
         version: version.to_owned(),
         ..ptxc.clone()
     };
-    let files = [
-        ("gemm-ptxc.json", ptxc.clone(), collected.ptxc),
-        ("gemm-cublas.json", cublas("cublas"), collected.cublas),
-        ("gemm-cublas-best-of-8.json", cublas("cublas-best-of-8"), collected.best),
-    ];
-    for (file, framework, cases) in files {
-        Results::new("gemm", framework, gpu.clone(), cases).write(&out.join(file))?;
-    }
-    if collected.failed.is_empty() { Ok(()) } else { Err(SweepError::Failed(collected.failed)) }
+    [
+        ("gemm-ptxc.json", ptxc.clone()),
+        ("gemm-cublas.json", cublas("cublas")),
+        ("gemm-cublas-best-of-8.json", cublas("cublas-best-of-8")),
+    ]
 }
 
 #[cfg(test)]
