@@ -1,5 +1,5 @@
 use ptxc_core::convert::int_to_f64;
-use ptxc_core::{HostTensor, TensorData};
+use ptxc_core::{DType, HostTensor, TensorData};
 use ptxc_testkit::families;
 use ptxc_testkit::generate::{Generator, Operand, Recipe, Seed, Source};
 use std::collections::HashSet;
@@ -102,6 +102,18 @@ fn moderate_inputs_are_small_and_take_both_signs() {
     assert!(moderate.iter().all(|x| (-8.0..=8.0).contains(x)), "out of range");
     assert!(moderate.iter().any(|&x| x < 0.0) && moderate.iter().any(|&x| x > 0.0));
     assert!(moderate.iter().any(|&x| x.fract() != 0.0), "no fractional floats");
+}
+
+#[test]
+fn moderate_integer_inputs_take_both_signs() {
+    let integers: Vec<f64> = recipes()
+        .iter()
+        .flat_map(|recipe| &recipe.inputs)
+        .filter(|input| input.source == Source::Moderate && input.tensor.dtype() == DType::I32)
+        .flat_map(|input| values(&input.tensor))
+        .collect();
+
+    assert!(integers.iter().any(|&x| x < 0.0) && integers.iter().any(|&x| x > 0.0));
 }
 
 #[test]
