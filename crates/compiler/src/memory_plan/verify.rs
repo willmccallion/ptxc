@@ -73,8 +73,9 @@ const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaE
     }
 }
 
-const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {
-    first.start < second.end && second.start < first.end
+/// Whether two ranges have a byte in common; an empty range has none.
+fn share(first: &Range<u64>, second: &Range<u64>) -> bool {
+    first.start.max(second.start) < first.end.min(second.end)
 }
 
 #[cfg(test)]
@@ -117,6 +118,13 @@ mod tests {
             found,
             Err(ArenaError::Overlap { first: BufferId::new(0), second: BufferId::new(1) })
         );
+    }
+
+    #[test]
+    fn an_empty_buffer_inside_a_live_one_shares_no_byte() {
+        let plan = [placed(0, 0, 2049, Some((35, 37))), placed(1, 256, 0, Some((33, 35)))];
+
+        assert_eq!(verify(&plan, ByteSize::new(2049)), Ok(()));
     }
 
     #[test]
