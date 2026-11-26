@@ -9,6 +9,7 @@ mod emit;
 use ptxc_compiler::{Compilation, CompileError};
 use ptxc_core::{DType, Dim, HostTensor, Shape};
 use ptxc_graph::{BinaryOp, Graph, GraphBuilder, Layout, Op, TensorType, ValueId, ValueName};
+use ptxc_graph_opt::{GreedyPartitioner, OneNodePerGroup, Partitioner};
 use ptxc_program::Program;
 use ptxc_target::{SmVersion, preset};
 
@@ -41,7 +42,19 @@ pub(crate) fn constant(builder: &mut GraphBuilder, value: f32) -> ValueId {
     builder.add_constant(HostTensor::vector(vec![value; 5].into()))
 }
 
+/// `graph` compiled for `sm_89`, fused as the compiler fuses.
 pub(crate) fn compile(graph: Graph) -> Result<Program, CompileError> {
+    compile_with(graph, &GreedyPartitioner)
+}
+
+/// `graph` compiled for `sm_89`, each node its own group, so every value a
+/// node computes crosses a group boundary.
+pub(crate) fn compile_unfused(graph: Graph) -> Result<Program, CompileError> {
+    compile_with(graph, &OneNodePerGroup)
+}
+
+fn compile_with(graph: Graph, partitioner: &dyn Partitioner) -> Result<Program, CompileError> {
     let target = preset(SmVersion::SM_89).unwrap();
-    Compilation::from_graph(graph, target).optimize()?.partition()?.lower()?.schedule()?.emit()
+    let optimized = Compilation::from_graph(graph, target).optimize()?;
+    optimized.partition_with(partitioner)?.lower()?.schedule()?.emit()
 }

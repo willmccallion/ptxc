@@ -113,7 +113,7 @@ fn compile_writes_a_program_that_loads() {
     assert!(output.status.success(), "{stderr}");
     assert!(stderr.contains("x [2, 4]") && stderr.contains("y [2, 3]"), "{stderr}");
     let program = ptxc_program::load(&std::fs::read(&out).unwrap()).unwrap();
-    assert!(program.kernels().len() >= 6, "one or more kernels per node");
+    assert_eq!(program.kernels().len(), 5, "each product with its epilogue, and softmax's three");
     let names: Vec<&str> =
         program.inputs().iter().chain(program.outputs()).map(|b| b.name.as_str()).collect();
     assert_eq!(names, ["x", "y"]);

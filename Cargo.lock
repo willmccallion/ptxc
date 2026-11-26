@@ -1062,6 +1062,7 @@ dependencies = [
  "ptxc-codegen",
  "ptxc-core",
  "ptxc-graph",
+ "ptxc-graph-opt",
  "ptxc-interp",
  "ptxc-loop",
  "ptxc-lower",

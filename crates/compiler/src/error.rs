@@ -3,7 +3,7 @@
 
 use ptxc_codegen::CodegenError;
 use ptxc_core::SizeError;
-use ptxc_graph::{CycleError, ValueId};
+use ptxc_graph::{PartitionError, ValueId};
 use ptxc_graph_opt::PipelineError;
 use ptxc_loop::ScheduleError;
 use ptxc_lower::LowerError;
@@ -20,9 +20,9 @@ pub enum CompileError {
     /// A graph pass failed.
     #[error(transparent)]
     Optimize(#[from] PipelineError),
-    /// The graph has a cycle.
+    /// The graph did not partition into groups.
     #[error(transparent)]
-    Partition(#[from] CycleError),
+    Partition(#[from] PartitionError),
     /// A group did not lower.
     #[error(transparent)]
     Lower(#[from] LowerError),
