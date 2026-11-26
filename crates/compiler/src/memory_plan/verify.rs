@@ -2,7 +2,7 @@
 //! simulator's: buffers live at the same step never share a byte, and every
 //! buffer is aligned and inside the arena.
 
-use super::lifetime::Lifetime;
+use super::lifetime::{Lifetime, live_together};
 use ptxc_core::{ByteOffset, ByteSize, SizeError};
 use ptxc_program::{BUFFER_ALIGNMENT, BufferId};
 use std::ops::Range;
@@ -53,7 +53,7 @@ pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaErro
         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;
     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {
         for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {
-            if live_together(first, second) && share(first_bytes, second_bytes) {
+            if live_together(first.lifetime, second.lifetime) && share(first_bytes, second_bytes) {
                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });
             }
         }
@@ -70,13 +70,6 @@ const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaE
     match start.checked_add(buffer.size.get()) {
         Some(end) if end <= arena.get() => Ok(start..end),
         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),
-    }
-}
-
-fn live_together(first: &Placed, second: &Placed) -> bool {
-    match (first.lifetime, second.lifetime) {
-        (Some(first), Some(second)) => first.overlaps(second),
-        _ => false,
     }
 }
 

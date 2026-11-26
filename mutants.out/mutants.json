@@ -1,42 +1,106 @@
 [
   {
-    "diff": "--- crates/compiler/src/memory_plan/mod.rs\n+++ replace verify_arena -> Result<(), ArenaError> with Ok(())\n@@ -22,17 +22,17 @@\n     pub size: ByteSize,\n     /// The most bytes the arena's buffers hold live at any one step.\n     pub lower_bound: ByteSize,\n }\n \n /// Checks `program`'s arena: no two buffers live at the same step share a\n /// byte, and each is aligned and inside the arena.\n pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {\n-    verify(&placed(program)?, program.arena())\n+    Ok(()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// `program`'s arena and its lower bound.\n pub fn arena_use(program: &Program) -> Result<ArenaUse, ArenaError> {\n     let live =\n         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));\n     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;\n     Ok(ArenaUse { size: program.arena(), lower_bound })\n",
-    "file": "crates/compiler/src/memory_plan/mod.rs",
+    "diff": "--- crates/cli/src/commands/compile.rs\n+++ replace run -> anyhow::Result<ExitCode> with Ok(Default::default())\n@@ -8,24 +8,17 @@\n use ptxc_onnx::ImportOptions;\n use ptxc_program::Program;\n use ptxc_target::{SmVersion, preset};\n use std::path::Path;\n use std::process::ExitCode;\n \n /// Compiles `args.model` and writes the program file.\n pub(crate) fn run(args: &CompileArgs) -> anyhow::Result<ExitCode> {\n-    ui::section(\"Compile\");\n-    ui::header(\"Model\", &args.model.display().to_string());\n-    let program = compile_model(&args.model, &args.dims)?;\n-    let bytes = ptxc_program::save(&program).context(\"encoding the program\")?;\n-    std::fs::write(&args.out, &bytes).with_context(|| format!(\"writing {}\", args.out.display()))?;\n-    describe(&program)?;\n-    ui::stat(\"Written\", &args.out.display().to_string());\n-    Ok(ExitCode::SUCCESS)\n+    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// The program for the ONNX model at `path`, its symbolic dimensions sized\n /// by `dims`, for `sm_89`.\n pub(crate) fn compile_model(path: &Path, dims: &[(String, Dim)]) -> anyhow::Result<Program> {\n     let onnx = std::fs::read(path).with_context(|| format!(\"reading {}\", path.display()))?;\n     let options = ImportOptions {\n         symbolic_dims: dims.iter().cloned().collect(),\n",
+    "file": "crates/cli/src/commands/compile.rs",
     "function": {
-      "function_name": "verify_arena",
-      "return_type": "-> Result<(), ArenaError>",
+      "function_name": "run",
+      "return_type": "-> anyhow::Result<ExitCode>",
       "span": {
         "end": {
           "column": 2,
-          "line": 31
+          "line": 24
         },
         "start": {
           "column": 1,
-          "line": 27
+          "line": 14
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/mod.rs:30:5: replace verify_arena -> Result<(), ArenaError> with Ok(())",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(())",
+    "name": "crates/cli/src/commands/compile.rs:16:5: replace run -> anyhow::Result<ExitCode> with Ok(Default::default())",
+    "package": "ptxc-cli",
+    "replacement": "Ok(Default::default())",
     "span": {
       "end": {
-        "column": 47,
-        "line": 30
+        "column": 26,
+        "line": 23
       },
       "start": {
         "column": 5,
-        "line": 30
+        "line": 16
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/mod.rs\n+++ replace arena_use -> Result<ArenaUse, ArenaError> with Ok(Default::default())\n@@ -27,20 +27,17 @@\n /// Checks `program`'s arena: no two buffers live at the same step share a\n /// byte, and each is aligned and inside the arena.\n pub fn verify_arena(program: &Program) -> Result<(), ArenaError> {\n     verify(&placed(program)?, program.arena())\n }\n \n /// `program`'s arena and its lower bound.\n pub fn arena_use(program: &Program) -> Result<ArenaUse, ArenaError> {\n-    let live =\n-        placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));\n-    let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;\n-    Ok(ArenaUse { size: program.arena(), lower_bound })\n+    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// `program`'s arena buffers, with their lifetimes over its steps.\n fn placed(program: &Program) -> Result<Vec<Placed>, ArenaError> {\n     let lifetimes = lifetimes(program.steps(), program.buffers());\n     let mut placed = Vec::new();\n     for (buffer, found) in program.buffers().iter_enumerated() {\n         let Location::Arena(offset) = found.location else { continue };\n",
-    "file": "crates/compiler/src/memory_plan/mod.rs",
+    "diff": "--- crates/cli/src/commands/compile.rs\n+++ replace describe -> anyhow::Result<()> with Ok(())\n@@ -36,27 +36,16 @@\n     let compiled = Compilation::import(&onnx, &options, target)\n         .and_then(|imported| imported.optimize()?.partition()?.lower()?.schedule()?.emit())\n         .with_context(|| format!(\"compiling {}\", path.display()))?;\n     Ok(compiled)\n }\n \n /// The program's shape: kernels, memory and bindings.\n pub(crate) fn describe(program: &Program) -> anyhow::Result<()> {\n-    ui::stat(\"Kernels\", &program.kernels().len().to_string());\n-    let arena = arena_use(program).context(\"measuring the arena\")?;\n-    ui::stat(\"Arena\", &format!(\"{} bytes\", arena.size.get()));\n-    ui::stat(\"Arena lower bound\", &format!(\"{} bytes\", arena.lower_bound.get()));\n-    ui::stat(\"Constants\", &format!(\"{} bytes\", program.constants().len()));\n-    for binding in program.inputs() {\n-        ui::stat(\"Input\", &format!(\"{} {}\", binding.name, extents(&binding.shape)));\n-    }\n-    for binding in program.outputs() {\n-        ui::stat(\"Output\", &format!(\"{} {}\", binding.name, extents(&binding.shape)));\n-    }\n-    Ok(())\n+    Ok(()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// A shape as its extents, such as `[2, 4]`.\n pub(crate) fn extents(shape: &Shape) -> String {\n     let extents: Vec<String> = shape.dims().iter().map(|dim| dim.get().to_string()).collect();\n     format!(\"[{}]\", extents.join(\", \"))\n }\n",
+    "file": "crates/cli/src/commands/compile.rs",
     "function": {
-      "function_name": "arena_use",
-      "return_type": "-> Result<ArenaUse, ArenaError>",
+      "function_name": "describe",
+      "return_type": "-> anyhow::Result<()>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 56
+        },
+        "start": {
+          "column": 1,
+          "line": 42
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/cli/src/commands/compile.rs:44:5: replace describe -> anyhow::Result<()> with Ok(())",
+    "package": "ptxc-cli",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 55
+      },
+      "start": {
+        "column": 5,
+        "line": 44
+      }
+    }
+  },
+  {
+    "diff": "--- crates/cli/src/commands/run.rs\n+++ replace run -> anyhow::Result<ExitCode> with Ok(Default::default())\n@@ -9,33 +9,17 @@\n use ptxc_program::{FormatError, Program};\n use ptxc_runtime::{Executor, load};\n use std::path::Path;\n use std::process::ExitCode;\n \n /// Runs `args.model` on its inputs and reports, and optionally writes, the\n /// outputs.\n pub(crate) fn run(args: &RunArgs) -> anyhow::Result<ExitCode> {\n-    ui::section(\"Run\");\n-    ui::header(\"Model\", &args.model.display().to_string());\n-    let program = program(&args.model, args)?;\n-    describe(&program)?;\n-    let inputs =\n-        args.inputs.iter().map(|path| read_tensor(path)).collect::<anyhow::Result<Vec<_>>>()?;\n-    let device = Driver::load()?.device(DeviceOrdinal::new(0))?;\n-    let names: Vec<String> = program.outputs().iter().map(|binding| binding.name.clone()).collect();\n-    let mut executor = Executor::eager(load(program, &device)?);\n-    let outputs = executor.evaluate(&inputs)?;\n-    for (name, output) in names.iter().zip(&outputs) {\n-        ui::stat(name, &format!(\"{} {}\", output.dtype().name(), extents(output.shape())));\n-    }\n-    if let Some(dir) = &args.out {\n-        write_outputs(dir, &names, &outputs)?;\n-    }\n-    Ok(ExitCode::SUCCESS)\n+    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// The program in `path`: a program file as it is, an ONNX model compiled.\n fn program(path: &Path, args: &RunArgs) -> anyhow::Result<Program> {\n     let bytes = std::fs::read(path).with_context(|| format!(\"reading {}\", path.display()))?;\n     match ptxc_program::load(&bytes) {\n         Ok(program) => Ok(program),\n         Err(FormatError::Magic) => compile_model(path, &args.dims),\n",
+    "file": "crates/cli/src/commands/run.rs",
+    "function": {
+      "function_name": "run",
+      "return_type": "-> anyhow::Result<ExitCode>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 34
+        },
+        "start": {
+          "column": 1,
+          "line": 14
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/cli/src/commands/run.rs:17:5: replace run -> anyhow::Result<ExitCode> with Ok(Default::default())",
+    "package": "ptxc-cli",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 33
+      },
+      "start": {
+        "column": 5,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace emit -> Result<Program, CompileError> with Ok(Default::default())\n@@ -19,28 +19,17 @@\n     BUFFER_ALIGNMENT, BufferId, InputIndex, IoBinding, KernelId, KernelSpec, LaunchConfig,\n     Location, OutputIndex, Program, ProgramParts, Step,\n };\n use ptxc_target::Target;\n use std::collections::HashMap;\n \n /// The program for `scheduled`'s kernels.\n pub(crate) fn emit(scheduled: &Scheduled, target: &Target) -> Result<Program, CompileError> {\n-    let graph = scheduled.partitioned.graph();\n-    let mut emitter = Emitter::new(graph);\n-    emitter.bind_inputs()?;\n-    let copies = emitter.bind_outputs()?;\n-    for (group, kernels) in scheduled.groups.iter().zip(&scheduled.kernels) {\n-        emitter.group(group, kernels, target)?;\n-    }\n-    for (value, output) in copies {\n-        let from = emitter.value_buffer(value)?;\n-        emitter.steps.push(Step::Copy { from, to: output });\n-    }\n-    Ok(Program::new(emitter.finish(target)?)?)\n+    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n struct Emitter<'g> {\n     graph: &'g Graph,\n     values: HashMap<ValueId, BufferId>,\n     buffers: IndexVec<BufferId, Unplaced>,\n     constants: Vec<u8>,\n     kernels: IndexVec<KernelId, KernelSpec>,\n",
+    "file": "crates/compiler/src/emit.rs",
+    "function": {
+      "function_name": "emit",
+      "return_type": "-> Result<Program, CompileError>",
       "span": {
         "end": {
           "column": 2,
@@ -44,255 +108,287 @@
         },
         "start": {
           "column": 1,
-          "line": 33
+          "line": 25
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/mod.rs:35:5: replace arena_use -> Result<ArenaUse, ArenaError> with Ok(Default::default())",
+    "name": "crates/compiler/src/emit.rs:27:5: replace emit -> Result<Program, CompileError> with Ok(Default::default())",
     "package": "ptxc-compiler",
     "replacement": "Ok(Default::default())",
     "span": {
       "end": {
-        "column": 56,
+        "column": 47,
         "line": 38
       },
       "start": {
         "column": 5,
-        "line": 35
+        "line": 27
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/mod.rs\n+++ replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![])\n@@ -35,17 +35,10 @@\n     let live =\n         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));\n     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;\n     Ok(ArenaUse { size: program.arena(), lower_bound })\n }\n \n /// `program`'s arena buffers, with their lifetimes over its steps.\n fn placed(program: &Program) -> Result<Vec<Placed>, ArenaError> {\n-    let lifetimes = lifetimes(program.steps(), program.buffers());\n-    let mut placed = Vec::new();\n-    for (buffer, found) in program.buffers().iter_enumerated() {\n-        let Location::Arena(offset) = found.location else { continue };\n-        let size = found.elements.in_bytes(found.dtype)?;\n-        placed.push(Placed { buffer, offset, size, lifetime: lifetimes[buffer] });\n-    }\n-    Ok(placed)\n+    Ok(vec![]) /* ~ changed by cargo-mutants ~ */\n }\n",
-    "file": "crates/compiler/src/memory_plan/mod.rs",
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace Emitter<'g>::finish -> Result<ProgramParts, CompileError> with Ok(Default::default())\n@@ -60,27 +60,17 @@\n             steps: Vec::new(),\n             inputs: IndexVec::new(),\n             outputs: IndexVec::new(),\n         }\n     }\n \n     /// The program's parts, with the arena planned.\n     fn finish(self, target: &Target) -> Result<ProgramParts, CompileError> {\n-        let (buffers, arena) = place(self.buffers, &self.steps)?;\n-        Ok(ProgramParts {\n-            target: target.sm(),\n-            kernels: self.kernels,\n-            constants: self.constants,\n-            arena,\n-            buffers,\n-            steps: self.steps,\n-            inputs: self.inputs,\n-            outputs: self.outputs,\n-        })\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn bind_inputs(&mut self) -> Result<(), CompileError> {\n         for &value in self.graph.inputs() {\n             let binding = self.io_binding(value, self.buffers.next_id())?;\n             let location = Location::Input(self.inputs.push(binding));\n             let buffer = self.buffer_of(value, location);\n             let _new = self.values.insert(value, buffer);\n",
+    "file": "crates/compiler/src/emit.rs",
     "function": {
-      "function_name": "placed",
-      "return_type": "-> Result<Vec<Placed>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 51
-        },
-        "start": {
-          "column": 1,
-          "line": 41
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/mod.rs:43:5: replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![])",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(vec![])",
-    "span": {
-      "end": {
-        "column": 15,
-        "line": 50
-      },
-      "start": {
-        "column": 5,
-        "line": 43
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/mod.rs\n+++ replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![Default::default()])\n@@ -35,17 +35,10 @@\n     let live =\n         placed(program)?.into_iter().filter_map(|buffer| Some((buffer.size, buffer.lifetime?)));\n     let lower_bound = peak_live_bytes(live).ok_or(ArenaError::TooLarge)?;\n     Ok(ArenaUse { size: program.arena(), lower_bound })\n }\n \n /// `program`'s arena buffers, with their lifetimes over its steps.\n fn placed(program: &Program) -> Result<Vec<Placed>, ArenaError> {\n-    let lifetimes = lifetimes(program.steps(), program.buffers());\n-    let mut placed = Vec::new();\n-    for (buffer, found) in program.buffers().iter_enumerated() {\n-        let Location::Arena(offset) = found.location else { continue };\n-        let size = found.elements.in_bytes(found.dtype)?;\n-        placed.push(Placed { buffer, offset, size, lifetime: lifetimes[buffer] });\n-    }\n-    Ok(placed)\n+    Ok(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */\n }\n",
-    "file": "crates/compiler/src/memory_plan/mod.rs",
-    "function": {
-      "function_name": "placed",
-      "return_type": "-> Result<Vec<Placed>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 51
-        },
-        "start": {
-          "column": 1,
-          "line": 41
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/mod.rs:43:5: replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![Default::default()])",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(vec![Default::default()])",
-    "span": {
-      "end": {
-        "column": 15,
-        "line": 50
-      },
-      "start": {
-        "column": 5,
-        "line": 43
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace Lifetime::overlaps -> bool with true\n@@ -18,17 +18,17 @@\n pub(crate) struct Lifetime {\n     first: StepIndex,\n     last: StepIndex,\n }\n \n impl Lifetime {\n     /// Whether some step is in both `self` and `other`.\n     pub(crate) fn overlaps(self, other: Self) -> bool {\n-        self.first <= other.last && other.first <= self.last\n+        true /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// `self` stretched to include `step`, a step after its first.\n     const fn through(self, step: StepIndex) -> Self {\n         Self { first: self.first, last: step }\n     }\n \n     /// The steps from `first` to `last`, by position.\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "Lifetime::overlaps",
-      "return_type": "-> bool",
+      "function_name": "Emitter<'g>::finish",
+      "return_type": "-> Result<ProgramParts, CompileError>",
       "span": {
         "end": {
           "column": 6,
-          "line": 27
+          "line": 79
         },
         "start": {
           "column": 5,
-          "line": 24
+          "line": 66
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:26:9: replace Lifetime::overlaps -> bool with true",
+    "name": "crates/compiler/src/emit.rs:68:9: replace Emitter<'g>::finish -> Result<ProgramParts, CompileError> with Ok(Default::default())",
     "package": "ptxc-compiler",
-    "replacement": "true",
+    "replacement": "Ok(Default::default())",
     "span": {
       "end": {
-        "column": 61,
-        "line": 26
+        "column": 11,
+        "line": 78
       },
       "start": {
         "column": 9,
-        "line": 26
+        "line": 68
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace Lifetime::overlaps -> bool with false\n@@ -18,17 +18,17 @@\n pub(crate) struct Lifetime {\n     first: StepIndex,\n     last: StepIndex,\n }\n \n impl Lifetime {\n     /// Whether some step is in both `self` and `other`.\n     pub(crate) fn overlaps(self, other: Self) -> bool {\n-        self.first <= other.last && other.first <= self.last\n+        false /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// `self` stretched to include `step`, a step after its first.\n     const fn through(self, step: StepIndex) -> Self {\n         Self { first: self.first, last: step }\n     }\n \n     /// The steps from `first` to `last`, by position.\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace Emitter<'g>::buffer_of -> BufferId with Default::default()\n@@ -116,22 +116,17 @@\n     fn io_binding(&self, value: ValueId, buffer: BufferId) -> Result<IoBinding, CompileError> {\n         let found = self.graph.value(value);\n         let name = found.name().ok_or(CompileError::Unnamed(value))?.as_str().to_owned();\n         Ok(IoBinding { name, shape: found.ty().shape().clone(), buffer })\n     }\n \n     /// A buffer of `value`'s type at `location`.\n     fn buffer_of(&mut self, value: ValueId, location: Location) -> BufferId {\n-        let ty = self.graph.value(value).ty();\n-        self.buffers.push(Unplaced {\n-            dtype: ty.dtype(),\n-            elements: ty.shape().element_count(),\n-            place: Place::Fixed(location),\n-        })\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// `value`'s buffer, placing it on first use: a constant in the blob,\n     /// anything else in the arena.\n     fn value_buffer(&mut self, value: ValueId) -> Result<BufferId, CompileError> {\n         if let Some(&id) = self.values.get(&value) {\n             return Ok(id);\n         }\n",
+    "file": "crates/compiler/src/emit.rs",
     "function": {
-      "function_name": "Lifetime::overlaps",
-      "return_type": "-> bool",
+      "function_name": "Emitter<'g>::buffer_of",
+      "return_type": "-> BufferId",
       "span": {
         "end": {
           "column": 6,
-          "line": 27
+          "line": 130
         },
         "start": {
           "column": 5,
-          "line": 24
+          "line": 122
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:26:9: replace Lifetime::overlaps -> bool with false",
+    "name": "crates/compiler/src/emit.rs:124:9: replace Emitter<'g>::buffer_of -> BufferId with Default::default()",
     "package": "ptxc-compiler",
-    "replacement": "false",
+    "replacement": "Default::default()",
     "span": {
       "end": {
-        "column": 61,
-        "line": 26
+        "column": 11,
+        "line": 129
       },
       "start": {
         "column": 9,
-        "line": 26
+        "line": 124
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace && with || in Lifetime::overlaps\n@@ -18,17 +18,17 @@\n pub(crate) struct Lifetime {\n     first: StepIndex,\n     last: StepIndex,\n }\n \n impl Lifetime {\n     /// Whether some step is in both `self` and `other`.\n     pub(crate) fn overlaps(self, other: Self) -> bool {\n-        self.first <= other.last && other.first <= self.last\n+        self.first <= other.last || /* ~ changed by cargo-mutants ~ */ other.first <= self.last\n     }\n \n     /// `self` stretched to include `step`, a step after its first.\n     const fn through(self, step: StepIndex) -> Self {\n         Self { first: self.first, last: step }\n     }\n \n     /// The steps from `first` to `last`, by position.\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace Emitter<'g>::value_buffer -> Result<BufferId, CompileError> with Ok(Default::default())\n@@ -127,28 +127,17 @@\n             elements: ty.shape().element_count(),\n             place: Place::Fixed(location),\n         })\n     }\n \n     /// `value`'s buffer, placing it on first use: a constant in the blob,\n     /// anything else in the arena.\n     fn value_buffer(&mut self, value: ValueId) -> Result<BufferId, CompileError> {\n-        if let Some(&id) = self.values.get(&value) {\n-            return Ok(id);\n-        }\n-        let id = match self.graph.value(value).def() {\n-            ValueDef::Constant(constant) => self.constant(self.graph.constant(constant))?,\n-            ValueDef::Input(_) | ValueDef::Output { .. } => {\n-                let ty = self.graph.value(value).ty();\n-                self.arena_buffer(ty.dtype(), ty.shape())\n-            }\n-        };\n-        let _new = self.values.insert(value, id);\n-        Ok(id)\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// A buffer for `tensor` at the next aligned offset of the blob.\n     fn constant(&mut self, tensor: &HostTensor) -> Result<BufferId, CompileError> {\n         let length = u64::try_from(self.constants.len()).map_err(|_| CompileError::TooLarge)?;\n         let offset = ByteOffset::new(length).align_up(BUFFER_ALIGNMENT)?;\n         let start = usize::try_from(offset.get()).map_err(|_| CompileError::TooLarge)?;\n         self.constants.resize(start, 0);\n",
+    "file": "crates/compiler/src/emit.rs",
     "function": {
-      "function_name": "Lifetime::overlaps",
-      "return_type": "-> bool",
+      "function_name": "Emitter<'g>::value_buffer",
+      "return_type": "-> Result<BufferId, CompileError>",
       "span": {
         "end": {
           "column": 6,
-          "line": 27
+          "line": 147
         },
         "start": {
           "column": 5,
-          "line": 24
+          "line": 132
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/emit.rs:135:9: replace Emitter<'g>::value_buffer -> Result<BufferId, CompileError> with Ok(Default::default())",
+    "package": "ptxc-compiler",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 146
+      },
+      "start": {
+        "column": 9,
+        "line": 135
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace Emitter<'g>::constant -> Result<BufferId, CompileError> with Ok(Default::default())\n@@ -143,24 +143,17 @@\n             }\n         };\n         let _new = self.values.insert(value, id);\n         Ok(id)\n     }\n \n     /// A buffer for `tensor` at the next aligned offset of the blob.\n     fn constant(&mut self, tensor: &HostTensor) -> Result<BufferId, CompileError> {\n-        let length = u64::try_from(self.constants.len()).map_err(|_| CompileError::TooLarge)?;\n-        let offset = ByteOffset::new(length).align_up(BUFFER_ALIGNMENT)?;\n-        let start = usize::try_from(offset.get()).map_err(|_| CompileError::TooLarge)?;\n-        self.constants.resize(start, 0);\n-        self.constants.extend(tensor.data().to_le_bytes());\n-        let elements = tensor.shape().element_count();\n-        let place = Place::Fixed(Location::Constant(offset));\n-        Ok(self.buffers.push(Unplaced { dtype: tensor.dtype(), elements, place }))\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// A buffer of `dtype` and `shape` in the arena, placed by the plan.\n     fn arena_buffer(&mut self, dtype: DType, shape: &Shape) -> BufferId {\n         let elements = shape.element_count();\n         self.buffers.push(Unplaced { dtype, elements, place: Place::Arena })\n     }\n \n",
+    "file": "crates/compiler/src/emit.rs",
+    "function": {
+      "function_name": "Emitter<'g>::constant",
+      "return_type": "-> Result<BufferId, CompileError>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 159
+        },
+        "start": {
+          "column": 5,
+          "line": 149
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/emit.rs:151:9: replace Emitter<'g>::constant -> Result<BufferId, CompileError> with Ok(Default::default())",
+    "package": "ptxc-compiler",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 83,
+        "line": 158
+      },
+      "start": {
+        "column": 9,
+        "line": 151
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace Emitter<'g>::arena_buffer -> BufferId with Default::default()\n@@ -155,18 +155,17 @@\n         self.constants.extend(tensor.data().to_le_bytes());\n         let elements = tensor.shape().element_count();\n         let place = Place::Fixed(Location::Constant(offset));\n         Ok(self.buffers.push(Unplaced { dtype: tensor.dtype(), elements, place }))\n     }\n \n     /// A buffer of `dtype` and `shape` in the arena, placed by the plan.\n     fn arena_buffer(&mut self, dtype: DType, shape: &Shape) -> BufferId {\n-        let elements = shape.element_count();\n-        self.buffers.push(Unplaced { dtype, elements, place: Place::Arena })\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Each of `group`'s stages as a kernel and a launch.\n     fn group(\n         &mut self,\n         group: &LoweredGroup,\n         kernels: &[LoweredKernel],\n         target: &Target,\n",
+    "file": "crates/compiler/src/emit.rs",
+    "function": {
+      "function_name": "Emitter<'g>::arena_buffer",
+      "return_type": "-> BufferId",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 165
+        },
+        "start": {
+          "column": 5,
+          "line": 161
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/emit.rs:163:9: replace Emitter<'g>::arena_buffer -> BufferId with Default::default()",
+    "package": "ptxc-compiler",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 77,
+        "line": 164
+      },
+      "start": {
+        "column": 9,
+        "line": 163
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/emit.rs\n+++ replace Emitter<'g>::group -> Result<(), CompileError> with Ok(())\n@@ -166,43 +166,11 @@\n \n     /// Each of `group`'s stages as a kernel and a launch.\n     fn group(\n         &mut self,\n         group: &LoweredGroup,\n         kernels: &[LoweredKernel],\n         target: &Target,\n     ) -> Result<(), CompileError> {\n-        let tables = group\n-            .tables()\n-            .iter()\n-            .map(|table| self.constant(table))\n-            .collect::<Result<Vec<_>, _>>()?;\n-        let intermediates: Vec<_> = group\n-            .intermediates()\n-            .iter()\n-            .map(|ty| self.arena_buffer(ty.dtype(), ty.shape()))\n-            .collect();\n-        for (stage, kernel) in group.stages().iter().zip(kernels) {\n-            let mut reads = stage.inputs().iter();\n-            let mut writes = stage.outputs().iter();\n-            let mut args = Vec::new();\n-            for param in kernel.params() {\n-                let binding = match param.access {\n-                    Access::Read => reads.next(),\n-                    Access::Write => writes.next(),\n-                };\n-                let binding = *binding.ok_or(CompileError::StageArity)?;\n-                let buffer = match binding {\n-                    Binding::Value(value) => Some(self.value_buffer(value)?),\n-                    Binding::Intermediate(id) => intermediates.get(id.index()).copied(),\n-                    Binding::Table(id) => tables.get(id.index()).copied(),\n-                };\n-                args.push(buffer.ok_or(CompileError::StageArity)?);\n-            }\n-            let launch = LaunchConfig { grid: kernel.launch().grid, block: kernel.launch().block };\n-            let ptx = generate(kernel, target)?.to_string();\n-            let spec = KernelSpec { name: kernel.name().clone(), ptx, launch };\n-            self.steps.push(Step::Launch { kernel: self.kernels.push(spec), args });\n-        }\n-        Ok(())\n+        Ok(()) /* ~ changed by cargo-mutants ~ */\n     }\n }\n",
+    "file": "crates/compiler/src/emit.rs",
+    "function": {
+      "function_name": "Emitter<'g>::group",
+      "return_type": "-> Result<(), CompileError>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 207
+        },
+        "start": {
+          "column": 5,
+          "line": 167
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/emit.rs:174:9: replace Emitter<'g>::group -> Result<(), CompileError> with Ok(())",
+    "package": "ptxc-compiler",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 206
+      },
+      "start": {
+        "column": 9,
+        "line": 174
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/mod.rs\n+++ replace place -> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError> with Ok((Default::default(), Default::default()))\n@@ -41,37 +41,17 @@\n \n /// `buffers` located, each `Place::Arena` one in an arena planned so that\n /// buffers `steps` touch at the same step never share a byte; and the\n /// arena's size.\n pub(crate) fn place(\n     buffers: IndexVec<BufferId, Unplaced>,\n     steps: &[Step],\n ) -> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError> {\n-    let lifetimes = lifetimes(steps, &buffers);\n-    let mut requests = Vec::new();\n-    for (id, buffer) in buffers.iter_enumerated() {\n-        if buffer.place == Place::Arena {\n-            let size = buffer.elements.in_bytes(buffer.dtype)?;\n-            requests.push(Request { size, lifetime: lifetimes[id] });\n-        }\n-    }\n-    let plan = GreedyBySize.plan(&requests).ok_or(CompileError::TooLarge)?;\n-    let mut offsets = plan.offsets.into_iter();\n-    let located = buffers\n-        .into_iter()\n-        .map(|buffer| {\n-            let location = match buffer.place {\n-                Place::Fixed(location) => location,\n-                Place::Arena => Location::Arena(offsets.next().ok_or(CompileError::Unplaced)?),\n-            };\n-            Ok(Buffer { dtype: buffer.dtype, elements: buffer.elements, location })\n-        })\n-        .collect::<Result<_, CompileError>>()?;\n-    Ok((located, plan.size))\n+    Ok((Default::default(), Default::default())) /* ~ changed by cargo-mutants ~ */\n }\n \n /// A program's arena against the least any placement of its buffers needs.\n #[derive(Clone, Copy, PartialEq, Eq, Debug)]\n pub struct ArenaUse {\n     /// The arena's size.\n     pub size: ByteSize,\n     /// The most bytes the arena's buffers hold live at any one step.\n",
+    "file": "crates/compiler/src/memory_plan/mod.rs",
+    "function": {
+      "function_name": "place",
+      "return_type": "-> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 70
+        },
+        "start": {
+          "column": 1,
+          "line": 42
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/memory_plan/mod.rs:49:5: replace place -> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError> with Ok((Default::default(), Default::default()))",
+    "package": "ptxc-compiler",
+    "replacement": "Ok((Default::default(), Default::default()))",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 69
+      },
+      "start": {
+        "column": 5,
+        "line": 49
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/mod.rs\n+++ replace == with != in place\n@@ -44,17 +44,17 @@\n /// arena's size.\n pub(crate) fn place(\n     buffers: IndexVec<BufferId, Unplaced>,\n     steps: &[Step],\n ) -> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError> {\n     let lifetimes = lifetimes(steps, &buffers);\n     let mut requests = Vec::new();\n     for (id, buffer) in buffers.iter_enumerated() {\n-        if buffer.place == Place::Arena {\n+        if buffer.place != /* ~ changed by cargo-mutants ~ */ Place::Arena {\n             let size = buffer.elements.in_bytes(buffer.dtype)?;\n             requests.push(Request { size, lifetime: lifetimes[id] });\n         }\n     }\n     let plan = GreedyBySize.plan(&requests).ok_or(CompileError::TooLarge)?;\n     let mut offsets = plan.offsets.into_iter();\n     let located = buffers\n         .into_iter()\n",
+    "file": "crates/compiler/src/memory_plan/mod.rs",
+    "function": {
+      "function_name": "place",
+      "return_type": "-> Result<(IndexVec<BufferId, Buffer>, ByteSize), CompileError>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 70
+        },
+        "start": {
+          "column": 1,
+          "line": 42
         }
       }
     },
     "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:26:34: replace && with || in Lifetime::overlaps",
+    "name": "crates/compiler/src/memory_plan/mod.rs:52:25: replace == with != in place",
     "package": "ptxc-compiler",
-    "replacement": "||",
+    "replacement": "!=",
     "span": {
       "end": {
-        "column": 36,
-        "line": 26
+        "column": 27,
+        "line": 52
       },
       "start": {
-        "column": 34,
-        "line": 26
+        "column": 25,
+        "line": 52
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace <= with > in Lifetime::overlaps\n@@ -18,17 +18,17 @@\n pub(crate) struct Lifetime {\n     first: StepIndex,\n     last: StepIndex,\n }\n \n impl Lifetime {\n     /// Whether some step is in both `self` and `other`.\n     pub(crate) fn overlaps(self, other: Self) -> bool {\n-        self.first <= other.last && other.first <= self.last\n+        self.first > /* ~ changed by cargo-mutants ~ */ other.last && other.first <= self.last\n     }\n \n     /// `self` stretched to include `step`, a step after its first.\n     const fn through(self, step: StepIndex) -> Self {\n         Self { first: self.first, last: step }\n     }\n \n     /// The steps from `first` to `last`, by position.\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace <impl MemoryPlanner for GreedyBySize>::plan -> Option<ArenaPlan> with None\n@@ -11,29 +11,17 @@\n /// Memory Management for Deep Neural Net Inference\"): buffers from largest\n /// to smallest, each in the smallest gap that fits it among the buffers\n /// already placed that are live with it, or after the last of them.\n #[derive(Clone, Copy, Debug)]\n pub(crate) struct GreedyBySize;\n \n impl MemoryPlanner for GreedyBySize {\n     fn plan(&self, requests: &[Request]) -> Option<ArenaPlan> {\n-        let mut order: Vec<usize> = (0..requests.len()).collect();\n-        order.sort_by_key(|&index| (Reverse(requests[index].size), index));\n-        let mut offsets = vec![ByteOffset::new(0); requests.len()];\n-        let mut placed: Vec<(usize, Range<u64>)> = Vec::new();\n-        for index in order {\n-            let offset = smallest_gap(requests, index, &placed)?;\n-            let end = offset.get().checked_add(requests[index].size.get())?;\n-            offsets[index] = offset;\n-            let at = placed.partition_point(|(_, bytes)| bytes.start <= offset.get());\n-            placed.insert(at, (index, offset.get()..end));\n-        }\n-        let size = placed.iter().map(|(_, bytes)| bytes.end).max().unwrap_or(0);\n-        Some(ArenaPlan { offsets, size: ByteSize::new(size) })\n+        None /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n /// The offset for request `index`: the start of the smallest gap that fits\n /// it between the buffers of `placed`, sorted by offset, live with it, or\n /// the first aligned offset after them.\n fn smallest_gap(\n     requests: &[Request],\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
     "function": {
-      "function_name": "Lifetime::overlaps",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 6,
-          "line": 27
-        },
-        "start": {
-          "column": 5,
-          "line": 24
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:26:20: replace <= with > in Lifetime::overlaps",
-    "package": "ptxc-compiler",
-    "replacement": ">",
-    "span": {
-      "end": {
-        "column": 22,
-        "line": 26
-      },
-      "start": {
-        "column": 20,
-        "line": 26
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace <= with > in Lifetime::overlaps\n@@ -18,17 +18,17 @@\n pub(crate) struct Lifetime {\n     first: StepIndex,\n     last: StepIndex,\n }\n \n impl Lifetime {\n     /// Whether some step is in both `self` and `other`.\n     pub(crate) fn overlaps(self, other: Self) -> bool {\n-        self.first <= other.last && other.first <= self.last\n+        self.first <= other.last && other.first > /* ~ changed by cargo-mutants ~ */ self.last\n     }\n \n     /// `self` stretched to include `step`, a step after its first.\n     const fn through(self, step: StepIndex) -> Self {\n         Self { first: self.first, last: step }\n     }\n \n     /// The steps from `first` to `last`, by position.\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "Lifetime::overlaps",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 6,
-          "line": 27
-        },
-        "start": {
-          "column": 5,
-          "line": 24
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:26:49: replace <= with > in Lifetime::overlaps",
-    "package": "ptxc-compiler",
-    "replacement": ">",
-    "span": {
-      "end": {
-        "column": 51,
-        "line": 26
-      },
-      "start": {
-        "column": 49,
-        "line": 26
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace Lifetime::through -> Self with Default::default()\n@@ -23,17 +23,17 @@\n impl Lifetime {\n     /// Whether some step is in both `self` and `other`.\n     pub(crate) fn overlaps(self, other: Self) -> bool {\n         self.first <= other.last && other.first <= self.last\n     }\n \n     /// `self` stretched to include `step`, a step after its first.\n     const fn through(self, step: StepIndex) -> Self {\n-        Self { first: self.first, last: step }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// The steps from `first` to `last`, by position.\n     #[cfg(test)]\n     pub(crate) fn between(first: usize, last: usize) -> Self {\n         Self { first: StepIndex::new(first), last: StepIndex::new(last) }\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "Lifetime::through",
-      "return_type": "-> Self",
+      "function_name": "<impl MemoryPlanner for GreedyBySize>::plan",
+      "return_type": "-> Option<ArenaPlan>",
       "span": {
         "end": {
           "column": 6,
@@ -300,35 +396,483 @@
         },
         "start": {
           "column": 5,
-          "line": 29
+          "line": 18
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:31:9: replace Lifetime::through -> Self with Default::default()",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:19:9: replace <impl MemoryPlanner for GreedyBySize>::plan -> Option<ArenaPlan> with None",
     "package": "ptxc-compiler",
-    "replacement": "Default::default()",
+    "replacement": "None",
     "span": {
       "end": {
-        "column": 47,
+        "column": 63,
         "line": 31
       },
       "start": {
         "column": 9,
-        "line": 31
+        "line": 19
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace lifetimes -> IndexVec<BufferId, Option<Lifetime>> with Default::default()\n@@ -38,27 +38,17 @@\n     }\n }\n \n /// The lifetime of each of `buffers`, `None` for one `steps` never touch.\n pub(crate) fn lifetimes<T>(\n     steps: &[Step],\n     buffers: &IndexVec<BufferId, T>,\n ) -> IndexVec<BufferId, Option<Lifetime>> {\n-    let mut found: IndexVec<BufferId, Option<Lifetime>> = buffers.iter().map(|_| None).collect();\n-    for (position, step) in steps.iter().enumerate() {\n-        let step_index = StepIndex::new(position);\n-        for buffer in touched(step) {\n-            if let Some(lifetime) = found.get_mut(buffer) {\n-                let fresh = Lifetime { first: step_index, last: step_index };\n-                *lifetime = Some(lifetime.map_or(fresh, |earlier| earlier.through(step_index)));\n-            }\n-        }\n-    }\n-    found\n+    Default::default() /* ~ changed by cargo-mutants ~ */\n }\n \n /// The buffers `step` reads or writes.\n fn touched(step: &Step) -> Vec<BufferId> {\n     match step {\n         Step::Launch { args, .. } => args.clone(),\n         Step::Copy { from, to } => vec![*from, *to],\n     }\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace <impl MemoryPlanner for GreedyBySize>::plan -> Option<ArenaPlan> with Some(Default::default())\n@@ -11,29 +11,17 @@\n /// Memory Management for Deep Neural Net Inference\"): buffers from largest\n /// to smallest, each in the smallest gap that fits it among the buffers\n /// already placed that are live with it, or after the last of them.\n #[derive(Clone, Copy, Debug)]\n pub(crate) struct GreedyBySize;\n \n impl MemoryPlanner for GreedyBySize {\n     fn plan(&self, requests: &[Request]) -> Option<ArenaPlan> {\n-        let mut order: Vec<usize> = (0..requests.len()).collect();\n-        order.sort_by_key(|&index| (Reverse(requests[index].size), index));\n-        let mut offsets = vec![ByteOffset::new(0); requests.len()];\n-        let mut placed: Vec<(usize, Range<u64>)> = Vec::new();\n-        for index in order {\n-            let offset = smallest_gap(requests, index, &placed)?;\n-            let end = offset.get().checked_add(requests[index].size.get())?;\n-            offsets[index] = offset;\n-            let at = placed.partition_point(|(_, bytes)| bytes.start <= offset.get());\n-            placed.insert(at, (index, offset.get()..end));\n-        }\n-        let size = placed.iter().map(|(_, bytes)| bytes.end).max().unwrap_or(0);\n-        Some(ArenaPlan { offsets, size: ByteSize::new(size) })\n+        Some(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n /// The offset for request `index`: the start of the smallest gap that fits\n /// it between the buffers of `placed`, sorted by offset, live with it, or\n /// the first aligned offset after them.\n fn smallest_gap(\n     requests: &[Request],\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
     "function": {
-      "function_name": "lifetimes",
-      "return_type": "-> IndexVec<BufferId, Option<Lifetime>>",
+      "function_name": "<impl MemoryPlanner for GreedyBySize>::plan",
+      "return_type": "-> Option<ArenaPlan>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 32
+        },
+        "start": {
+          "column": 5,
+          "line": 18
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:19:9: replace <impl MemoryPlanner for GreedyBySize>::plan -> Option<ArenaPlan> with Some(Default::default())",
+    "package": "ptxc-compiler",
+    "replacement": "Some(Default::default())",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 31
+      },
+      "start": {
+        "column": 9,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace <= with > in <impl MemoryPlanner for GreedyBySize>::plan\n@@ -19,17 +19,17 @@\n         let mut order: Vec<usize> = (0..requests.len()).collect();\n         order.sort_by_key(|&index| (Reverse(requests[index].size), index));\n         let mut offsets = vec![ByteOffset::new(0); requests.len()];\n         let mut placed: Vec<(usize, Range<u64>)> = Vec::new();\n         for index in order {\n             let offset = smallest_gap(requests, index, &placed)?;\n             let end = offset.get().checked_add(requests[index].size.get())?;\n             offsets[index] = offset;\n-            let at = placed.partition_point(|(_, bytes)| bytes.start <= offset.get());\n+            let at = placed.partition_point(|(_, bytes)| bytes.start > /* ~ changed by cargo-mutants ~ */ offset.get());\n             placed.insert(at, (index, offset.get()..end));\n         }\n         let size = placed.iter().map(|(_, bytes)| bytes.end).max().unwrap_or(0);\n         Some(ArenaPlan { offsets, size: ByteSize::new(size) })\n     }\n }\n \n /// The offset for request `index`: the start of the smallest gap that fits\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "<impl MemoryPlanner for GreedyBySize>::plan",
+      "return_type": "-> Option<ArenaPlan>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 32
+        },
+        "start": {
+          "column": 5,
+          "line": 18
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:27:70: replace <= with > in <impl MemoryPlanner for GreedyBySize>::plan",
+    "package": "ptxc-compiler",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 72,
+        "line": 27
+      },
+      "start": {
+        "column": 70,
+        "line": 27
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace smallest_gap -> Option<ByteOffset> with None\n@@ -35,34 +35,17 @@\n /// The offset for request `index`: the start of the smallest gap that fits\n /// it between the buffers of `placed`, sorted by offset, live with it, or\n /// the first aligned offset after them.\n fn smallest_gap(\n     requests: &[Request],\n     index: usize,\n     placed: &[(usize, Range<u64>)],\n ) -> Option<ByteOffset> {\n-    let request = requests[index];\n-    let mut best: Option<(u64, ByteOffset)> = None;\n-    let mut taken_to = ByteOffset::new(0);\n-    for (other, bytes) in placed {\n-        if !live_together(request.lifetime, requests[*other].lifetime) {\n-            continue;\n-        }\n-        let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n-        let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n-            best = Some((bytes.start - start.get(), start));\n-        }\n-        taken_to = taken_to.max(ByteOffset::new(bytes.end));\n-    }\n-    match best {\n-        Some((_, start)) => Some(start),\n-        None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n-    }\n+    None /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n #[allow(clippy::unwrap_used, reason = \"test code: a panic is a test failure\")]\n mod tests {\n     use super::{GreedyBySize, smallest_gap};\n     use crate::memory_plan::lifetime::{Lifetime, peak_live_bytes};\n     use crate::memory_plan::planner::{MemoryPlanner, Request};\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
       "span": {
         "end": {
           "column": 2,
-          "line": 57
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:43:5: replace smallest_gap -> Option<ByteOffset> with None",
+    "package": "ptxc-compiler",
+    "replacement": "None",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 60
+      },
+      "start": {
+        "column": 5,
+        "line": 43
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace smallest_gap -> Option<ByteOffset> with Some(Default::default())\n@@ -35,34 +35,17 @@\n /// The offset for request `index`: the start of the smallest gap that fits\n /// it between the buffers of `placed`, sorted by offset, live with it, or\n /// the first aligned offset after them.\n fn smallest_gap(\n     requests: &[Request],\n     index: usize,\n     placed: &[(usize, Range<u64>)],\n ) -> Option<ByteOffset> {\n-    let request = requests[index];\n-    let mut best: Option<(u64, ByteOffset)> = None;\n-    let mut taken_to = ByteOffset::new(0);\n-    for (other, bytes) in placed {\n-        if !live_together(request.lifetime, requests[*other].lifetime) {\n-            continue;\n-        }\n-        let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n-        let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n-            best = Some((bytes.start - start.get(), start));\n-        }\n-        taken_to = taken_to.max(ByteOffset::new(bytes.end));\n-    }\n-    match best {\n-        Some((_, start)) => Some(start),\n-        None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n-    }\n+    Some(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n #[allow(clippy::unwrap_used, reason = \"test code: a panic is a test failure\")]\n mod tests {\n     use super::{GreedyBySize, smallest_gap};\n     use crate::memory_plan::lifetime::{Lifetime, peak_live_bytes};\n     use crate::memory_plan::planner::{MemoryPlanner, Request};\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:43:5: replace smallest_gap -> Option<ByteOffset> with Some(Default::default())",
+    "package": "ptxc-compiler",
+    "replacement": "Some(Default::default())",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 60
+      },
+      "start": {
+        "column": 5,
+        "line": 43
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ delete ! in smallest_gap\n@@ -39,17 +39,17 @@\n     requests: &[Request],\n     index: usize,\n     placed: &[(usize, Range<u64>)],\n ) -> Option<ByteOffset> {\n     let request = requests[index];\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n-        if !live_together(request.lifetime, requests[*other].lifetime) {\n+        if  /* ~ changed by cargo-mutants ~ */live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n         if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:47:12: delete ! in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 47
+      },
+      "start": {
+        "column": 12,
+        "line": 47
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace && with || in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end <= bytes.start || /* ~ changed by cargo-mutants ~ */ best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:31: replace && with || in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 33,
+        "line": 52
+      },
+      "start": {
+        "column": 31,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace <= with > in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end > /* ~ changed by cargo-mutants ~ */ bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:16: replace <= with > in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 52
+      },
+      "start": {
+        "column": 16,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace < with == in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() == /* ~ changed by cargo-mutants ~ */ gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:87: replace < with == in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 88,
+        "line": 52
+      },
+      "start": {
+        "column": 87,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace < with > in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() > /* ~ changed by cargo-mutants ~ */ gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:87: replace < with > in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 88,
+        "line": 52
+      },
+      "start": {
+        "column": 87,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace < with <= in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() <= /* ~ changed by cargo-mutants ~ */ gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:87: replace < with <= in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 88,
+        "line": 52
+      },
+      "start": {
+        "column": 87,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace - with + in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start + /* ~ changed by cargo-mutants ~ */ start.get() < gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:73: replace - with + in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 74,
+        "line": 52
+      },
+      "start": {
+        "column": 73,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace - with / in smallest_gap\n@@ -44,17 +44,17 @@\n     let mut best: Option<(u64, ByteOffset)> = None;\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n-        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n+        if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start / /* ~ changed by cargo-mutants ~ */ start.get() < gap) {\n             best = Some((bytes.start - start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:52:73: replace - with / in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 74,
+        "line": 52
+      },
+      "start": {
+        "column": 73,
+        "line": 52
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace - with + in smallest_gap\n@@ -45,17 +45,17 @@\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n         if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n-            best = Some((bytes.start - start.get(), start));\n+            best = Some((bytes.start + /* ~ changed by cargo-mutants ~ */ start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:53:38: replace - with + in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 53
+      },
+      "start": {
+        "column": 38,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/greedy_by_size.rs\n+++ replace - with / in smallest_gap\n@@ -45,17 +45,17 @@\n     let mut taken_to = ByteOffset::new(0);\n     for (other, bytes) in placed {\n         if !live_together(request.lifetime, requests[*other].lifetime) {\n             continue;\n         }\n         let start = taken_to.align_up(BUFFER_ALIGNMENT).ok()?;\n         let end = start.get().checked_add(request.size.get())?;\n         if end <= bytes.start && best.is_none_or(|(gap, _)| bytes.start - start.get() < gap) {\n-            best = Some((bytes.start - start.get(), start));\n+            best = Some((bytes.start / /* ~ changed by cargo-mutants ~ */ start.get(), start));\n         }\n         taken_to = taken_to.max(ByteOffset::new(bytes.end));\n     }\n     match best {\n         Some((_, start)) => Some(start),\n         None => taken_to.align_up(BUFFER_ALIGNMENT).ok(),\n     }\n }\n",
+    "file": "crates/compiler/src/memory_plan/greedy_by_size.rs",
+    "function": {
+      "function_name": "smallest_gap",
+      "return_type": "-> Option<ByteOffset>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 61
+        },
+        "start": {
+          "column": 1,
+          "line": 35
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/compiler/src/memory_plan/greedy_by_size.rs:53:38: replace - with / in smallest_gap",
+    "package": "ptxc-compiler",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 53
+      },
+      "start": {
+        "column": 38,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace live_together -> bool with true\n@@ -36,20 +36,17 @@\n     pub(crate) fn between(first: usize, last: usize) -> Self {\n         Self { first: StepIndex::new(first), last: StepIndex::new(last) }\n     }\n }\n \n /// Whether two buffers with these lifetimes are live at some step together;\n /// a buffer no step touches is never live.\n pub(crate) fn live_together(first: Option<Lifetime>, second: Option<Lifetime>) -> bool {\n-    match (first, second) {\n-        (Some(first), Some(second)) => first.overlaps(second),\n-        _ => false,\n-    }\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n /// The lifetime of each of `buffers`, `None` for one `steps` never touch.\n pub(crate) fn lifetimes<T>(\n     steps: &[Step],\n     buffers: &IndexVec<BufferId, T>,\n ) -> IndexVec<BufferId, Option<Lifetime>> {\n     let mut found: IndexVec<BufferId, Option<Lifetime>> = buffers.iter().map(|_| None).collect();\n",
+    "file": "crates/compiler/src/memory_plan/lifetime.rs",
+    "function": {
+      "function_name": "live_together",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 48
         },
         "start": {
           "column": 1,
@@ -337,278 +881,86 @@
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:46:5: replace lifetimes -> IndexVec<BufferId, Option<Lifetime>> with Default::default()",
+    "name": "crates/compiler/src/memory_plan/lifetime.rs:44:5: replace live_together -> bool with true",
     "package": "ptxc-compiler",
-    "replacement": "Default::default()",
-    "span": {
-      "end": {
-        "column": 10,
-        "line": 56
-      },
-      "start": {
-        "column": 5,
-        "line": 46
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace touched -> Vec<BufferId> with vec![]\n@@ -53,20 +53,17 @@\n             }\n         }\n     }\n     found\n }\n \n /// The buffers `step` reads or writes.\n fn touched(step: &Step) -> Vec<BufferId> {\n-    match step {\n-        Step::Launch { args, .. } => args.clone(),\n-        Step::Copy { from, to } => vec![*from, *to],\n-    }\n+    vec![] /* ~ changed by cargo-mutants ~ */\n }\n \n /// The most bytes `buffers`, each a size and a lifetime, hold live at any\n /// one step: no placement fits them in less. `None` if that passes 2^64.\n pub(crate) fn peak_live_bytes(\n     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,\n ) -> Option<ByteSize> {\n     let mut changes: Vec<(StepIndex, Change)> = Vec::new();\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "touched",
-      "return_type": "-> Vec<BufferId>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 65
-        },
-        "start": {
-          "column": 1,
-          "line": 59
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:61:5: replace touched -> Vec<BufferId> with vec![]",
-    "package": "ptxc-compiler",
-    "replacement": "vec![]",
+    "replacement": "true",
     "span": {
       "end": {
         "column": 6,
-        "line": 64
+        "line": 47
       },
       "start": {
         "column": 5,
-        "line": 61
+        "line": 44
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace touched -> Vec<BufferId> with vec![Default::default()]\n@@ -53,20 +53,17 @@\n             }\n         }\n     }\n     found\n }\n \n /// The buffers `step` reads or writes.\n fn touched(step: &Step) -> Vec<BufferId> {\n-    match step {\n-        Step::Launch { args, .. } => args.clone(),\n-        Step::Copy { from, to } => vec![*from, *to],\n-    }\n+    vec![Default::default()] /* ~ changed by cargo-mutants ~ */\n }\n \n /// The most bytes `buffers`, each a size and a lifetime, hold live at any\n /// one step: no placement fits them in less. `None` if that passes 2^64.\n pub(crate) fn peak_live_bytes(\n     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,\n ) -> Option<ByteSize> {\n     let mut changes: Vec<(StepIndex, Change)> = Vec::new();\n",
+    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace live_together -> bool with false\n@@ -36,20 +36,17 @@\n     pub(crate) fn between(first: usize, last: usize) -> Self {\n         Self { first: StepIndex::new(first), last: StepIndex::new(last) }\n     }\n }\n \n /// Whether two buffers with these lifetimes are live at some step together;\n /// a buffer no step touches is never live.\n pub(crate) fn live_together(first: Option<Lifetime>, second: Option<Lifetime>) -> bool {\n-    match (first, second) {\n-        (Some(first), Some(second)) => first.overlaps(second),\n-        _ => false,\n-    }\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n /// The lifetime of each of `buffers`, `None` for one `steps` never touch.\n pub(crate) fn lifetimes<T>(\n     steps: &[Step],\n     buffers: &IndexVec<BufferId, T>,\n ) -> IndexVec<BufferId, Option<Lifetime>> {\n     let mut found: IndexVec<BufferId, Option<Lifetime>> = buffers.iter().map(|_| None).collect();\n",
     "file": "crates/compiler/src/memory_plan/lifetime.rs",
     "function": {
-      "function_name": "touched",
-      "return_type": "-> Vec<BufferId>",
+      "function_name": "live_together",
+      "return_type": "-> bool",
       "span": {
         "end": {
           "column": 2,
-          "line": 65
+          "line": 48
         },
         "start": {
           "column": 1,
-          "line": 59
+          "line": 41
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:61:5: replace touched -> Vec<BufferId> with vec![Default::default()]",
+    "name": "crates/compiler/src/memory_plan/lifetime.rs:44:5: replace live_together -> bool with false",
     "package": "ptxc-compiler",
-    "replacement": "vec![Default::default()]",
+    "replacement": "false",
     "span": {
       "end": {
         "column": 6,
-        "line": 64
+        "line": 47
       },
       "start": {
         "column": 5,
-        "line": 61
+        "line": 44
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace peak_live_bytes -> Option<ByteSize> with None\n@@ -64,31 +64,17 @@\n     }\n }\n \n /// The most bytes `buffers`, each a size and a lifetime, hold live at any\n /// one step: no placement fits them in less. `None` if that passes 2^64.\n pub(crate) fn peak_live_bytes(\n     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,\n ) -> Option<ByteSize> {\n-    let mut changes: Vec<(StepIndex, Change)> = Vec::new();\n-    for (size, lifetime) in buffers {\n-        changes.push((lifetime.first, Change::Live(size)));\n-        changes.push((StepIndex::new(lifetime.last.index() + 1), Change::Dead(size)));\n-    }\n-    changes.sort_unstable_by_key(|&(step, change)| (step, matches!(change, Change::Live(_))));\n-    let (mut live, mut peak) = (0_u64, 0_u64);\n-    for (_, change) in changes {\n-        live = match change {\n-            Change::Live(size) => live.checked_add(size.get())?,\n-            Change::Dead(size) => live - size.get(),\n-        };\n-        peak = peak.max(live);\n-    }\n-    Some(ByteSize::new(peak))\n+    None /* ~ changed by cargo-mutants ~ */\n }\n \n /// A buffer becoming live, or dead, at a step.\n #[derive(Clone, Copy)]\n enum Change {\n     Live(ByteSize),\n     Dead(ByteSize),\n }\n",
+    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ delete match arm (Some(first), Some(second)) in live_together\n@@ -37,17 +37,17 @@\n         Self { first: StepIndex::new(first), last: StepIndex::new(last) }\n     }\n }\n \n /// Whether two buffers with these lifetimes are live at some step together;\n /// a buffer no step touches is never live.\n pub(crate) fn live_together(first: Option<Lifetime>, second: Option<Lifetime>) -> bool {\n     match (first, second) {\n-        (Some(first), Some(second)) => first.overlaps(second),\n+         /* ~ changed by cargo-mutants ~ */\n         _ => false,\n     }\n }\n \n /// The lifetime of each of `buffers`, `None` for one `steps` never touch.\n pub(crate) fn lifetimes<T>(\n     steps: &[Step],\n     buffers: &IndexVec<BufferId, T>,\n",
     "file": "crates/compiler/src/memory_plan/lifetime.rs",
     "function": {
-      "function_name": "peak_live_bytes",
-      "return_type": "-> Option<ByteSize>",
+      "function_name": "live_together",
+      "return_type": "-> bool",
       "span": {
         "end": {
           "column": 2,
-          "line": 87
+          "line": 48
         },
         "start": {
           "column": 1,
-          "line": 67
+          "line": 41
         }
       }
     },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:72:5: replace peak_live_bytes -> Option<ByteSize> with None",
+    "genre": "MatchArm",
+    "name": "crates/compiler/src/memory_plan/lifetime.rs:45:9: delete match arm (Some(first), Some(second)) in live_together",
     "package": "ptxc-compiler",
-    "replacement": "None",
+    "replacement": "",
     "span": {
       "end": {
-        "column": 30,
-        "line": 86
+        "column": 63,
+        "line": 45
       },
       "start": {
-        "column": 5,
-        "line": 72
+        "column": 9,
+        "line": 45
       }
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace peak_live_bytes -> Option<ByteSize> with Some(Default::default())\n@@ -64,31 +64,17 @@\n     }\n }\n \n /// The most bytes `buffers`, each a size and a lifetime, hold live at any\n /// one step: no placement fits them in less. `None` if that passes 2^64.\n pub(crate) fn peak_live_bytes(\n     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,\n ) -> Option<ByteSize> {\n-    let mut changes: Vec<(StepIndex, Change)> = Vec::new();\n-    for (size, lifetime) in buffers {\n-        changes.push((lifetime.first, Change::Live(size)));\n-        changes.push((StepIndex::new(lifetime.last.index() + 1), Change::Dead(size)));\n-    }\n-    changes.sort_unstable_by_key(|&(step, change)| (step, matches!(change, Change::Live(_))));\n-    let (mut live, mut peak) = (0_u64, 0_u64);\n-    for (_, change) in changes {\n-        live = match change {\n-            Change::Live(size) => live.checked_add(size.get())?,\n-            Change::Dead(size) => live - size.get(),\n-        };\n-        peak = peak.max(live);\n-    }\n-    Some(ByteSize::new(peak))\n+    Some(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// A buffer becoming live, or dead, at a step.\n #[derive(Clone, Copy)]\n enum Change {\n     Live(ByteSize),\n     Dead(ByteSize),\n }\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "peak_live_bytes",
-      "return_type": "-> Option<ByteSize>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 87
-        },
-        "start": {
-          "column": 1,
-          "line": 67
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:72:5: replace peak_live_bytes -> Option<ByteSize> with Some(Default::default())",
-    "package": "ptxc-compiler",
-    "replacement": "Some(Default::default())",
-    "span": {
-      "end": {
-        "column": 30,
-        "line": 86
-      },
-      "start": {
-        "column": 5,
-        "line": 72
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace + with - in peak_live_bytes\n@@ -67,17 +67,17 @@\n /// The most bytes `buffers`, each a size and a lifetime, hold live at any\n /// one step: no placement fits them in less. `None` if that passes 2^64.\n pub(crate) fn peak_live_bytes(\n     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,\n ) -> Option<ByteSize> {\n     let mut changes: Vec<(StepIndex, Change)> = Vec::new();\n     for (size, lifetime) in buffers {\n         changes.push((lifetime.first, Change::Live(size)));\n-        changes.push((StepIndex::new(lifetime.last.index() + 1), Change::Dead(size)));\n+        changes.push((StepIndex::new(lifetime.last.index() - /* ~ changed by cargo-mutants ~ */ 1), Change::Dead(size)));\n     }\n     changes.sort_unstable_by_key(|&(step, change)| (step, matches!(change, Change::Live(_))));\n     let (mut live, mut peak) = (0_u64, 0_u64);\n     for (_, change) in changes {\n         live = match change {\n             Change::Live(size) => live.checked_add(size.get())?,\n             Change::Dead(size) => live - size.get(),\n         };\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "peak_live_bytes",
-      "return_type": "-> Option<ByteSize>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 87
-        },
-        "start": {
-          "column": 1,
-          "line": 67
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:75:60: replace + with - in peak_live_bytes",
-    "package": "ptxc-compiler",
-    "replacement": "-",
-    "span": {
-      "end": {
-        "column": 61,
-        "line": 75
-      },
-      "start": {
-        "column": 60,
-        "line": 75
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace + with * in peak_live_bytes\n@@ -67,17 +67,17 @@\n /// The most bytes `buffers`, each a size and a lifetime, hold live at any\n /// one step: no placement fits them in less. `None` if that passes 2^64.\n pub(crate) fn peak_live_bytes(\n     buffers: impl IntoIterator<Item = (ByteSize, Lifetime)>,\n ) -> Option<ByteSize> {\n     let mut changes: Vec<(StepIndex, Change)> = Vec::new();\n     for (size, lifetime) in buffers {\n         changes.push((lifetime.first, Change::Live(size)));\n-        changes.push((StepIndex::new(lifetime.last.index() + 1), Change::Dead(size)));\n+        changes.push((StepIndex::new(lifetime.last.index() * /* ~ changed by cargo-mutants ~ */ 1), Change::Dead(size)));\n     }\n     changes.sort_unstable_by_key(|&(step, change)| (step, matches!(change, Change::Live(_))));\n     let (mut live, mut peak) = (0_u64, 0_u64);\n     for (_, change) in changes {\n         live = match change {\n             Change::Live(size) => live.checked_add(size.get())?,\n             Change::Dead(size) => live - size.get(),\n         };\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "peak_live_bytes",
-      "return_type": "-> Option<ByteSize>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 87
-        },
-        "start": {
-          "column": 1,
-          "line": 67
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:75:60: replace + with * in peak_live_bytes",
-    "package": "ptxc-compiler",
-    "replacement": "*",
-    "span": {
-      "end": {
-        "column": 61,
-        "line": 75
-      },
-      "start": {
-        "column": 60,
-        "line": 75
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace - with + in peak_live_bytes\n@@ -74,17 +74,17 @@\n         changes.push((lifetime.first, Change::Live(size)));\n         changes.push((StepIndex::new(lifetime.last.index() + 1), Change::Dead(size)));\n     }\n     changes.sort_unstable_by_key(|&(step, change)| (step, matches!(change, Change::Live(_))));\n     let (mut live, mut peak) = (0_u64, 0_u64);\n     for (_, change) in changes {\n         live = match change {\n             Change::Live(size) => live.checked_add(size.get())?,\n-            Change::Dead(size) => live - size.get(),\n+            Change::Dead(size) => live + /* ~ changed by cargo-mutants ~ */ size.get(),\n         };\n         peak = peak.max(live);\n     }\n     Some(ByteSize::new(peak))\n }\n \n /// A buffer becoming live, or dead, at a step.\n #[derive(Clone, Copy)]\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "peak_live_bytes",
-      "return_type": "-> Option<ByteSize>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 87
-        },
-        "start": {
-          "column": 1,
-          "line": 67
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:82:40: replace - with + in peak_live_bytes",
-    "package": "ptxc-compiler",
-    "replacement": "+",
-    "span": {
-      "end": {
-        "column": 41,
-        "line": 82
-      },
-      "start": {
-        "column": 40,
-        "line": 82
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/lifetime.rs\n+++ replace - with / in peak_live_bytes\n@@ -74,17 +74,17 @@\n         changes.push((lifetime.first, Change::Live(size)));\n         changes.push((StepIndex::new(lifetime.last.index() + 1), Change::Dead(size)));\n     }\n     changes.sort_unstable_by_key(|&(step, change)| (step, matches!(change, Change::Live(_))));\n     let (mut live, mut peak) = (0_u64, 0_u64);\n     for (_, change) in changes {\n         live = match change {\n             Change::Live(size) => live.checked_add(size.get())?,\n-            Change::Dead(size) => live - size.get(),\n+            Change::Dead(size) => live / /* ~ changed by cargo-mutants ~ */ size.get(),\n         };\n         peak = peak.max(live);\n     }\n     Some(ByteSize::new(peak))\n }\n \n /// A buffer becoming live, or dead, at a step.\n #[derive(Clone, Copy)]\n",
-    "file": "crates/compiler/src/memory_plan/lifetime.rs",
-    "function": {
-      "function_name": "peak_live_bytes",
-      "return_type": "-> Option<ByteSize>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 87
-        },
-        "start": {
-          "column": 1,
-          "line": 67
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/lifetime.rs:82:40: replace - with / in peak_live_bytes",
-    "package": "ptxc-compiler",
-    "replacement": "/",
-    "span": {
-      "end": {
-        "column": 41,
-        "line": 82
-      },
-      "start": {
-        "column": 40,
-        "line": 82
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace verify -> Result<(), ArenaError> with Ok(())\n@@ -44,26 +44,17 @@\n     /// The bytes live at one step pass 2^64.\n     #[error(\"the bytes live at one step pass 2^64\")]\n     TooLarge,\n }\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n-    let bytes =\n-        placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n-    for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n-        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n-            if live_together(first, second) && share(first_bytes, second_bytes) {\n-                return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n-            }\n-        }\n-    }\n-    Ok(())\n+    Ok(()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n     if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n     }\n     let start = buffer.offset.get();\n",
+    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace verify -> Result<(), ArenaError> with Ok(())\n@@ -44,26 +44,17 @@\n     /// The bytes live at one step pass 2^64.\n     #[error(\"the bytes live at one step pass 2^64\")]\n     TooLarge,\n }\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n-    let bytes =\n-        placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n-    for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n-        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n-            if live_together(first.lifetime, second.lifetime) && share(first_bytes, second_bytes) {\n-                return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n-            }\n-        }\n-    }\n-    Ok(())\n+    Ok(()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n     if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n     }\n     let start = buffer.offset.get();\n",
     "file": "crates/compiler/src/memory_plan/verify.rs",
     "function": {
       "function_name": "verify",
@@ -640,7 +992,7 @@
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace + with - in verify\n@@ -47,17 +47,17 @@\n }\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n     let bytes =\n         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n-        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n+        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index - /* ~ changed by cargo-mutants ~ */ 1) {\n             if live_together(first, second) && share(first_bytes, second_bytes) {\n                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n             }\n         }\n     }\n     Ok(())\n }\n \n",
+    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace + with - in verify\n@@ -47,17 +47,17 @@\n }\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n     let bytes =\n         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n-        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n+        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index - /* ~ changed by cargo-mutants ~ */ 1) {\n             if live_together(first.lifetime, second.lifetime) && share(first_bytes, second_bytes) {\n                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n             }\n         }\n     }\n     Ok(())\n }\n \n",
     "file": "crates/compiler/src/memory_plan/verify.rs",
     "function": {
       "function_name": "verify",
@@ -672,7 +1024,7 @@
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace + with * in verify\n@@ -47,17 +47,17 @@\n }\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n     let bytes =\n         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n-        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n+        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index * /* ~ changed by cargo-mutants ~ */ 1) {\n             if live_together(first, second) && share(first_bytes, second_bytes) {\n                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n             }\n         }\n     }\n     Ok(())\n }\n \n",
+    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace + with * in verify\n@@ -47,17 +47,17 @@\n }\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n     let bytes =\n         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n-        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n+        for (second, second_bytes) in placed.iter().zip(&bytes).skip(index * /* ~ changed by cargo-mutants ~ */ 1) {\n             if live_together(first.lifetime, second.lifetime) && share(first_bytes, second_bytes) {\n                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n             }\n         }\n     }\n     Ok(())\n }\n \n",
     "file": "crates/compiler/src/memory_plan/verify.rs",
     "function": {
       "function_name": "verify",
@@ -704,7 +1056,7 @@
     }
   },
   {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace && with || in verify\n@@ -48,17 +48,17 @@\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n     let bytes =\n         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n         for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n-            if live_together(first, second) && share(first_bytes, second_bytes) {\n+            if live_together(first, second) || /* ~ changed by cargo-mutants ~ */ share(first_bytes, second_bytes) {\n                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n",
+    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace && with || in verify\n@@ -48,17 +48,17 @@\n \n /// Whether `placed` fit an arena of `arena` bytes with no two live buffers\n /// sharing a byte.\n pub(crate) fn verify(placed: &[Placed], arena: ByteSize) -> Result<(), ArenaError> {\n     let bytes =\n         placed.iter().map(|buffer| bytes_in(buffer, arena)).collect::<Result<Vec<_>, _>>()?;\n     for (index, (first, first_bytes)) in placed.iter().zip(&bytes).enumerate() {\n         for (second, second_bytes) in placed.iter().zip(&bytes).skip(index + 1) {\n-            if live_together(first.lifetime, second.lifetime) && share(first_bytes, second_bytes) {\n+            if live_together(first.lifetime, second.lifetime) || /* ~ changed by cargo-mutants ~ */ share(first_bytes, second_bytes) {\n                 return Err(ArenaError::Overlap { first: first.buffer, second: second.buffer });\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n",
     "file": "crates/compiler/src/memory_plan/verify.rs",
     "function": {
       "function_name": "verify",
@@ -721,753 +1073,17 @@
       }
     },
     "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:56:45: replace && with || in verify",
+    "name": "crates/compiler/src/memory_plan/verify.rs:56:63: replace && with || in verify",
     "package": "ptxc-compiler",
     "replacement": "||",
     "span": {
       "end": {
-        "column": 47,
+        "column": 65,
         "line": 56
       },
       "start": {
-        "column": 45,
-        "line": 56
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new())\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::new()) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new())",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::new())",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from_iter([0]))\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::from_iter([0])) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from_iter([0]))",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::from_iter([0]))",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new(0))\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::new(0)) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new(0))",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::new(0))",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from(0))\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::from(0)) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from(0))",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::from(0))",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from_iter([1]))\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::from_iter([1])) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from_iter([1]))",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::from_iter([1]))",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new(1))\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::new(1)) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::new(1))",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::new(1))",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from(1))\n@@ -58,24 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n-        return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n-    }\n-    let start = buffer.offset.get();\n-    match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n-        _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n-    }\n+    Ok(Range::from(1)) /* ~ changed by cargo-mutants ~ */\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:5: replace bytes_in -> Result<Range<u64>, ArenaError> with Ok(Range::from(1))",
-    "package": "ptxc-compiler",
-    "replacement": "Ok(Range::from(1))",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 73
-      },
-      "start": {
-        "column": 5,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ delete ! in bytes_in\n@@ -58,17 +58,17 @@\n             }\n         }\n     }\n     Ok(())\n }\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n-    if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n+    if  /* ~ changed by cargo-mutants ~ */buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n     }\n     let start = buffer.offset.get();\n     match start.checked_add(buffer.size.get()) {\n         Some(end) if end <= arena.get() => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:66:8: delete ! in bytes_in",
-    "package": "ptxc-compiler",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 9,
-        "line": 66
-      },
-      "start": {
-        "column": 8,
-        "line": 66
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace match guard end <= arena.get() with true in bytes_in\n@@ -63,17 +63,17 @@\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n     if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n     }\n     let start = buffer.offset.get();\n     match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n+        Some(end) if true /* ~ changed by cargo-mutants ~ */ => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "MatchArmGuard",
-    "name": "crates/compiler/src/memory_plan/verify.rs:71:22: replace match guard end <= arena.get() with true in bytes_in",
-    "package": "ptxc-compiler",
-    "replacement": "true",
-    "span": {
-      "end": {
-        "column": 40,
-        "line": 71
-      },
-      "start": {
-        "column": 22,
-        "line": 71
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace match guard end <= arena.get() with false in bytes_in\n@@ -63,17 +63,17 @@\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n     if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n     }\n     let start = buffer.offset.get();\n     match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n+        Some(end) if false /* ~ changed by cargo-mutants ~ */ => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "MatchArmGuard",
-    "name": "crates/compiler/src/memory_plan/verify.rs:71:22: replace match guard end <= arena.get() with false in bytes_in",
-    "package": "ptxc-compiler",
-    "replacement": "false",
-    "span": {
-      "end": {
-        "column": 40,
-        "line": 71
-      },
-      "start": {
-        "column": 22,
-        "line": 71
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace <= with > in bytes_in\n@@ -63,17 +63,17 @@\n \n /// The bytes `buffer` takes, if it is aligned and inside the arena.\n const fn bytes_in(buffer: &Placed, arena: ByteSize) -> Result<Range<u64>, ArenaError> {\n     if !buffer.offset.is_aligned(BUFFER_ALIGNMENT) {\n         return Err(ArenaError::Unaligned(buffer.buffer, buffer.offset));\n     }\n     let start = buffer.offset.get();\n     match start.checked_add(buffer.size.get()) {\n-        Some(end) if end <= arena.get() => Ok(start..end),\n+        Some(end) if end > /* ~ changed by cargo-mutants ~ */ arena.get() => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "bytes_in",
-      "return_type": "-> Result<Range<u64>, ArenaError>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 74
-        },
-        "start": {
-          "column": 1,
-          "line": 64
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:71:26: replace <= with > in bytes_in",
-    "package": "ptxc-compiler",
-    "replacement": ">",
-    "span": {
-      "end": {
-        "column": 28,
-        "line": 71
-      },
-      "start": {
-        "column": 26,
-        "line": 71
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace live_together -> bool with true\n@@ -69,20 +69,17 @@\n     let start = buffer.offset.get();\n     match start.checked_add(buffer.size.get()) {\n         Some(end) if end <= arena.get() => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n-    match (first.lifetime, second.lifetime) {\n-        (Some(first), Some(second)) => first.overlaps(second),\n-        _ => false,\n-    }\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n     first.start < second.end && second.start < first.end\n }\n \n #[cfg(test)]\n mod tests {\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "live_together",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 81
-        },
-        "start": {
-          "column": 1,
-          "line": 76
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:77:5: replace live_together -> bool with true",
-    "package": "ptxc-compiler",
-    "replacement": "true",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 80
-      },
-      "start": {
-        "column": 5,
-        "line": 77
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace live_together -> bool with false\n@@ -69,20 +69,17 @@\n     let start = buffer.offset.get();\n     match start.checked_add(buffer.size.get()) {\n         Some(end) if end <= arena.get() => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n-    match (first.lifetime, second.lifetime) {\n-        (Some(first), Some(second)) => first.overlaps(second),\n-        _ => false,\n-    }\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n     first.start < second.end && second.start < first.end\n }\n \n #[cfg(test)]\n mod tests {\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "live_together",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 81
-        },
-        "start": {
-          "column": 1,
-          "line": 76
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:77:5: replace live_together -> bool with false",
-    "package": "ptxc-compiler",
-    "replacement": "false",
-    "span": {
-      "end": {
-        "column": 6,
-        "line": 80
-      },
-      "start": {
-        "column": 5,
-        "line": 77
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ delete match arm (Some(first), Some(second)) in live_together\n@@ -70,17 +70,17 @@\n     match start.checked_add(buffer.size.get()) {\n         Some(end) if end <= arena.get() => Ok(start..end),\n         _ => Err(ArenaError::OutOfBounds(buffer.buffer)),\n     }\n }\n \n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n-        (Some(first), Some(second)) => first.overlaps(second),\n+         /* ~ changed by cargo-mutants ~ */\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n     first.start < second.end && second.start < first.end\n }\n \n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "live_together",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 81
-        },
-        "start": {
-          "column": 1,
-          "line": 76
-        }
-      }
-    },
-    "genre": "MatchArm",
-    "name": "crates/compiler/src/memory_plan/verify.rs:78:9: delete match arm (Some(first), Some(second)) in live_together",
-    "package": "ptxc-compiler",
-    "replacement": "",
-    "span": {
-      "end": {
         "column": 63,
-        "line": 78
-      },
-      "start": {
-        "column": 9,
-        "line": 78
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace share -> bool with true\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    true /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:5: replace share -> bool with true",
-    "package": "ptxc-compiler",
-    "replacement": "true",
-    "span": {
-      "end": {
-        "column": 57,
-        "line": 84
-      },
-      "start": {
-        "column": 5,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace share -> bool with false\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    false /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:5: replace share -> bool with false",
-    "package": "ptxc-compiler",
-    "replacement": "false",
-    "span": {
-      "end": {
-        "column": 57,
-        "line": 84
-      },
-      "start": {
-        "column": 5,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace && with || in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start < second.end || /* ~ changed by cargo-mutants ~ */ second.start < first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:30: replace && with || in share",
-    "package": "ptxc-compiler",
-    "replacement": "||",
-    "span": {
-      "end": {
-        "column": 32,
-        "line": 84
-      },
-      "start": {
-        "column": 30,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace < with == in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start == /* ~ changed by cargo-mutants ~ */ second.end && second.start < first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:17: replace < with == in share",
-    "package": "ptxc-compiler",
-    "replacement": "==",
-    "span": {
-      "end": {
-        "column": 18,
-        "line": 84
-      },
-      "start": {
-        "column": 17,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace < with > in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start > /* ~ changed by cargo-mutants ~ */ second.end && second.start < first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:17: replace < with > in share",
-    "package": "ptxc-compiler",
-    "replacement": ">",
-    "span": {
-      "end": {
-        "column": 18,
-        "line": 84
-      },
-      "start": {
-        "column": 17,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace < with <= in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start <= /* ~ changed by cargo-mutants ~ */ second.end && second.start < first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:17: replace < with <= in share",
-    "package": "ptxc-compiler",
-    "replacement": "<=",
-    "span": {
-      "end": {
-        "column": 18,
-        "line": 84
-      },
-      "start": {
-        "column": 17,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace < with == in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start < second.end && second.start == /* ~ changed by cargo-mutants ~ */ first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:46: replace < with == in share",
-    "package": "ptxc-compiler",
-    "replacement": "==",
-    "span": {
-      "end": {
-        "column": 47,
-        "line": 84
-      },
-      "start": {
-        "column": 46,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace < with > in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start < second.end && second.start > /* ~ changed by cargo-mutants ~ */ first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:46: replace < with > in share",
-    "package": "ptxc-compiler",
-    "replacement": ">",
-    "span": {
-      "end": {
-        "column": 47,
-        "line": 84
-      },
-      "start": {
-        "column": 46,
-        "line": 84
-      }
-    }
-  },
-  {
-    "diff": "--- crates/compiler/src/memory_plan/verify.rs\n+++ replace < with <= in share\n@@ -76,17 +76,17 @@\n fn live_together(first: &Placed, second: &Placed) -> bool {\n     match (first.lifetime, second.lifetime) {\n         (Some(first), Some(second)) => first.overlaps(second),\n         _ => false,\n     }\n }\n \n const fn share(first: &Range<u64>, second: &Range<u64>) -> bool {\n-    first.start < second.end && second.start < first.end\n+    first.start < second.end && second.start <= /* ~ changed by cargo-mutants ~ */ first.end\n }\n \n #[cfg(test)]\n mod tests {\n     use super::{ArenaError, Placed, verify};\n     use crate::memory_plan::lifetime::Lifetime;\n     use ptxc_core::{ByteOffset, ByteSize, Idx};\n     use ptxc_program::BufferId;\n",
-    "file": "crates/compiler/src/memory_plan/verify.rs",
-    "function": {
-      "function_name": "share",
-      "return_type": "-> bool",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 85
-        },
-        "start": {
-          "column": 1,
-          "line": 83
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/compiler/src/memory_plan/verify.rs:84:46: replace < with <= in share",
-    "package": "ptxc-compiler",
-    "replacement": "<=",
-    "span": {
-      "end": {
-        "column": 47,
-        "line": 84
-      },
-      "start": {
-        "column": 46,
-        "line": 84
+        "line": 56
       }
     }
   }

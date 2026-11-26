@@ -17,7 +17,7 @@ pub(crate) fn run(args: &RunArgs) -> anyhow::Result<ExitCode> {
     ui::section("Run");
     ui::header("Model", &args.model.display().to_string());
     let program = program(&args.model, args)?;
-    describe(&program);
+    describe(&program)?;
     let inputs =
         args.inputs.iter().map(|path| read_tensor(path)).collect::<anyhow::Result<Vec<_>>>()?;
     let device = Driver::load()?.device(DeviceOrdinal::new(0))?;

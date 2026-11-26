@@ -1,0 +1,22 @@
+--- crates/compiler/src/emit.rs
++++ replace Emitter<'g>::arena_buffer -> BufferId with Default::default()
+@@ -155,18 +155,17 @@
+         self.constants.extend(tensor.data().to_le_bytes());
+         let elements = tensor.shape().element_count();
+         let place = Place::Fixed(Location::Constant(offset));
+         Ok(self.buffers.push(Unplaced { dtype: tensor.dtype(), elements, place }))
+     }
+ 
+     /// A buffer of `dtype` and `shape` in the arena, placed by the plan.
+     fn arena_buffer(&mut self, dtype: DType, shape: &Shape) -> BufferId {
+-        let elements = shape.element_count();
+-        self.buffers.push(Unplaced { dtype, elements, place: Place::Arena })
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Each of `group`'s stages as a kernel and a launch.
+     fn group(
+         &mut self,
+         group: &LoweredGroup,
+         kernels: &[LoweredKernel],
+         target: &Target,

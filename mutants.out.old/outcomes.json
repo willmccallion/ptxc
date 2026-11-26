@@ -8,7 +8,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 9.967916322,
+          "duration": 12.75348932,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -20,7 +20,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.151240312,
+          "duration": 0.201137211,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -71,7 +71,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.502816439,
+          "duration": 1.6650740019999999,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -83,7 +83,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100815656,
+          "duration": 0.101085083,
           "process_status": {
             "Failure": 101
           },
@@ -136,7 +136,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.150902381,
+          "duration": 0.155754812,
           "process_status": {
             "Failure": 101
           },
@@ -190,7 +190,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.407683089,
+          "duration": 2.083694062,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -202,7 +202,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.25229094,
+          "duration": 0.20206607,
           "process_status": {
             "Failure": 101
           },
@@ -218,7 +218,7 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/compiler/src/memory_plan/lifetime.rs:26:34: replace && with || in Lifetime::overlaps",
+          "name": "crates/compiler/src/memory_plan/lifetime.rs:26:9: replace Lifetime::overlaps -> bool with true",
           "package": "ptxc-compiler",
           "file": "crates/compiler/src/memory_plan/lifetime.rs",
           "function": {
@@ -238,24 +238,24 @@
           "span": {
             "start": {
               "line": 26,
-              "column": 34
+              "column": 9
             },
             "end": {
               "line": 26,
-              "column": 36
+              "column": 61
             }
           },
-          "replacement": "||",
-          "genre": "BinaryOperator"
+          "replacement": "true",
+          "genre": "FnValue"
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_34.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_34.diff",
+      "log_path": "log/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_9.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_9.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 3.870419862,
+          "duration": 4.593448775,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -267,7 +267,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.503976375,
+          "duration": 0.202101932,
           "process_status": {
             "Failure": 101
           },
@@ -320,7 +320,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.713240981,
+          "duration": 2.938192104,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -332,7 +332,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.15181417,
+          "duration": 0.155970858,
           "process_status": {
             "Failure": 101
           },
@@ -385,7 +385,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.456092353,
+          "duration": 2.457463536,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -397,7 +397,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.152910756,
+          "duration": 0.20358627,
           "process_status": {
             "Failure": 101
           },
@@ -450,7 +450,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.25368187,
+          "duration": 0.407241282,
           "process_status": {
             "Failure": 101
           },
@@ -504,7 +504,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.105896017,
+          "duration": 3.169756389,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -516,121 +516,13 @@
         },
         {
           "phase": "Test",
-          "duration": 0.101057175,
+          "duration": 0.104533751,
           "process_status": {
             "Failure": 101
           },
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
             "test",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/mod.rs:43:5: replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![Default::default()])",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/mod.rs",
-          "function": {
-            "function_name": "placed",
-            "return_type": "-> Result<Vec<Placed>, ArenaError>",
-            "span": {
-              "start": {
-                "line": 41,
-                "column": 1
-              },
-              "end": {
-                "line": 51,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 43,
-              "column": 5
-            },
-            "end": {
-              "line": 50,
-              "column": 15
-            }
-          },
-          "replacement": "Ok(vec![Default::default()])",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__compiler__src__memory_plan__mod.rs_line_43_col_5_001.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__mod.rs_line_43_col_5_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 15.707504641,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/lifetime.rs:61:5: replace touched -> Vec<BufferId> with vec![Default::default()]",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/lifetime.rs",
-          "function": {
-            "function_name": "touched",
-            "return_type": "-> Vec<BufferId>",
-            "span": {
-              "start": {
-                "line": 59,
-                "column": 1
-              },
-              "end": {
-                "line": 65,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 61,
-              "column": 5
-            },
-            "end": {
-              "line": 64,
-              "column": 6
-            }
-          },
-          "replacement": "vec![Default::default()]",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__compiler__src__memory_plan__lifetime.rs_line_61_col_5_001.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__lifetime.rs_line_61_col_5_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.301271693,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
             "--verbose",
             "--package=ptxc-compiler@0.1.0"
           ]
@@ -677,7 +569,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.454004827,
+          "duration": 2.192843012,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -689,13 +581,121 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100983642,
+          "duration": 0.105775167,
           "process_status": {
             "Failure": 101
           },
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
             "test",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/lifetime.rs:61:5: replace touched -> Vec<BufferId> with vec![Default::default()]",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/lifetime.rs",
+          "function": {
+            "function_name": "touched",
+            "return_type": "-> Vec<BufferId>",
+            "span": {
+              "start": {
+                "line": 59,
+                "column": 1
+              },
+              "end": {
+                "line": 65,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 61,
+              "column": 5
+            },
+            "end": {
+              "line": 64,
+              "column": 6
+            }
+          },
+          "replacement": "vec![Default::default()]",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__compiler__src__memory_plan__lifetime.rs_line_61_col_5_001.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__lifetime.rs_line_61_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.207256379,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/mod.rs:43:5: replace placed -> Result<Vec<Placed>, ArenaError> with Ok(vec![Default::default()])",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/mod.rs",
+          "function": {
+            "function_name": "placed",
+            "return_type": "-> Result<Vec<Placed>, ArenaError>",
+            "span": {
+              "start": {
+                "line": 41,
+                "column": 1
+              },
+              "end": {
+                "line": 51,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 43,
+              "column": 5
+            },
+            "end": {
+              "line": 50,
+              "column": 15
+            }
+          },
+          "replacement": "Ok(vec![Default::default()])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__compiler__src__memory_plan__mod.rs_line_43_col_5_001.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__mod.rs_line_43_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 17.821804142,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
             "--verbose",
             "--package=ptxc-compiler@0.1.0"
           ]
@@ -742,7 +742,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.200965812,
+          "duration": 0.252177936,
           "process_status": {
             "Failure": 101
           },
@@ -796,7 +796,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 16.49514943,
+          "duration": 18.476281296,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -808,7 +808,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100987829,
+          "duration": 0.101033189,
           "process_status": {
             "Failure": 101
           },
@@ -824,7 +824,7 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/compiler/src/memory_plan/lifetime.rs:26:9: replace Lifetime::overlaps -> bool with true",
+          "name": "crates/compiler/src/memory_plan/lifetime.rs:26:34: replace && with || in Lifetime::overlaps",
           "package": "ptxc-compiler",
           "file": "crates/compiler/src/memory_plan/lifetime.rs",
           "function": {
@@ -844,24 +844,24 @@
           "span": {
             "start": {
               "line": 26,
-              "column": 9
+              "column": 34
             },
             "end": {
               "line": 26,
-              "column": 61
+              "column": 36
             }
           },
-          "replacement": "true",
-          "genre": "FnValue"
+          "replacement": "||",
+          "genre": "BinaryOperator"
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_9.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_9.diff",
+      "log_path": "log/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_34.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__lifetime.rs_line_26_col_34.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 16.812157834,
+          "duration": 18.82947461,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -873,7 +873,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100980337,
+          "duration": 0.101118199,
           "process_status": {
             "Failure": 101
           },
@@ -926,7 +926,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.203922434,
+          "duration": 2.386136421,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -938,7 +938,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.101086423,
+          "duration": 0.102816614,
           "process_status": {
             "Failure": 101
           },
@@ -991,7 +991,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402841676,
+          "duration": 2.344204096,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -1003,7 +1003,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.10082874,
+          "duration": 0.101788969,
           "process_status": {
             "Failure": 101
           },
@@ -1056,7 +1056,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402898741,
+          "duration": 1.611765268,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -1068,7 +1068,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100940205,
+          "duration": 0.101658019,
           "process_status": {
             "Failure": 101
           },
@@ -1121,7 +1121,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.703149169,
+          "duration": 1.768950558,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -1133,137 +1133,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100991191,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/verify.rs:55:76: replace + with - in verify",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/verify.rs",
-          "function": {
-            "function_name": "verify",
-            "return_type": "-> Result<(), ArenaError>",
-            "span": {
-              "start": {
-                "line": 49,
-                "column": 1
-              },
-              "end": {
-                "line": 62,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 55,
-              "column": 76
-            },
-            "end": {
-              "line": 55,
-              "column": 77
-            }
-          },
-          "replacement": "-",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_55_col_76.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_55_col_76.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 1.402975884,
-          "process_status": "Success",
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.101020219,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/verify.rs:52:5: replace verify -> Result<(), ArenaError> with Ok(())",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/verify.rs",
-          "function": {
-            "function_name": "verify",
-            "return_type": "-> Result<(), ArenaError>",
-            "span": {
-              "start": {
-                "line": 49,
-                "column": 1
-              },
-              "end": {
-                "line": 62,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 52,
-              "column": 5
-            },
-            "end": {
-              "line": 61,
-              "column": 11
-            }
-          },
-          "replacement": "Ok(())",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_52_col_5.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_52_col_5.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 1.653291377,
-          "process_status": "Success",
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.100813786,
+          "duration": 0.103705535,
           "process_status": {
             "Failure": 101
           },
@@ -1316,7 +1186,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 2.00421907,
+          "duration": 1.918119846,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -1328,7 +1198,72 @@
         },
         {
           "phase": "Test",
-          "duration": 0.10098227,
+          "duration": 0.151889562,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/verify.rs:52:5: replace verify -> Result<(), ArenaError> with Ok(())",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/verify.rs",
+          "function": {
+            "function_name": "verify",
+            "return_type": "-> Result<(), ArenaError>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 62,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 52,
+              "column": 5
+            },
+            "end": {
+              "line": 61,
+              "column": 11
+            }
+          },
+          "replacement": "Ok(())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_52_col_5.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_52_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.820388773,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.105456256,
           "process_status": {
             "Failure": 101
           },
@@ -1381,7 +1316,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.201082708,
+          "duration": 0.205262713,
           "process_status": {
             "Failure": 101
           },
@@ -1389,6 +1324,71 @@
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
             "test",
             "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/verify.rs:55:76: replace + with - in verify",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/verify.rs",
+          "function": {
+            "function_name": "verify",
+            "return_type": "-> Result<(), ArenaError>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 62,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 76
+            },
+            "end": {
+              "line": 55,
+              "column": 77
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_55_col_76.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_55_col_76.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.66526978,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.101005211,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
             "--verbose",
             "--package=ptxc-compiler@0.1.0"
           ]
@@ -1435,7 +1435,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.201172405,
+          "duration": 0.201745945,
           "process_status": {
             "Failure": 101
           },
@@ -1489,7 +1489,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.200929644,
+          "duration": 0.201063704,
           "process_status": {
             "Failure": 101
           },
@@ -1497,71 +1497,6 @@
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
             "test",
             "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/verify.rs:55:76: replace + with * in verify",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/verify.rs",
-          "function": {
-            "function_name": "verify",
-            "return_type": "-> Result<(), ArenaError>",
-            "span": {
-              "start": {
-                "line": 49,
-                "column": 1
-              },
-              "end": {
-                "line": 62,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 55,
-              "column": 76
-            },
-            "end": {
-              "line": 55,
-              "column": 77
-            }
-          },
-          "replacement": "*",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_55_col_76_001.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_55_col_76_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 1.353308993,
-          "process_status": "Success",
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.10102138,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
             "--verbose",
             "--package=ptxc-compiler@0.1.0"
           ]
@@ -1608,7 +1543,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.201182097,
+          "duration": 0.203984868,
           "process_status": {
             "Failure": 101
           },
@@ -1662,7 +1597,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.201110675,
+          "duration": 0.203947435,
           "process_status": {
             "Failure": 101
           },
@@ -1716,7 +1651,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.20110022,
+          "duration": 0.257629236,
           "process_status": {
             "Failure": 101
           },
@@ -1770,7 +1705,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.201110327,
+          "duration": 0.200927604,
           "process_status": {
             "Failure": 101
           },
@@ -1778,6 +1713,71 @@
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
             "test",
             "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/verify.rs:55:76: replace + with * in verify",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/verify.rs",
+          "function": {
+            "function_name": "verify",
+            "return_type": "-> Result<(), ArenaError>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 62,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 76
+            },
+            "end": {
+              "line": 55,
+              "column": 77
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_55_col_76_001.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_55_col_76_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.816369814,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.151674524,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
             "--verbose",
             "--package=ptxc-compiler@0.1.0"
           ]
@@ -1824,7 +1824,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402718427,
+          "duration": 1.614866041,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -1836,7 +1836,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.101151613,
+          "duration": 0.100869518,
           "process_status": {
             "Failure": 101
           },
@@ -1889,7 +1889,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402666161,
+          "duration": 1.666604545,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -1901,137 +1901,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.101085385,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/verify.rs:66:8: delete ! in bytes_in",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/verify.rs",
-          "function": {
-            "function_name": "bytes_in",
-            "return_type": "-> Result<Range<u64>, ArenaError>",
-            "span": {
-              "start": {
-                "line": 64,
-                "column": 1
-              },
-              "end": {
-                "line": 74,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 66,
-              "column": 8
-            },
-            "end": {
-              "line": 66,
-              "column": 9
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_66_col_8.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_66_col_8.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 1.652988633,
-          "process_status": "Success",
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.100919646,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/verify.rs:71:22: replace match guard end <= arena.get() with false in bytes_in",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/verify.rs",
-          "function": {
-            "function_name": "bytes_in",
-            "return_type": "-> Result<Range<u64>, ArenaError>",
-            "span": {
-              "start": {
-                "line": 64,
-                "column": 1
-              },
-              "end": {
-                "line": 74,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 71,
-              "column": 22
-            },
-            "end": {
-              "line": 71,
-              "column": 40
-            }
-          },
-          "replacement": "false",
-          "genre": "MatchArmGuard"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_71_col_22_001.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_71_col_22_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 1.70285478,
-          "process_status": "Success",
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.100865433,
+          "duration": 0.151663824,
           "process_status": {
             "Failure": 101
           },
@@ -2084,7 +1954,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.502920383,
+          "duration": 1.868667314,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2096,7 +1966,137 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100908312,
+          "duration": 0.100908593,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/verify.rs:66:8: delete ! in bytes_in",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/verify.rs",
+          "function": {
+            "function_name": "bytes_in",
+            "return_type": "-> Result<Range<u64>, ArenaError>",
+            "span": {
+              "start": {
+                "line": 64,
+                "column": 1
+              },
+              "end": {
+                "line": 74,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 66,
+              "column": 8
+            },
+            "end": {
+              "line": 66,
+              "column": 9
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_66_col_8.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_66_col_8.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.369189619,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.102541777,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/verify.rs:71:22: replace match guard end <= arena.get() with false in bytes_in",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/verify.rs",
+          "function": {
+            "function_name": "bytes_in",
+            "return_type": "-> Result<Range<u64>, ArenaError>",
+            "span": {
+              "start": {
+                "line": 64,
+                "column": 1
+              },
+              "end": {
+                "line": 74,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 71,
+              "column": 22
+            },
+            "end": {
+              "line": 71,
+              "column": 40
+            }
+          },
+          "replacement": "false",
+          "genre": "MatchArmGuard"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_71_col_22_001.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_71_col_22_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.176989921,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.105258973,
           "process_status": {
             "Failure": 101
           },
@@ -2149,7 +2149,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.602921569,
+          "duration": 1.665931698,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2161,7 +2161,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100884706,
+          "duration": 0.105882316,
           "process_status": {
             "Failure": 101
           },
@@ -2214,7 +2214,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.652902248,
+          "duration": 1.5650441229999998,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2226,7 +2226,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.10107263,
+          "duration": 0.101502849,
           "process_status": {
             "Failure": 101
           },
@@ -2279,7 +2279,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.7532750670000001,
+          "duration": 1.608868031,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2291,7 +2291,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100911204,
+          "duration": 0.10095476,
           "process_status": {
             "Failure": 101
           },
@@ -2344,7 +2344,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402909159,
+          "duration": 1.7266033859999999,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2356,72 +2356,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.101027451,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/compiler/src/memory_plan/verify.rs:84:5: replace share -> bool with false",
-          "package": "ptxc-compiler",
-          "file": "crates/compiler/src/memory_plan/verify.rs",
-          "function": {
-            "function_name": "share",
-            "return_type": "-> bool",
-            "span": {
-              "start": {
-                "line": 83,
-                "column": 1
-              },
-              "end": {
-                "line": 85,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 84,
-              "column": 5
-            },
-            "end": {
-              "line": 84,
-              "column": 57
-            }
-          },
-          "replacement": "false",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_84_col_5_001.log",
-      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_84_col_5_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 1.8032155699999999,
-          "process_status": "Success",
-          "argv": [
-            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=ptxc-compiler@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.101033912,
+          "duration": 0.100969893,
           "process_status": {
             "Failure": 101
           },
@@ -2474,7 +2409,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.6529331090000001,
+          "duration": 1.7634644480000001,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2486,7 +2421,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100890096,
+          "duration": 0.102929961,
           "process_status": {
             "Failure": 101
           },
@@ -2539,7 +2474,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402455093,
+          "duration": 1.510146341,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2551,7 +2486,72 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100960562,
+          "duration": 0.101854515,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/compiler/src/memory_plan/verify.rs:84:5: replace share -> bool with false",
+          "package": "ptxc-compiler",
+          "file": "crates/compiler/src/memory_plan/verify.rs",
+          "function": {
+            "function_name": "share",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 83,
+                "column": 1
+              },
+              "end": {
+                "line": 85,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 84,
+              "column": 5
+            },
+            "end": {
+              "line": 84,
+              "column": 57
+            }
+          },
+          "replacement": "false",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_84_col_5_001.log",
+      "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_84_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.076550007,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=ptxc-compiler@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.104958037,
           "process_status": {
             "Failure": 101
           },
@@ -2604,7 +2604,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.503125247,
+          "duration": 1.716689629,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2616,7 +2616,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.050828239,
+          "duration": 0.104550852,
           "process_status": {
             "Failure": 101
           },
@@ -2669,7 +2669,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.402572388,
+          "duration": 1.622182809,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2681,7 +2681,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100897035,
+          "duration": 0.108224592,
           "process_status": {
             "Failure": 101
           },
@@ -2728,13 +2728,13 @@
           "genre": "BinaryOperator"
         }
       },
-      "summary": "MissedMutant",
+      "summary": "CaughtMutant",
       "log_path": "log/crates__compiler__src__memory_plan__verify.rs_line_84_col_17_002.log",
       "diff_path": "diff/crates__compiler__src__memory_plan__verify.rs_line_84_col_17_002.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.602781245,
+          "duration": 1.724439683,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2746,8 +2746,10 @@
         },
         {
           "phase": "Test",
-          "duration": 0.150923687,
-          "process_status": "Success",
+          "duration": 0.100965312,
+          "process_status": {
+            "Failure": 101
+          },
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
             "test",
@@ -2797,7 +2799,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.552794897,
+          "duration": 1.984104978,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2809,7 +2811,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.101051144,
+          "duration": 0.101087153,
           "process_status": {
             "Failure": 101
           },
@@ -2862,7 +2864,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 1.40232157,
+          "duration": 1.727899872,
           "process_status": "Success",
           "argv": [
             "/nix/store/c2ii5nkzv440xj9igxsd49i8f5y2vr6f-cargo-1.99.1/bin/cargo",
@@ -2874,7 +2876,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.100670932,
+          "duration": 0.103146944,
           "process_status": {
             "Failure": 101
           },
@@ -2889,12 +2891,12 @@
     }
   ],
   "total_mutants": 46,
-  "missed": 1,
-  "caught": 33,
+  "missed": 0,
+  "caught": 34,
   "timeout": 0,
   "unviable": 12,
   "success": 0,
-  "start_time": "2026-11-25T23:50:40.466392391Z",
-  "end_time": "2026-11-25T23:51:27.153279602Z",
+  "start_time": "2026-11-25T23:51:39.010893908Z",
+  "end_time": "2026-11-25T23:52:32.450512959Z",
   "cargo_mutants_version": "27.1.0"
 }

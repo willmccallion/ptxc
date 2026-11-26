@@ -895,6 +895,7 @@ dependencies = [
 name = "ptxc-compiler"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "ptxc-codegen",
  "ptxc-core",
  "ptxc-graph",
