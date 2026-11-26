@@ -2,8 +2,8 @@
 
 mod builder;
 mod compose;
-mod epilogue;
 mod error;
+mod fuse;
 mod group;
 mod ops;
 mod precision;

@@ -1,9 +1,8 @@
 //! Runs a graph as ptxc compiles it before codegen, stage by stage.
 //!
-//! Each node is its own group, each group lowered and its products split
-//! where the compiler splits them (D75), and each stage put under its
-//! default schedule and run by an executor the caller gives, such as the
-//! loop interpreter or the GPU.
+//! Each group lowered and its products split where the compiler splits
+//! them (D75), and each stage put under its default schedule and run by an
+//! executor the caller gives, such as the loop interpreter or the GPU.
 
 use ptxc_core::{HostTensor, Idx, TensorError};
 use ptxc_graph::{CycleError, Graph, Partitioned, ValueDef, ValueId};
@@ -40,15 +39,25 @@ pub enum LoweredError<E> {
     Stage(E),
 }
 
-/// `graph`'s outputs for `inputs`, each stage's kernel run by `run_stage`
-/// on its arguments, returning its outputs flat in its output order.
+/// `graph`'s outputs for `inputs`, each node its own group, each stage's
+/// kernel run by `run_stage` on its arguments, returning its outputs flat
+/// in its output order.
 pub fn run_lowered<E>(
     graph: Graph,
     inputs: &[HostTensor],
+    run_stage: impl FnMut(&LoweredKernel, &[HostTensor]) -> Result<Vec<HostTensor>, E>,
+) -> Result<Vec<HostTensor>, LoweredError<E>> {
+    run_partitioned(&Partitioned::one_node_per_group(graph)?, inputs, run_stage)
+}
+
+/// `partitioned`'s outputs for `inputs`, as `run_lowered` runs a graph's,
+/// each group lowered as `partitioned` groups its nodes.
+pub fn run_partitioned<E>(
+    partitioned: &Partitioned,
+    inputs: &[HostTensor],
     mut run_stage: impl FnMut(&LoweredKernel, &[HostTensor]) -> Result<Vec<HostTensor>, E>,
 ) -> Result<Vec<HostTensor>, LoweredError<E>> {
-    let partitioned = Partitioned::one_node_per_group(graph)?;
-    let groups = ptxc_lower::lower(&partitioned)?;
+    let groups = ptxc_lower::lower(partitioned)?;
     let graph = partitioned.graph();
     let target = preset(SmVersion::SM_89)?;
     let mut tensors = Tensors {

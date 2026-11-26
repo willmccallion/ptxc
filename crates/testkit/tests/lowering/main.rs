@@ -7,6 +7,7 @@ mod activation;
 mod attention;
 mod elementwise;
 mod emitted;
+mod fused;
 mod gather;
 mod harness;
 mod matmul;

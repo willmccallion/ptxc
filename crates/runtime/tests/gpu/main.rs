@@ -11,6 +11,7 @@ mod convolutions;
 mod device;
 mod families;
 mod fragments;
+mod fused;
 mod kernels;
 mod products;
 mod programs;

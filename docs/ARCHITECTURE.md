@@ -350,6 +350,16 @@ which moves no row-major element, so every index stays a plain axis and a
 split product is a batched product the tiling rules take unchanged. An
 axis read any other way, or by a gather, is refused.
 
+`inline` merges a producer's definition into its consumer's, as TVM's
+`compute_inline` does (D80): each read of the inputs holding the
+producer's output becomes that output computed at the read's index. A
+producer without a reduction inlines at any read; one that reduces only
+where the consumer reads it at its own element and reduces nothing
+itself, so its reduction becomes the consumer's one and the consumer its
+epilogue, which may read the reduction more than once. Padded reads,
+producers of several outputs and gathers are refused. Both `rfactor` and
+`inline` rebuild expressions through one walk (`compute/rebuild.rs`).
+
 **3. Lowered kernel: an explicit loop nest.** This is a tree of owned
 statements, as in TVM's TIR. Index arithmetic and data arithmetic are
 different types, so an address can never be computed from loaded data by
@@ -501,9 +511,14 @@ and the GPU tests check them.
 - `LoweredGroup::with_split_reductions` replaces a stage whose definition
   scheduling splits with its partial and combine stages, joined by a new
   intermediate for the partials (D75).
-- `epilogue.rs` substitutes injective consumers into the producing stage's
-  output expression. In M2 every stage is its own kernel; M3's `compute_at`
-  places a stage inside another's loop nest, so a group becomes one kernel.
+- A group of several nodes (`fuse.rs`) lowers each node to its stages, then
+  inlines each stage that computes one graph value alone into the later
+  stages reading it, with the loop IR's `inline` (D80). Stages are taken
+  from the last, their producers without a reduction first, so a chain of
+  injective ops and the one reduction before it become one stage, the
+  reduction its epilogue's. A stage `inline` refuses keeps its kernel and
+  writes its value to memory; a stage whose outputs no stage kept reads,
+  and the group does not export, is dropped.
 
 ### Scheduling (`ptxc-schedule`)
 
