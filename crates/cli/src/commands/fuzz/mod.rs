@@ -60,22 +60,30 @@ struct Tally {
     mismatched: Vec<u64>,
 }
 
+impl Tally {
+    /// Counts what `seed`'s case, built from `recipe`, came to.
+    fn record(&mut self, seed: u64, recipe: &Recipe, outcome: &Result<(), Failure>) {
+        match outcome {
+            Ok(()) => {
+                self.agreed += 1;
+                self.against_reference += u64::from(recipe.compares_with_reference());
+            }
+            Err(Failure::Rejected(_)) => self.rejected += 1,
+            Err(Failure::Mismatch(_)) => self.mismatched.push(seed),
+        }
+    }
+}
+
 /// Every seed's case checked, each mismatch shrunk and written to `out`.
 fn fuzz(seeds: Range<u64>, backend: Option<&Backend<'_>>, out: &Path) -> anyhow::Result<Tally> {
     let generator = Generator::default();
     let mut tally = Tally::default();
     for seed in seeds {
         let recipe = generator.generate(Seed(seed));
-        match check(&recipe, backend) {
-            Ok(()) => {
-                tally.agreed += 1;
-                tally.against_reference += u64::from(recipe.compares_with_reference());
-            }
-            Err(Failure::Rejected(_)) => tally.rejected += 1,
-            Err(Failure::Mismatch(_)) => {
-                report(seed, recipe, backend, out)?;
-                tally.mismatched.push(seed);
-            }
+        let outcome = check(&recipe, backend);
+        tally.record(seed, &recipe, &outcome);
+        if let Err(Failure::Mismatch(_)) = outcome {
+            report(seed, recipe, backend, out)?;
         }
     }
     Ok(tally)
@@ -107,8 +115,8 @@ fn report(
 
 #[cfg(test)]
 mod tests {
-    use super::check::{Failure, check, compares_backend};
-    use super::fuzz;
+    use super::check::{Backend, Failure, check, compares_backend};
+    use super::{BackendArg, Tally, fuzz, selected};
     use ptxc_core::ElementCount;
     use ptxc_core::float::F16;
     use ptxc_core::{Dim, HostTensor, Shape};
@@ -138,6 +146,32 @@ mod tests {
         assert!(tally.agreed > tally.rejected, "{tally:?}");
         assert!(tally.against_reference > 0 && tally.against_reference < tally.agreed);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn each_outcome_is_counted_apart_and_agreement_with_the_reference_too() {
+        let generator = Generator::default();
+        let recipes: Vec<Recipe> = (0..40).map(|seed| generator.generate(Seed(seed))).collect();
+        let compared = recipes.iter().find(|recipe| recipe.compares_with_reference()).unwrap();
+        let alone = recipes.iter().find(|recipe| !recipe.compares_with_reference()).unwrap();
+        let mut tally = Tally::default();
+
+        tally.record(1, compared, &Ok(()));
+        tally.record(2, alone, &Ok(()));
+        tally.record(3, compared, &Err(Failure::Rejected("division by zero".to_owned())));
+        tally.record(4, alone, &Err(Failure::Mismatch("differs".to_owned())));
+
+        let expected = Tally { agreed: 2, against_reference: 1, rejected: 1, mismatched: vec![4] };
+        assert_eq!(tally, expected);
+    }
+
+    #[test]
+    fn only_the_gpu_backend_is_checked_beyond_the_interpreters() {
+        let none = |_: &Graph, _: &[HostTensor]| Ok(Vec::new());
+        let on_runner: &Backend<'_> = &none;
+
+        assert!(selected(BackendArg::Interp, on_runner).is_none());
+        assert!(selected(BackendArg::Gpu, on_runner).is_some());
     }
 
     #[test]
