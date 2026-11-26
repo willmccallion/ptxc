@@ -1,12 +1,13 @@
-//! The sweep's choice of the fastest algorithm and, on a GPU, a problem
-//! run end to end and the check that catches a run writing nothing.
+//! The files the sweep writes each framework to, its choice of the fastest
+//! algorithm and, on a GPU, a problem run end to end and the check that
+//! catches a run writing nothing.
 
 #![allow(clippy::unwrap_used, reason = "test code: a panic is a test failure")]
 
-use super::fastest;
 use super::problems::{GemmParams, params, problems};
+use super::{fastest, result_files};
 use crate::clocks::{Celsius, GpuState, Megahertz};
-use crate::results::Case;
+use crate::results::{Case, Framework};
 use crate::timing::Series;
 use ptxc_core::Microseconds;
 
@@ -25,6 +26,31 @@ fn case(algorithm: u8, median_us: f64) -> Case<GemmParams> {
 
 fn algorithm(case: Option<Case<GemmParams>>) -> Option<u8> {
     case.and_then(|case| case.params.algorithm)
+}
+
+#[test]
+fn cublas_results_record_cublas_at_its_version_from_ptxc_s_commit() {
+    let ptxc = Framework {
+        name: "ptxc".to_owned(),
+        version: "0.1.0".to_owned(),
+        commit: "8ef7be1".to_owned(),
+        dirty: true,
+    };
+
+    let files = result_files(&ptxc, "13.1.0");
+
+    let recorded: Vec<(&str, &str, &str, &str, bool)> = files
+        .iter()
+        .map(|(file, f)| (*file, f.name.as_str(), f.version.as_str(), f.commit.as_str(), f.dirty))
+        .collect();
+    assert_eq!(
+        recorded,
+        [
+            ("gemm-ptxc.json", "ptxc", "0.1.0", "8ef7be1", true),
+            ("gemm-cublas.json", "cublas", "13.1.0", "8ef7be1", true),
+            ("gemm-cublas-best-of-8.json", "cublas-best-of-8", "13.1.0", "8ef7be1", true),
+        ]
+    );
 }
 
 #[test]
