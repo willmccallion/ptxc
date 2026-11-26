@@ -149,3 +149,114 @@ fn permutation(rng: &mut Rng, rank: usize) -> TransposeAttrs {
 fn flattened(shape: &Shape) -> Shape {
     Shape::new(vec![Dim::new(shape.element_count().get())]).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{BINARY, connect, is_continuous, moderate, push};
+    use crate::generate::recipe::{Node, Operand, Recipe};
+    use crate::generate::shapes::Rng;
+    use ptxc_core::{Axis, DType};
+    use ptxc_graph::{
+        Activation, BinaryOp, F32Attr, KeepDims, Op, ReduceAttrs, ReduceOp, SoftmaxAttrs,
+        SoftmaxKind, UnaryOp,
+    };
+    use std::mem::discriminant;
+
+    /// Three moderate `f32` inputs of shape `[2, 3]`.
+    fn three_inputs() -> Recipe {
+        let mut rng = Rng::new(0);
+        let mut recipe = Recipe::default();
+        for _ in 0..3 {
+            let _operand = push(&mut recipe, moderate(&mut rng, DType::F32, &[2, 3]));
+        }
+        recipe
+    }
+
+    /// The connector each of the first `seeds` seeds adds to `recipe`.
+    fn connectors(recipe: &Recipe, seeds: u64) -> Vec<Node> {
+        let values = recipe.values().unwrap();
+        (0..seeds)
+            .filter_map(|seed| {
+                let mut next = recipe.clone();
+                connect(&mut Rng::new(seed), &mut next, &values)?;
+                next.nodes.pop()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_connector_reads_the_last_value_most_often_but_not_always() {
+        let recipe = three_inputs();
+
+        let nodes = connectors(&recipe, 200);
+
+        let last = Operand::Input(2);
+        let at_last = nodes.iter().filter(|node| node.operands[0] == last).count();
+        assert!(at_last > nodes.len() / 2 && at_last < nodes.len(), "{at_last} of {}", nodes.len());
+    }
+
+    #[test]
+    fn connectors_draw_every_kind_of_op_they_name() {
+        let recipe = three_inputs();
+
+        let kinds: Vec<_> =
+            connectors(&recipe, 400).iter().map(|node| discriminant(&node.op)).collect();
+
+        let unary = Op::Unary(UnaryOp::Abs);
+        let named = [
+            unary,
+            Op::Activation(Activation::Relu),
+            BINARY[0].clone(),
+            Op::MatMul,
+            Op::Reduce(ReduceAttrs { op: ReduceOp::Sum, axes: vec![], keep_dims: KeepDims::Keep }),
+            Op::Softmax(SoftmaxAttrs { kind: SoftmaxKind::Softmax, axis: Axis::new(0) }),
+            Op::Transpose(ptxc_graph::TransposeAttrs { permutation: vec![] }),
+            Op::Reshape(ptxc_core::Shape::new(vec![]).unwrap()),
+            Op::Concat(Axis::new(0)),
+        ];
+        for op in named {
+            assert!(kinds.contains(&discriminant(&op)), "no {op:?}");
+        }
+    }
+
+    #[test]
+    fn transposes_draw_every_order_of_two_axes() {
+        let recipe = three_inputs();
+
+        let orders: Vec<Vec<usize>> = connectors(&recipe, 400)
+            .iter()
+            .filter_map(|node| match &node.op {
+                Op::Transpose(attrs) => Some(attrs.permutation.iter().map(|a| a.index()).collect()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(orders.contains(&vec![0, 1]) && orders.contains(&vec![1, 0]), "{orders:?}");
+    }
+
+    #[test]
+    fn only_the_connectors_ops_are_continuous() {
+        let reduce = |op| Op::Reduce(ReduceAttrs { op, axes: vec![], keep_dims: KeepDims::Keep });
+        let softmax = |kind| Op::Softmax(SoftmaxAttrs { kind, axis: Axis::new(0) });
+        let hard_sigmoid =
+            Activation::HardSigmoid { alpha: F32Attr::new(0.2), beta: F32Attr::new(0.5) };
+
+        let continuous = [
+            Op::Unary(UnaryOp::Neg),
+            Op::Activation(Activation::Tanh),
+            Op::Binary(BinaryOp::Mul),
+            reduce(ReduceOp::Max),
+            softmax(SoftmaxKind::Softmax),
+        ];
+        let discontinuous = [
+            Op::Unary(UnaryOp::Floor),
+            Op::Activation(hard_sigmoid),
+            Op::Binary(BinaryOp::Div),
+            reduce(ReduceOp::Prod),
+            softmax(SoftmaxKind::LogSoftmax),
+        ];
+
+        assert!(continuous.iter().all(is_continuous));
+        assert!(!discontinuous.iter().any(is_continuous));
+    }
+}
