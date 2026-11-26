@@ -1,8 +1,13 @@
-//! Tolerance comparison per data type with a report of the worst mismatches.
+//! Tolerance comparison per data type with a report of the worst mismatches,
+//! and comparison with the error bounds of f32 sums.
 
 use ptxc_core::{DType, ElementCount, HostTensor, Shape, TensorData};
 use std::fmt;
 use thiserror::Error;
+
+mod bounded;
+
+pub use bounded::{BoundsReport, SumBound, compare_bounded};
 
 /// How closely a result must match its reference.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -241,6 +246,9 @@ pub enum Mismatch {
     /// Some elements are outside the tolerance.
     #[error("{0}")]
     Values(ValueReport),
+    /// Some elements are outside their sums' error bounds.
+    #[error("{0}")]
+    Bounds(BoundsReport),
 }
 
 /// Compares a result with its reference under `tolerance`.
