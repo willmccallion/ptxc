@@ -152,6 +152,33 @@ pub(crate) fn floats(dtype: DType, values: &[f64]) -> TensorData {
     }
 }
 
+/// `tensor`, of a float type, with every element's sign cleared. A
+/// magnitude is as representable as its value, so no conversion here
+/// overflows.
+pub fn absolute(tensor: &HostTensor) -> HostTensor {
+    let data: TensorData = match tensor.data() {
+        TensorData::F32(values) => values.iter().map(|v| v.abs()).collect::<Vec<_>>().into(),
+        TensorData::F16(values) => {
+            values.iter().map(|v| F16::from_f64(v.to_f64().abs())).collect::<Vec<_>>().into()
+        }
+        TensorData::Bf16(values) => {
+            values.iter().map(|v| Bf16::from_f64(v.to_f64().abs())).collect::<Vec<_>>().into()
+        }
+        TensorData::F8E4M3Fn(values) => values
+            .iter()
+            .map(|v| F8E4M3Fn::from_f64(v.to_f64().abs(), Overflow::NonFinite))
+            .collect::<Vec<_>>()
+            .into(),
+        TensorData::F8E5M2(values) => values
+            .iter()
+            .map(|v| F8E5M2::from_f64(v.to_f64().abs(), Overflow::NonFinite))
+            .collect::<Vec<_>>()
+            .into(),
+        other => panic!("{:?} is not a float type", other.dtype()),
+    };
+    HostTensor::new(tensor.shape().clone(), data).unwrap()
+}
+
 pub(crate) fn integers(dtype: DType, values: &[i64]) -> TensorData {
     let each = values.iter().copied();
     match dtype {

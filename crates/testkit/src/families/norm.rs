@@ -2,12 +2,11 @@
 //! and parameter shapes.
 
 use super::cases::single_node;
-use super::values::{Domain, axis_dims, operand_dims, tensor};
+use super::values::{Domain, absolute, axis_dims, operand_dims, tensor};
 use crate::compare::Tolerance;
 use proptest::prelude::*;
 use proptest::sample::select;
-use ptxc_core::float::{Bf16, F16};
-use ptxc_core::{Axis, DType, ElementCount, HostTensor, TensorData};
+use ptxc_core::{Axis, DType, ElementCount, HostTensor};
 use ptxc_graph::{
     BatchNormAttrs, F32Attr, Graph, InstanceNormAttrs, LayerNormAttrs, LayerNormKind, NormOutputs,
     Op, SoftmaxAttrs, SoftmaxKind, StashType,
@@ -114,21 +113,6 @@ pub fn batch_norm_graphs() -> impl Strategy<Value = (Graph, Vec<HostTensor>)> {
             let attrs = BatchNormAttrs { epsilon: EPSILON };
             graph_of(Op::BatchNorm(attrs), vec![x, scale, bias, mean, variance])
         })
-}
-
-/// `tensor`, of a float type, with every element's sign cleared.
-fn absolute(tensor: &HostTensor) -> HostTensor {
-    let data: TensorData = match tensor.data() {
-        TensorData::F32(values) => values.iter().map(|v| v.abs()).collect::<Vec<_>>().into(),
-        TensorData::F16(values) => {
-            values.iter().map(|v| F16::from_f64(v.to_f64().abs())).collect::<Vec<_>>().into()
-        }
-        TensorData::Bf16(values) => {
-            values.iter().map(|v| Bf16::from_f64(v.to_f64().abs())).collect::<Vec<_>>().into()
-        }
-        other => panic!("{:?} is not one of the float types drawn", other.dtype()),
-    };
-    HostTensor::new(tensor.shape().clone(), data).unwrap()
 }
 
 /// `InstanceNormalization` over every spatial rank.

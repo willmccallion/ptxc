@@ -115,7 +115,7 @@ fn of_mismatch(mismatch: &Mismatch, data_set: usize, output: usize) -> Failure {
         Mismatch::Values(report) => {
             (Some(worst(&report.worst_absolute)), Some(worst(&report.worst_relative)))
         }
-        Mismatch::DType { .. } | Mismatch::Shape { .. } => (None, None),
+        Mismatch::DType { .. } | Mismatch::Shape { .. } | Mismatch::Bounds(_) => (None, None),
     };
     Failure::Mismatch {
         data_set,
