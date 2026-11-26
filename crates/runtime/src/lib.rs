@@ -8,5 +8,5 @@ mod io;
 mod load;
 
 pub use error::RuntimeError;
-pub use executor::{Bound, Eager, Executor};
+pub use executor::{Bound, Eager, Executor, Graphed};
 pub use load::{LoadedProgram, load};

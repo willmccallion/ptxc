@@ -738,12 +738,14 @@ kernel.launch()
   program's inputs and outputs on the device, so a caller can queue it
   repeatedly on its own stream with no host copies, as the benchmarks do.
   `.capture(self) -> Result<Executor<Graphed>, RuntimeError>` records them
-  into a CUDA graph once. Replays then copy the inputs into fixed staging
-  buffers and launch the graph.
+  into a CUDA graph once, on buffers of its own for the inputs and
+  outputs. Each run then copies the inputs into those buffers, launches
+  the graph once and reads the outputs back; it takes `&mut self`, since
+  runs share the buffers. `ptxc run --executor graphed` runs a model so.
 - `Target::from_device` is built here from device attributes (SM count,
   shared memory per block when opted in, L2 size) on top of the preset for
   the device's SM version.
-- Implements `Evaluate`.
+- `Executor<Eager>` implements `Evaluate`.
 
 ### Autotuner (`ptxc-autotune`)
 
