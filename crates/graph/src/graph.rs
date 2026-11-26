@@ -3,7 +3,9 @@
 use crate::node::{Node, NodeId, NodeOutputIndex, NodeSlot, OperandIndex};
 use crate::ops::{Op, TypeError, TypeRule};
 use crate::tensor_type::{Layout, TensorType};
-use crate::value::{ConstantId, GraphInputIndex, GraphOutputIndex, Use, Value, ValueDef, ValueId};
+use crate::value::{
+    ConstantId, GraphInputIndex, GraphOutputIndex, Use, Value, ValueDef, ValueId, ValueName,
+};
 use ptxc_core::{HostTensor, IndexVec};
 use thiserror::Error;
 
@@ -34,6 +36,7 @@ pub struct Graph {
     pub(crate) uses: IndexVec<ValueId, Vec<Use>>,
     pub(crate) inputs: IndexVec<GraphInputIndex, ValueId>,
     pub(crate) outputs: IndexVec<GraphOutputIndex, ValueId>,
+    pub(crate) output_names: IndexVec<GraphOutputIndex, Option<ValueName>>,
 }
 
 impl Graph {
@@ -76,6 +79,12 @@ impl Graph {
     /// The graph outputs, in order.
     pub const fn outputs(&self) -> &IndexVec<GraphOutputIndex, ValueId> {
         &self.outputs
+    }
+
+    /// The name of output `index`, which it keeps whichever value a rewrite
+    /// makes it read (D79).
+    pub fn output_name(&self, index: GraphOutputIndex) -> Option<&ValueName> {
+        self.output_names.get(index).and_then(Option::as_ref)
     }
 
     /// The node defining `value`, if a node defines it.

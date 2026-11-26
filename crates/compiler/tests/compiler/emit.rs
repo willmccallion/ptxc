@@ -116,3 +116,20 @@ fn an_unnamed_input_is_rejected() {
 
     assert!(matches!(compile(graph), Err(CompileError::Unnamed(value)) if value == x));
 }
+
+#[test]
+fn an_output_a_rewrite_redirects_keeps_its_name() {
+    let mut graph = graph(|b, x, y| vec![add(b, x, y), add(b, x, y)]);
+    let [first, second] = graph.outputs().iter().copied().collect::<Vec<_>>()[..] else { panic!() };
+    let repeat = graph.producer(second).unwrap();
+    let mut rewriter = graph.rewriter();
+    rewriter.replace_all_uses(second, first).unwrap();
+    rewriter.erase_node(repeat).unwrap();
+
+    let program = compile(graph).unwrap();
+
+    let names: Vec<&str> = program.outputs().iter().map(|output| output.name.as_str()).collect();
+    assert_eq!(names, ["out0", "out1"]);
+    let copies = program.steps().iter().filter(|step| matches!(step, Step::Copy { .. })).count();
+    assert_eq!(copies, 1);
+}
