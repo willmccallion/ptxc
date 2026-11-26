@@ -4,6 +4,7 @@
 
 mod bounded;
 mod compare;
+mod convolution;
 mod data;
 mod generate;
 mod golden;
