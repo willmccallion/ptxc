@@ -77,6 +77,31 @@ fn each_type_compiles_its_own_product_transposing_what_its_layout_stores_transpo
     assert_eq!(built("gemm/f16/NT/256x256x256"), (vec!["gemm"], DType::F16));
 }
 
+#[test]
+fn a_quantized_product_reads_its_transposed_operand_on_tensor_cores_in_one_kernel() {
+    use super::data::Inputs;
+    use super::frameworks::graph;
+    use super::problems::id;
+    use ptxc_compiler::Compilation;
+    use ptxc_target::{SmVersion, preset};
+
+    let layouts = ["e4m3/NT", "e4m3/TN", "i8/NT", "i8/TN"];
+    for name in layouts.map(|layout| format!("gemm/{layout}/256x256x256")) {
+        let problem = problems().into_iter().find(|&problem| id(problem) == name).unwrap();
+        let graph = graph(problem, &Inputs::new(problem).unwrap()).unwrap();
+        let target = preset(SmVersion::SM_89).unwrap();
+
+        let compiled =
+            Compilation::from_graph(graph, target).optimize().unwrap().partition().unwrap();
+        let program = compiled.lower().unwrap().schedule().unwrap().emit().unwrap();
+
+        let [kernel] = &program.kernels().iter().collect::<Vec<_>>()[..] else {
+            panic!("{name}: {} kernels", program.kernels().len())
+        };
+        assert!(kernel.ptx.contains("mma.sync"), "{name} is not tiled on tensor cores");
+    }
+}
+
 #[cfg(feature = "gpu")]
 mod gpu {
     use crate::cublas::{Handle, lt};
