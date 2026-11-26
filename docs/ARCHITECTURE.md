@@ -194,9 +194,14 @@ them, lowering gives a reshape a copy stage like any other op.
   when `cfg(debug_assertions)` is on or a test asks for it, naming the pass
   that failed or left the graph invalid. `Compilation::optimize` runs
   `PassManager::standard()`.
+- **CSE** merges nodes with the same op, attributes and operands, and
+  constants with the same type and bytes, as XLA's `HloCSE`; ops are
+  deterministic and `Eq + Hash` (D2), so equal nodes compute equal values.
 - **DCE** removes the nodes no graph output depends on, as XLA's `HloDCE`;
   a node stays while any of its outputs is read. Compaction then drops
   constants nothing reads.
+- A graph output keeps its own name whichever value a rewrite makes it
+  read (D79).
 - **Rewrite rules are data:**
   `RewriteRule { name, lhs: Pattern, rhs: Template, guard: Guard }`.
   `RewriteEngine` is a trait. `GreedyEngine` (a worklist, as in MLIR's

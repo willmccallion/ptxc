@@ -1,7 +1,7 @@
 use crate::{add, compile, constant, f32s, graph};
 use ptxc_compiler::CompileError;
 use ptxc_core::{ByteOffset, ByteSize, Idx};
-use ptxc_graph::GraphBuilder;
+use ptxc_graph::{GraphBuilder, Op, UnaryOp};
 use ptxc_program::{BufferId, InputIndex, Location, OutputIndex, Step, load, save};
 
 fn location(program: &ptxc_program::Program, buffer: BufferId) -> Location {
@@ -132,4 +132,23 @@ fn an_output_a_rewrite_redirects_keeps_its_name() {
     assert_eq!(names, ["out0", "out1"]);
     let copies = program.steps().iter().filter(|step| matches!(step, Step::Copy { .. })).count();
     assert_eq!(copies, 1);
+}
+
+/// Fuzz seed 1835, shrunk: the graph's passes merge the repeated `neg`, and
+/// the output it computed keeps its name.
+#[test]
+fn outputs_merged_by_the_graph_passes_keep_their_names() {
+    let graph = graph(|b, x, _| {
+        let first = b.add_node(Op::Unary(UnaryOp::Neg), vec![x]).unwrap()[0];
+        let repeat = b.add_node(Op::Unary(UnaryOp::Neg), vec![x]).unwrap()[0];
+        vec![add(b, first, x), repeat]
+    });
+
+    let program = compile(graph).unwrap();
+
+    let names: Vec<&str> = program.outputs().iter().map(|output| output.name.as_str()).collect();
+    assert_eq!(names, ["out0", "out1"]);
+    let launches =
+        program.steps().iter().filter(|step| matches!(step, Step::Launch { .. })).count();
+    assert_eq!(launches, 2);
 }

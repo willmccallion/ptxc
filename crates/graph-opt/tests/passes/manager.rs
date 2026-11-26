@@ -1,7 +1,7 @@
 use crate::graph;
 use ptxc_core::Idx;
 use ptxc_graph::{CycleError, Graph, NodeId, NodeOutputIndex, VerifyError};
-use ptxc_graph_opt::{Dce, Pass, PassError, PassManager, PassReport, PipelineError};
+use ptxc_graph_opt::{Cse, Dce, Pass, PassError, PassManager, PassReport, PipelineError};
 
 /// Makes the first node's output read the second node's, closing a cycle,
 /// which the rewriter allows and the verifier refuses.
@@ -84,17 +84,19 @@ fn a_pass_that_fails_is_named_and_stops_the_rest() {
 }
 
 #[test]
-fn dce_refuses_a_graph_with_a_cycle_by_name() {
-    let mut chain = graph(CHAIN);
-    let cycle = PassManager::new(vec![Box::new(CloseACycle)]);
-    let _invalid = cycle.run(&mut chain);
+fn a_pass_on_a_graph_with_a_cycle_fails_under_its_own_name() {
+    let passes: [(Box<dyn Pass>, &str); 2] = [(Box::new(Dce), "dce"), (Box::new(Cse), "cse")];
+    for (refusing, name) in passes {
+        let mut chain = graph(CHAIN);
+        let _invalid = PassManager::new(vec![Box::new(CloseACycle)]).run(&mut chain);
 
-    let error = PassManager::new(vec![Box::new(Dce)]).run(&mut chain).unwrap_err();
+        let error = PassManager::new(vec![refusing]).run(&mut chain).unwrap_err();
 
-    let PipelineError::Failed { pass, source: PassError::Cycle(_) } = error else {
-        panic!("{error:?}")
-    };
-    assert_eq!(pass, "dce");
+        let PipelineError::Failed { pass, source: PassError::Cycle(_) } = error else {
+            panic!("{error:?}")
+        };
+        assert_eq!(pass, name);
+    }
 }
 
 /// Release builds verify only when asked; debug builds always do, so this
