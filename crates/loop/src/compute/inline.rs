@@ -61,8 +61,8 @@ pub enum InlineError {
     Compute(#[from] ComputeError),
 }
 
-/// `consumer` with each read of its `input` replaced by `producer`'s output
-/// computed at that read's index.
+/// `consumer` with each read of its `inputs`, which all hold `producer`'s
+/// output, replaced by that output computed at the read's index.
 ///
 /// A producer without a reduction inlines at every read, at any index, and
 /// is computed again at each. One with a reduction inlines only where the
@@ -71,27 +71,29 @@ pub enum InlineError {
 /// becomes its epilogue, which may read it more than once.
 pub fn inline(
     consumer: &ComputeDef,
-    input: TensorParamId,
+    inputs: &[TensorParamId],
     producer: &ComputeDef,
 ) -> Result<Inlined, InlineError> {
     let [output] = producer.outputs() else { return Err(InlineError::SeveralOutputs) };
-    let read = consumer.inputs().get(input).ok_or(ComputeError::UnknownTensor(input))?;
-    let matches =
-        read.dtype == producer.dtype_of(&output.expr) && &read.shape == producer.output_shape();
-    if !matches {
-        return Err(InlineError::Mismatch);
+    for &input in inputs {
+        let read = consumer.inputs().get(input).ok_or(ComputeError::UnknownTensor(input))?;
+        let matches =
+            read.dtype == producer.dtype_of(&output.expr) && &read.shape == producer.output_shape();
+        if !matches {
+            return Err(InlineError::Mismatch);
+        }
     }
     if [consumer, producer].iter().any(|compute| gathers(compute)) {
         return Err(InlineError::Gather);
     }
-    if reads_padded(consumer, input) {
+    if reads_padded(consumer, inputs) {
         return Err(InlineError::Padded);
     }
-    if output.expr.reduction().is_some() && !is_epilogue(consumer, input) {
+    if output.expr.reduction().is_some() && !is_epilogue(consumer, inputs) {
         return Err(InlineError::NotAnEpilogue);
     }
     let name = ComputeName::new(format!("{}_{}", producer.name(), consumer.name()));
-    Inliner::new(consumer, input, producer, name).finish()
+    Inliner::new(consumer, inputs, producer, name).finish()
 }
 
 /// Whether `compute` reads loaded indices.
@@ -99,9 +101,9 @@ fn gathers(compute: &ComputeDef) -> bool {
     compute.vars().iter().any(|var| matches!(var, IndexVar::Loaded { .. }))
 }
 
-/// Whether `consumer` reduces nothing and reads `input` only at its own
+/// Whether `consumer` reduces nothing and reads `inputs` only at its own
 /// element, each index its own variable in order.
-fn is_epilogue(consumer: &ComputeDef, input: TensorParamId) -> bool {
+fn is_epilogue(consumer: &ComputeDef, inputs: &[TensorParamId]) -> bool {
     if consumer.outputs().iter().any(|output| output.expr.reduction().is_some()) {
         return false;
     }
@@ -111,27 +113,27 @@ fn is_epilogue(consumer: &ComputeDef, input: TensorParamId) -> bool {
         read.len() == own.len()
             && read.iter().zip(&own).all(|(&id, &var)| consumer.exprs().get(id) == Expr::Var(var))
     };
-    consumer.outputs().iter().all(|output| every_read(&output.expr, input, &at_own))
+    consumer.outputs().iter().all(|output| every_read(&output.expr, inputs, &at_own))
 }
 
-/// Whether `consumer` reads `input` with padding anywhere.
-fn reads_padded(consumer: &ComputeDef, input: TensorParamId) -> bool {
+/// Whether `consumer` reads any of `inputs` with padding.
+fn reads_padded(consumer: &ComputeDef, inputs: &[TensorParamId]) -> bool {
     let unpadded = |_: &[ExprId], padded: bool| !padded;
-    !consumer.outputs().iter().all(|output| every_read(&output.expr, input, &unpadded))
+    !consumer.outputs().iter().all(|output| every_read(&output.expr, inputs, &unpadded))
 }
 
-/// Whether `holds` holds of every read of `input` in `expr`, given the
+/// Whether `holds` holds of every read of `inputs` in `expr`, given the
 /// read's index and whether it is padded.
 fn every_read(
     expr: &TensorExpr,
-    input: TensorParamId,
+    inputs: &[TensorParamId],
     holds: &impl Fn(&[ExprId], bool) -> bool,
 ) -> bool {
     match expr {
         TensorExpr::Load { tensor, index, padding } => {
-            *tensor != input || holds(index, padding.is_some())
+            !inputs.contains(tensor) || holds(index, padding.is_some())
         }
-        other => other.operands().into_iter().all(|operand| every_read(operand, input, holds)),
+        other => other.operands().into_iter().all(|operand| every_read(operand, inputs, holds)),
     }
 }
 
@@ -139,7 +141,7 @@ fn every_read(
 /// producer's inputs and reduction axes after them.
 struct Inliner<'c> {
     consumer: &'c ComputeDef,
-    input: TensorParamId,
+    inlined: &'c [TensorParamId],
     producer: &'c ComputeDef,
     builder: ComputeBuilder,
     inputs: IndexVec<TensorParamId, InlinedInput>,
@@ -154,13 +156,13 @@ struct Inliner<'c> {
 impl<'c> Inliner<'c> {
     fn new(
         consumer: &'c ComputeDef,
-        input: TensorParamId,
+        inlined: &'c [TensorParamId],
         producer: &'c ComputeDef,
         name: ComputeName,
     ) -> Self {
         let mut inliner = Self {
             consumer,
-            input,
+            inlined,
             producer,
             builder: ComputeBuilder::new(name),
             inputs: IndexVec::new(),
@@ -176,10 +178,10 @@ impl<'c> Inliner<'c> {
         inliner
     }
 
-    /// The consumer's inputs but the inlined one, then the producer's.
+    /// The consumer's inputs but the inlined ones, then the producer's.
     fn declare_inputs(&mut self) {
         for (id, param) in self.consumer.inputs().iter_enumerated() {
-            if id != self.input {
+            if !self.inlined.contains(&id) {
                 let new = self.builder.input(param.name.clone(), param.dtype, param.shape.clone());
                 let _old = self.consumer_tensors.insert(id, new);
                 let _pushed = self.inputs.push(InlinedInput::Consumer(id));
@@ -263,7 +265,7 @@ impl Rebuild for Consumer<'_, '_> {
         padding: Option<Scalar>,
     ) -> Result<TensorExpr, ComputeError> {
         let index = index.iter().map(|&part| self.index(part)).collect::<Result<Vec<_>, _>>()?;
-        if tensor == self.0.input {
+        if self.0.inlined.contains(&tensor) {
             return self.0.produce(&index);
         }
         let new = self.0.consumer_tensors.get(&tensor).copied();
