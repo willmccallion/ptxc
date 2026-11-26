@@ -107,7 +107,7 @@ fn an_elementwise_producer_is_computed_again_at_each_read() {
     });
     let x = [tensor(&[2, 6], values(12, 0))];
 
-    let inlined = inline(&reversed, TensorParamId::new(0), &double).unwrap();
+    let inlined = inline(&reversed, &[TensorParamId::new(0)], &double).unwrap();
 
     assert_eq!(
         inlined.inputs.iter().copied().collect::<Vec<_>>(),
@@ -137,7 +137,7 @@ fn a_transpose_inlines_into_a_products_reads() {
     let product = finish(product);
     let (weight, lhs) = (tensor(&[5, 3], values(15, 1)), tensor(&[4, 5], values(20, 2)));
 
-    let inlined = inline(&product, TensorParamId::new(0), &transpose).unwrap();
+    let inlined = inline(&product, &[TensorParamId::new(0)], &transpose).unwrap();
 
     let order = [
         InlinedInput::Consumer(TensorParamId::new(1)),
@@ -159,7 +159,7 @@ fn a_product_becomes_the_reduction_of_its_epilogue() {
     let operands = [tensor(&[3, 4], values(12, 3)), tensor(&[4, 5], values(20, 4))];
     let bias = [tensor(&[5], values(5, 5))];
 
-    let inlined = inline(&relu, TensorParamId::new(0), &product).unwrap();
+    let inlined = inline(&relu, &[TensorParamId::new(0)], &product).unwrap();
 
     let fused = run(&inlined.compute, &inlined_inputs(&inlined.inputs, &bias, &operands));
     assert_eq!(fused, in_turn(&product, &operands, &relu, &bias));
@@ -173,10 +173,28 @@ fn an_epilogue_may_read_the_product_more_than_once() {
     });
     let operands = [tensor(&[3, 4], values(12, 6)), tensor(&[4, 5], values(20, 7))];
 
-    let inlined = inline(&squared, TensorParamId::new(0), &product).unwrap();
+    let inlined = inline(&squared, &[TensorParamId::new(0)], &product).unwrap();
 
     let fused = run(&inlined.compute, &inlined_inputs(&inlined.inputs, &[], &operands));
     assert_eq!(fused, in_turn(&product, &operands, &squared, &[]));
+}
+
+#[test]
+fn a_producer_held_by_two_inputs_inlines_into_both_at_once() {
+    let product = product(3, 4, 5);
+    let squared = consumer([3, 5], &[&[3, 5]], |_, inputs, [i, j]| {
+        binary(BinaryOp::Mul, load(inputs[0], &[i, j]), load(inputs[1], &[i, j]))
+    });
+    let operands = [tensor(&[3, 4], values(12, 8)), tensor(&[4, 5], values(20, 9))];
+    let both = [TensorParamId::new(0), TensorParamId::new(1)];
+
+    let inlined = inline(&squared, &both, &product).unwrap();
+
+    let producer_only = |input: &InlinedInput| matches!(input, InlinedInput::Producer(_));
+    assert!(inlined.inputs.iter().all(producer_only));
+    let fused = run(&inlined.compute, &inlined_inputs(&inlined.inputs, &[], &operands));
+    let produced = run_default(&Arc::new(product), &operands).unwrap().remove(0);
+    assert_eq!(fused, run(&squared, &[produced.clone(), produced]));
 }
 
 #[test]
@@ -184,7 +202,7 @@ fn a_product_read_away_from_the_consumers_own_element_is_refused() {
     let product = product(4, 2, 4);
     let transposed = consumer([4, 4], &[], |_, inputs, [i, j]| load(inputs[0], &[j, i]));
 
-    let refused = inline(&transposed, TensorParamId::new(0), &product).unwrap_err();
+    let refused = inline(&transposed, &[TensorParamId::new(0)], &product).unwrap_err();
 
     assert_eq!(refused, InlineError::NotAnEpilogue);
 }
@@ -204,7 +222,7 @@ fn a_product_into_a_consumer_that_reduces_is_refused() {
     row_sum.output(TensorName::new("out"), sum);
     let row_sum = finish(row_sum);
 
-    let refused = inline(&row_sum, TensorParamId::new(0), &product).unwrap_err();
+    let refused = inline(&row_sum, &[TensorParamId::new(0)], &product).unwrap_err();
 
     assert_eq!(refused, InlineError::NotAnEpilogue);
 }
@@ -218,7 +236,7 @@ fn a_padded_read_of_the_producer_is_refused() {
         padding: Some(Scalar::zero(DType::I32)),
     });
 
-    let refused = inline(&padded, TensorParamId::new(0), &product).unwrap_err();
+    let refused = inline(&padded, &[TensorParamId::new(0)], &product).unwrap_err();
 
     assert_eq!(refused, InlineError::Padded);
 }
@@ -234,7 +252,7 @@ fn a_producer_of_several_outputs_is_refused() {
     let two = finish(two);
     let copy = consumer([3, 4], &[], |_, inputs, [i, j]| load(inputs[0], &[i, j]));
 
-    let refused = inline(&copy, TensorParamId::new(0), &two).unwrap_err();
+    let refused = inline(&copy, &[TensorParamId::new(0)], &two).unwrap_err();
 
     assert_eq!(refused, InlineError::SeveralOutputs);
 }
@@ -244,7 +262,7 @@ fn an_input_that_is_not_the_producers_output_is_refused() {
     let product = product(3, 2, 4);
     let wider = consumer([3, 5], &[], |_, inputs, [i, j]| load(inputs[0], &[i, j]));
 
-    let refused = inline(&wider, TensorParamId::new(0), &product).unwrap_err();
+    let refused = inline(&wider, &[TensorParamId::new(0)], &product).unwrap_err();
 
     assert_eq!(refused, InlineError::Mismatch);
 }
@@ -257,7 +275,7 @@ fn a_consumer_that_gathers_is_refused() {
         load(inputs[0], &[row, j])
     });
 
-    let refused = inline(&gather, TensorParamId::new(0), &product).unwrap_err();
+    let refused = inline(&gather, &[TensorParamId::new(0)], &product).unwrap_err();
 
     assert_eq!(refused, InlineError::Gather);
 }
