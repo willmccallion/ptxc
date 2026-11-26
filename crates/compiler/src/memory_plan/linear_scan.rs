@@ -213,6 +213,17 @@ mod tests {
     }
 
     #[test]
+    fn a_dead_empty_buffer_joins_the_free_range_it_starts() {
+        let requests =
+            [request(1000, Some((0, 1))), request(0, Some((2, 2))), request(2000, Some((3, 3)))];
+
+        let plan = LinearScan.plan(&requests).unwrap();
+
+        assert_eq!(offsets(&requests), [0, 0, 0]);
+        assert_eq!(plan.size, ByteSize::new(2000));
+    }
+
+    #[test]
     fn a_buffer_no_step_touches_sits_at_the_start_inside_the_arena() {
         let requests = [request(300, Some((0, 0))), request(2000, None)];
 
