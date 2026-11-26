@@ -1,4 +1,4 @@
-use crate::{add, compile, graph};
+use crate::{add, compile_unfused, graph};
 use ptxc_compiler::{ArenaError, ArenaUse, arena_use, verify_arena};
 use ptxc_core::{ByteOffset, ByteSize, DType, ElementCount, Idx, IndexVec, KernelName};
 use ptxc_program::{
@@ -76,7 +76,7 @@ fn a_copy_keeps_its_source_live_until_it_runs() {
 
 #[test]
 fn a_chain_reuses_the_bytes_of_values_it_no_longer_reads() {
-    let program = compile(graph(|b, x, y| {
+    let program = compile_unfused(graph(|b, x, y| {
         let first = add(b, x, y);
         let second = add(b, first, x);
         let third = add(b, second, y);

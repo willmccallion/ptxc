@@ -799,7 +799,7 @@ graph-opt     lower ◄── loop         │
                                │
            cli ◄── compiler, runtime, autotune, interp, testkit
            bench ◄── compiler, runtime, cuda   (+ cuBLAS via dlopen)
-           testkit ◄── graph, interp, onnx, onnx-proto
+           testkit ◄── graph, graph-opt, interp, onnx, onnx-proto, lower, schedule
            xtask (no ptxc dependencies)
 ```
 

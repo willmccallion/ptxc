@@ -6,7 +6,7 @@ use crate::emit::emit;
 use crate::error::CompileError;
 use ptxc_core::IndexVec;
 use ptxc_graph::{Graph, GroupId, Partitioned as PartitionedGraph};
-use ptxc_graph_opt::PassManager;
+use ptxc_graph_opt::{GreedyPartitioner, Partitioner, PassManager};
 use ptxc_loop::{ComputeDef, LoweredKernel};
 use ptxc_lower::LoweredGroup;
 use ptxc_onnx::{ImportOptions, import_model};
@@ -79,11 +79,17 @@ impl Compilation<Imported> {
 }
 
 impl Compilation<Optimized> {
-    /// The graph split into groups.
-    // NOTE: one node per group, the trivial partitioner M2 plans (D40);
-    // the greedy fusion partitioner comes with M4.
+    /// The graph split into fused groups by the greedy partitioner (D82).
     pub fn partition(self) -> Result<Compilation<Partitioned>, CompileError> {
-        let partitioned = PartitionedGraph::one_node_per_group(self.state.graph)?;
+        self.partition_with(&GreedyPartitioner)
+    }
+
+    /// The graph split into groups by `partitioner`.
+    pub fn partition_with(
+        self,
+        partitioner: &dyn Partitioner,
+    ) -> Result<Compilation<Partitioned>, CompileError> {
+        let partitioned = partitioner.partition(self.state.graph)?;
         Ok(Compilation { state: Partitioned { partitioned }, target: self.target })
     }
 }

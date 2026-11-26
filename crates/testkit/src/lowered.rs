@@ -1,11 +1,14 @@
 //! Runs a graph as ptxc compiles it before codegen, stage by stage.
 //!
-//! Each group lowered and its products split where the compiler splits
-//! them (D75), and each stage put under its default schedule and run by an
-//! executor the caller gives, such as the loop interpreter or the GPU.
+//! The graph goes through the compiler's standard passes and greedy
+//! partition, each group is lowered and its products split where the
+//! compiler splits them (D75), and each stage is put under its default
+//! schedule and run by an executor the caller gives, such as the loop
+//! interpreter or the GPU: the kernels a compiled program launches.
 
 use ptxc_core::{HostTensor, Idx, TensorError};
-use ptxc_graph::{CycleError, Graph, Partitioned, ValueDef, ValueId};
+use ptxc_graph::{Graph, PartitionError, Partitioned, ValueDef, ValueId};
+use ptxc_graph_opt::{GreedyPartitioner, Partitioner, PassManager, PipelineError};
 use ptxc_loop::{ComputeDef, LoweredKernel, ScheduleError};
 use ptxc_lower::{Binding, IntermediateId, LowerError, LoweredGroup};
 use ptxc_target::{SmVersion, UnsupportedSm, preset};
@@ -16,9 +19,12 @@ use thiserror::Error;
 /// Why a lowered graph did not run.
 #[derive(Debug, Error)]
 pub enum LoweredError<E> {
-    /// The graph has a cycle.
+    /// A graph pass failed.
     #[error(transparent)]
-    Partition(#[from] CycleError),
+    Optimize(#[from] PipelineError),
+    /// The graph did not partition into groups.
+    #[error(transparent)]
+    Partition(#[from] PartitionError),
     /// Lowering refused a group.
     #[error(transparent)]
     Lower(#[from] LowerError),
@@ -39,15 +45,16 @@ pub enum LoweredError<E> {
     Stage(E),
 }
 
-/// `graph`'s outputs for `inputs`, each node its own group, each stage's
-/// kernel run by `run_stage` on its arguments, returning its outputs flat
-/// in its output order.
+/// `graph`'s outputs for `inputs`, optimized and partitioned as the
+/// compiler does, each stage's kernel run by `run_stage` on its arguments,
+/// returning its outputs flat in its output order.
 pub fn run_lowered<E>(
-    graph: Graph,
+    mut graph: Graph,
     inputs: &[HostTensor],
     run_stage: impl FnMut(&LoweredKernel, &[HostTensor]) -> Result<Vec<HostTensor>, E>,
 ) -> Result<Vec<HostTensor>, LoweredError<E>> {
-    run_partitioned(&Partitioned::one_node_per_group(graph)?, inputs, run_stage)
+    let _reports = PassManager::standard().run(&mut graph)?;
+    run_partitioned(&GreedyPartitioner.partition(graph)?, inputs, run_stage)
 }
 
 /// `partitioned`'s outputs for `inputs`, as `run_lowered` runs a graph's,

@@ -1,4 +1,4 @@
-use crate::{add, compile, constant, f32s, graph};
+use crate::{add, compile, compile_unfused, constant, f32s, graph};
 use ptxc_compiler::CompileError;
 use ptxc_core::{ByteOffset, ByteSize, Idx};
 use ptxc_graph::{GraphBuilder, Op, UnaryOp};
@@ -29,7 +29,7 @@ fn a_node_becomes_one_launch_over_its_inputs_and_output() {
 
 #[test]
 fn a_value_between_nodes_lives_in_the_arena() {
-    let program = compile(graph(|b, x, y| {
+    let program = compile_unfused(graph(|b, x, y| {
         let sum = add(b, x, y);
         vec![add(b, sum, x)]
     }))
@@ -46,7 +46,7 @@ fn a_value_between_nodes_lives_in_the_arena() {
 
 #[test]
 fn constants_are_placed_aligned_in_the_blob() {
-    let program = compile(graph(|b, x, _| {
+    let program = compile_unfused(graph(|b, x, _| {
         let (one, two) = (constant(b, 1.0), constant(b, 2.0));
         let sum = add(b, x, one);
         vec![add(b, sum, two)]
@@ -151,4 +151,16 @@ fn outputs_merged_by_the_graph_passes_keep_their_names() {
     let launches =
         program.steps().iter().filter(|step| matches!(step, Step::Launch { .. })).count();
     assert_eq!(launches, 2);
+}
+
+#[test]
+fn a_chain_of_elementwise_nodes_compiles_to_one_launch() {
+    let program = compile(graph(|b, x, y| {
+        let sum = add(b, x, y);
+        vec![add(b, sum, x)]
+    }))
+    .unwrap();
+
+    let [Step::Launch { .. }] = program.steps() else { panic!("{:?}", program.steps()) };
+    assert_eq!(program.arena(), ByteSize::new(0));
 }

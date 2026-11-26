@@ -20,6 +20,7 @@ proptest.workspace = true
 prost.workspace = true
 ptxc-core.workspace = true
 ptxc-graph.workspace = true
+ptxc-graph-opt.workspace = true
 ptxc-interp.workspace = true
 ptxc-loop.workspace = true
 ptxc-lower.workspace = true
