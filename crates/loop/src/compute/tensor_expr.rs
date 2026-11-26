@@ -93,7 +93,7 @@ impl TensorExpr {
     }
 
     /// The expressions `self` operates on, in order.
-    pub(crate) fn operands(&self) -> Vec<&Self> {
+    pub fn operands(&self) -> Vec<&Self> {
         match self {
             Self::Load { .. } | Self::Const(_) | Self::Index { .. } => Vec::new(),
             Self::Unary(_, value) | Self::Cast { value, .. } => vec![value],

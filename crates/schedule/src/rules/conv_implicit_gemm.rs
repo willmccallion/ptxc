@@ -8,7 +8,7 @@
 //! product's.
 
 use super::matmul_loops::{GemmLoops, own_loop};
-use super::matmul_shape::{loads, uncast};
+use super::matmul_shape::{read_once, uncast};
 use ptxc_loop::{
     BinaryOp, ComputeDef, ExprId, IndexVar, IterKind, IterVarId, LoopId, LoopKind, Open, Primitive,
     ReduceOp, Schedule, ScheduleError, TensorExpr, TensorParamId,
@@ -48,7 +48,7 @@ pub(crate) fn implicit_gemm(compute: &ComputeDef) -> Option<ImplicitGemm> {
     let (rows, columns) = (only(&lhs_axes, &rhs_axes), only(&rhs_axes, &lhs_axes));
     let summed_by_both = axes.iter().all(|axis| lhs_axes.contains(axis) && rhs_axes.contains(axis));
     let has_work = compute.iter_vars().iter().all(|axis| axis.extent.get() > 0);
-    let read_once = [lhs.0, rhs.0].iter().all(|&tensor| loads(&output.expr, tensor) == 1);
+    let read_once = [lhs.0, rhs.0].iter().all(|&tensor| read_once(&output.expr, body, tensor));
     let found = !rows.is_empty() && !columns.is_empty() && summed_by_both;
     if !(found && has_work && read_once && lhs.0 != rhs.0) {
         return None;
