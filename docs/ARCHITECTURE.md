@@ -715,8 +715,13 @@ kernel.launch()
 - `CudaError` carries the driver's error name, the call that failed and,
   for a failed PTX load, the JIT's log.
 - No host memory is mapped into the device's address space, which is what
-  makes a safe launch sound (D37). Stream capture and CUDA graphs come with
-  the graphed executor (M4).
+  makes a safe launch sound (D37).
+- Stream capture: `Stream::begin_capture` gives a `GraphCapture`, whose
+  stream records the work queued on it instead of running it; `end` gives
+  a `CapturedGraph`, `instantiate` a `GraphExec`, and `launch` replays it
+  all on a stream with one call. Captures are thread-local, so threads
+  sharing the context keep allocating and copying, and a capture dropped
+  unended ends itself.
 - `unsafe_code` is denied workspace-wide and allowed only in `ptxc-cuda`
   and in `ptxc-bench`'s cuBLAS bindings (D55); `cargo xtask check-deps`
   enforces both.

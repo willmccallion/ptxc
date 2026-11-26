@@ -40,6 +40,14 @@ pub(crate) const CU_STREAM_DEFAULT: c_uint = 0;
 /// `CU_EVENT_DEFAULT`: an event that records timing.
 pub(crate) const CU_EVENT_DEFAULT: c_uint = 0;
 
+/// `CUstreamCaptureMode`.
+pub(crate) type CuStreamCaptureMode = c_int;
+
+/// `CU_STREAM_CAPTURE_MODE_THREAD_LOCAL`: while this thread captures, only
+/// it is barred from calls a capture cannot hold; other threads' captures
+/// and calls are left alone.
+pub(crate) const CU_STREAM_CAPTURE_MODE_THREAD_LOCAL: CuStreamCaptureMode = 1;
+
 macro_rules! handles {
     ($($(#[$doc:meta])* $name:ident),* $(,)?) => {$(
         $(#[$doc])*
@@ -73,4 +81,8 @@ handles! {
     CuStream,
     /// `CUevent`.
     CuEvent,
+    /// `CUgraph`.
+    CuGraph,
+    /// `CUgraphExec`.
+    CuGraphExec,
 }
