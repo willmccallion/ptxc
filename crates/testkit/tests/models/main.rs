@@ -8,6 +8,8 @@
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
 use ptxc_core::{DType, Dim, ElementCount, Evaluate};
+use ptxc_graph::{Graph, Op};
+use ptxc_graph_opt::PassManager;
 use ptxc_interp::Interpreter;
 use ptxc_onnx::{ImportOptions, import_model};
 use ptxc_testkit::compare::{Tolerance, compare};
@@ -38,6 +40,10 @@ const RESNET50: Check = Check {
     longest_reduction: ElementCount::new(3 * 3 * 512),
 };
 
+/// ResNet-50 exported with its batch normalisations, which the standard
+/// passes fold into its convolutions.
+const RESNET50_UNFOLDED: Check = Check { model: "resnet50-unfolded", ..RESNET50 };
+
 const BERT_BASE: Check = Check {
     model: "bert-base",
     inputs: random("bert-base", 1),
@@ -61,7 +67,7 @@ fn import_options(inputs: &InputSet) -> ImportOptions {
     ImportOptions { symbolic_dims, ..ImportOptions::default() }
 }
 
-fn import(check: &Check) -> ptxc_graph::Graph {
+fn import(check: &Check) -> Graph {
     let path = model(check.model).unwrap_or_else(|error| panic!("{error}"));
     import_model(&std::fs::read(&path).unwrap(), &import_options(&check.inputs))
         .unwrap_or_else(|error| panic!("{}: {error}", check.model))
@@ -70,7 +76,7 @@ fn import(check: &Check) -> ptxc_graph::Graph {
 #[test]
 #[ignore = "needs the exported models: uv run --project baselines ptxc-baselines export --model <name>"]
 fn every_target_model_imports_and_verifies() {
-    for check in [&MLP, &RESNET50, &BERT_BASE, &GPT2] {
+    for check in [&MLP, &RESNET50, &RESNET50_UNFOLDED, &BERT_BASE, &GPT2] {
         let graph = import(check);
 
         assert!(graph.verify().is_ok(), "{}: {:?}", check.model, graph.verify());
@@ -80,12 +86,17 @@ fn every_target_model_imports_and_verifies() {
 /// Runs `check` on the interpreter and compares every output with ONNX
 /// Runtime's.
 fn matches_onnx_runtime(check: &Check) {
+    graph_matches_onnx_runtime(check, &import(check));
+}
+
+/// Runs `graph`, `check`'s model or a rewrite of it, on the interpreter and
+/// compares every output with ONNX Runtime's.
+fn graph_matches_onnx_runtime(check: &Check, graph: &Graph) {
     let path = model(check.model).unwrap_or_else(|error| panic!("{error}"));
     let directory = check.inputs.directory().unwrap_or_else(|error| panic!("{error}"));
     let expected = ort_reference(&path, &directory).unwrap_or_else(|error| panic!("{error}"));
-    let graph = import(check);
 
-    let actual = Interpreter::new(&graph).evaluate(&inputs(&directory).unwrap()).unwrap();
+    let actual = Interpreter::new(graph).evaluate(&inputs(&directory).unwrap()).unwrap();
 
     assert_eq!(actual.len(), expected.len());
     let tolerance = Tolerance::for_dtype(DType::F32).for_reduction(check.longest_reduction);
@@ -106,6 +117,23 @@ fn mlp_matches_onnx_runtime() {
 #[ignore = "needs the ResNet-50 export, 16 ImageNetV2 images and their ONNX Runtime reference"]
 fn resnet50_matches_onnx_runtime_on_16_images() {
     matches_onnx_runtime(&RESNET50);
+}
+
+/// How many of `graph`'s nodes are batch normalisations.
+fn batch_norms(graph: &Graph) -> usize {
+    graph.nodes().filter(|(_, node)| matches!(node.op(), Op::BatchNorm(_))).count()
+}
+
+#[test]
+#[ignore = "needs the unfolded ResNet-50 export, 16 ImageNetV2 images and their ONNX Runtime reference"]
+fn resnet50_s_batch_normalisations_fold_into_its_convolutions_and_still_match_onnx_runtime() {
+    let mut graph = import(&RESNET50_UNFOLDED);
+    let unfolded = batch_norms(&graph);
+
+    let _reports = PassManager::standard().run(&mut graph).unwrap();
+
+    assert_eq!((unfolded, batch_norms(&graph)), (53, 0));
+    graph_matches_onnx_runtime(&RESNET50_UNFOLDED, &graph);
 }
 
 #[test]
