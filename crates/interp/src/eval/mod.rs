@@ -21,7 +21,7 @@ use ptxc_core::{HostTensor, TensorData};
 use ptxc_graph::{Op, TensorType};
 
 /// The results of `op` on `operands`, given the types its rule inferred.
-pub(crate) fn evaluate(
+pub fn evaluate(
     op: &Op,
     operands: &[&HostTensor],
     outputs: &[&TensorType],

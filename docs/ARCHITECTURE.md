@@ -210,9 +210,13 @@ them, lowering gives a reshape a copy stage like any other op.
   can be added in `rewrite/egraph.rs` and consume the same rule sets. Rules
   are never closures, so no rule needs rewriting to switch engines.
 - **Constant folding** runs `ptxc-interp` on subgraphs whose inputs are all
-  constant, as XLA folds with its HloEvaluator. Folding therefore cannot
-  disagree with the golden model. A size limit stops folding from inflating
-  weights, for example by materialising a broadcast.
+  constant, node by node in topological order, as XLA folds with its
+  HloEvaluator. Folding therefore cannot disagree with the golden model. A
+  size limit stops folding from inflating weights: a fold may produce no
+  more bytes than the constants only that node reads, which folding frees,
+  or 4 KiB, whichever is more. It never materialises a broadcast, widens a
+  weight's type or copies a weight another node still reads. The standard
+  passes fold, then eliminate common subexpressions, then dead code.
 - **QDQ folding** (`rules/qdq.rs`) turns a `Dequantize → MatMul/Conv →
   Quantize` chain into `QMatMul`/`QConv`, as TensorRT's explicit
   quantization does, and a `Dequantize → MatMul` chain into a `QMatMul`
