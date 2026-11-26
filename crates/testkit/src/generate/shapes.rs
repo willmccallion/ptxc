@@ -60,7 +60,7 @@ pub(crate) fn dims(rng: &mut Rng, rank: u64) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::Rng;
+    use super::{Rng, dims};
 
     #[test]
     fn the_stream_matches_splitmix64s_reference_outputs() {
@@ -76,7 +76,27 @@ mod tests {
         let mut rng = Rng::new(1);
 
         let hits = (0..4000).filter(|_| rng.chance(1, 4)).count();
+        let most = (0..4000).filter(|_| rng.chance(3, 4)).count();
 
         assert!((900..1100).contains(&hits), "{hits}");
+        assert!((2900..3100).contains(&most), "{most}");
+    }
+
+    #[test]
+    fn a_number_between_two_bounds_reaches_both() {
+        let mut rng = Rng::new(2);
+
+        let drawn: Vec<i64> = (0..200).map(|_| rng.between(-2, 2)).collect();
+
+        assert!(drawn.iter().all(|value| (-2..=2).contains(value)));
+        assert!(drawn.contains(&-2) && drawn.contains(&2));
+    }
+
+    #[test]
+    fn dims_has_one_extent_per_axis() {
+        let mut rng = Rng::new(3);
+
+        assert_eq!(dims(&mut rng, 3).len(), 3);
+        assert_eq!(dims(&mut rng, 0), Vec::<u64>::new());
     }
 }
