@@ -12,6 +12,7 @@ mod device;
 mod families;
 mod fragments;
 mod fused;
+mod graphed;
 mod kernels;
 mod products;
 mod programs;

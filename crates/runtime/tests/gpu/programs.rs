@@ -18,14 +18,18 @@ use ptxc_testkit::sums::interpreted;
 /// Cases drawn per family.
 const CASES_PER_FAMILY: usize = 8;
 
-/// `graph` compiled, saved and reloaded, and run by the eager executor.
-pub(crate) fn run_program(graph: ptxc_graph::Graph, inputs: &[HostTensor]) -> Vec<HostTensor> {
+/// `graph` compiled, saved and reloaded.
+pub(crate) fn compiled(graph: ptxc_graph::Graph) -> ptxc_program::Program {
     let target = preset(SmVersion::SM_89).unwrap();
     let compilation = Compilation::from_graph(graph, target);
     let program = compilation.optimize().unwrap().partition().unwrap().lower().unwrap();
     let program = program.schedule().unwrap().emit().unwrap();
-    let saved = ptxc_program::load(&ptxc_program::save(&program).unwrap()).unwrap();
-    let mut executor = Executor::eager(load(saved, device()).unwrap());
+    ptxc_program::load(&ptxc_program::save(&program).unwrap()).unwrap()
+}
+
+/// `graph` compiled, saved and reloaded, and run by the eager executor.
+pub(crate) fn run_program(graph: ptxc_graph::Graph, inputs: &[HostTensor]) -> Vec<HostTensor> {
+    let mut executor = Executor::eager(load(compiled(graph), device()).unwrap());
     executor.evaluate(inputs).unwrap()
 }
 
@@ -107,7 +111,7 @@ fn inputs_of_the_wrong_count_type_or_shape_are_refused() {
 
 /// `softmax(relu(x w1 + b1) w2 + b2)`: a multi-node graph whose
 /// intermediates live in the arena and whose weights are constants.
-fn mlp() -> (ptxc_graph::Graph, Vec<HostTensor>) {
+pub(crate) fn mlp() -> (ptxc_graph::Graph, Vec<HostTensor>) {
     use ptxc_core::{DType, Dim, Shape};
     use ptxc_graph::{
         Activation, BinaryOp, GraphBuilder, Layout, Op, SoftmaxAttrs, SoftmaxKind, TensorType,
