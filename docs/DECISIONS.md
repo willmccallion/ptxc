@@ -1788,3 +1788,34 @@ the old one.
   the same checker and run by the same rules and interpreter as any
   definition. The refusals keep every inlined definition one the default
   schedules and kernel lowering already handle.
+
+## D81. An FP8 product is held to its f32 sum's error bound
+
+- **Context:** D72 sums an FP8 product's terms in f32 and expects the
+  result within f32's tolerance for the inner extent; the lowering test
+  held it within one step of the result's type. Both allowances are
+  relative to the result, and FP8's range lets terms cancel: in
+  `4.5 × -3.5 + 448 × 57344 + 448 × -57344` f32's spacing at 25690112 is
+  2, so the first term rounds to -16 and the result lands 1.6% from the
+  exact one (#218). No allowance relative to the result holds a sum whose
+  terms cancel.
+- **Options:**
+  - a bound on the magnitudes of the summed terms, the standard one for a
+    float sum;
+  - drawing values whose sums don't cancel, which stops testing large FP8
+    values where the accumulation's precision matters most.
+- **Choice:** the bound.
+  - `SumBound` in `ptxc-testkit` places each exact sum within Higham's
+    `γₙ Σ|xᵢ|` of a wide estimate, `n` counting the f32 roundings on a
+    term's way into it, and `compare_bounded` accepts an element that lies
+    between that interval's ends rounded into the result's type.
+  - An FP8 product's estimate is the reference's product given in f32, and
+    `Σ|xᵢ|` is its product of the operands' magnitudes. `n` is the inner
+    extent plus 3: one fewer additions than terms, two scalings, and one
+    rounding each for the estimate and the magnitudes, which also covers
+    the reference's own f64 roundings.
+  - A product of integer operands sums exactly and keeps one step.
+- **Reason:** the bound holds in any order of summation and however far
+  the terms cancel. Where they don't cancel it is narrower than one step
+  of an f16 or bf16 result, and a few steps of an f32 one.
+- **Supersedes:** D72's tolerance for the lowering's f32 sum.
