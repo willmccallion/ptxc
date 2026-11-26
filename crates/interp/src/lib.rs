@@ -9,4 +9,5 @@ mod movement;
 mod numeric;
 
 pub use error::{InterpError, Malformed};
+pub use eval::evaluate as evaluate_op;
 pub use interpreter::Interpreter;

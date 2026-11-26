@@ -1,8 +1,10 @@
 //! The `Pass` trait and `PassManager`, which verifies the graph after every
 //! pass in debug builds and in tests.
 
-use crate::passes::{Cse, Dce};
+use crate::passes::{ConstFold, Cse, Dce};
+use ptxc_core::SizeError;
 use ptxc_graph::{CycleError, Graph, RewriteError, VerifyError};
+use ptxc_interp::InterpError;
 use thiserror::Error;
 
 /// What a pass did to the graph.
@@ -13,7 +15,7 @@ pub struct PassReport {
 }
 
 /// Why a pass could not run.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[derive(Debug, Error)]
 pub enum PassError {
     /// A rewrite the graph refused.
     #[error(transparent)]
@@ -21,6 +23,12 @@ pub enum PassError {
     /// The graph has a cycle.
     #[error(transparent)]
     Cycle(#[from] CycleError),
+    /// The interpreter could not evaluate a node being folded.
+    #[error(transparent)]
+    Interpret(#[from] InterpError),
+    /// A tensor's size overflows.
+    #[error(transparent)]
+    Size(#[from] SizeError),
 }
 
 /// A transformation of a whole graph, as MLIR's and XLA's passes.
@@ -33,7 +41,7 @@ pub trait Pass: std::fmt::Debug {
 }
 
 /// Why the pass manager stopped.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[derive(Debug, Error)]
 pub enum PipelineError {
     /// A pass failed.
     #[error("{pass} failed: {source}")]
@@ -78,7 +86,7 @@ impl PassManager {
 
     /// The passes the compiler runs.
     pub fn standard() -> Self {
-        Self::new(vec![Box::new(Cse), Box::new(Dce)])
+        Self::new(vec![Box::new(ConstFold), Box::new(Cse), Box::new(Dce)])
     }
 
     /// `self`, verifying the graph after every pass in release builds too.
