@@ -2,12 +2,14 @@
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code: a panic is a test failure")]
 
+use prost::Message;
 use ptxc_core::{Axis, DType, Dim, Shape};
 use ptxc_graph::{
     Activation, BinaryOp, Graph, GraphBuilder, KeepDims, Layout, Op, ReduceAttrs, ReduceOp,
     SoftmaxAttrs, SoftmaxKind, TensorType, TransposeAttrs, UnaryOp, ValueId, ValueName, VariadicOp,
 };
 use ptxc_onnx::{ExportError, ImportOptions, import_model, model_to_bytes};
+use ptxc_onnx_proto::ModelProto;
 
 fn shape(dims: &[u64]) -> Shape {
     Shape::new(dims.iter().copied().map(Dim::new).collect()).unwrap()
@@ -57,11 +59,10 @@ fn every_exported_op() -> Graph {
         v = node(&mut b, op, vec![v, bias]);
     }
     v = node(&mut b, Op::Concat(Axis::new(0)), vec![v, empty]);
-    v = node(
-        &mut b,
-        Op::Transpose(TransposeAttrs { permutation: vec![Axis::new(1), Axis::new(0)] }),
-        vec![v],
-    );
+    v = node(&mut b, Op::Reshape(shape(&[2, 4, 1])), vec![v]);
+    // Not ONNX's default permutation, which reverses the axes.
+    let permutation = vec![Axis::new(1), Axis::new(0), Axis::new(2)];
+    v = node(&mut b, Op::Transpose(TransposeAttrs { permutation }), vec![v]);
     v = node(&mut b, Op::Reshape(shape(&[8, 1])), vec![v]);
     v = node(&mut b, reduce(ReduceOp::Sum, &[1], KeepDims::Keep), vec![v]);
     v = node(&mut b, reduce(ReduceOp::Mean, &[0], KeepDims::Keep), vec![v]);
@@ -122,4 +123,15 @@ fn an_op_without_an_export_is_an_error_naming_it() {
     let error = model_to_bytes(&graph).unwrap_err();
 
     assert_eq!(error, ExportError::Op("Unary(Floor)".to_owned()));
+}
+
+#[test]
+fn the_model_records_its_ir_version_and_who_wrote_it() {
+    let bytes = model_to_bytes(&every_exported_op()).unwrap();
+
+    let model = ModelProto::decode(bytes.as_slice()).unwrap();
+
+    assert_eq!(model.ir_version, Some(10));
+    assert_eq!(model.producer_name.as_deref(), Some("ptxc"));
+    assert_eq!(model.graph.unwrap().name.as_deref(), Some("ptxc"));
 }
