@@ -1,7 +1,8 @@
 //! Canonicalisation: each computation given one form.
 
+use super::rewrite_greedily;
 use crate::pass::{Pass, PassError, PassReport};
-use crate::rewrite::{GreedyEngine, RewriteEngine, canonical};
+use crate::rewrite::canonical;
 use ptxc_graph::Graph;
 
 /// Applies the canonical rewrite rules until none matches, as MLIR's
@@ -15,7 +16,6 @@ impl Pass for Canonicalize {
     }
 
     fn run(&self, graph: &mut Graph) -> Result<PassReport, PassError> {
-        let applied = GreedyEngine.apply(graph, &canonical())?;
-        Ok(PassReport { changed: !applied.is_empty() })
+        rewrite_greedily(graph, &canonical())
     }
 }

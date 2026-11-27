@@ -1,7 +1,8 @@
 //! Algebraic simplification, batch normalisations folded into convolutions.
 
+use super::rewrite_greedily;
 use crate::pass::{Pass, PassError, PassReport};
-use crate::rewrite::{GreedyEngine, RewriteEngine, algebraic};
+use crate::rewrite::algebraic;
 use ptxc_graph::Graph;
 
 /// Applies the algebraic rewrite rules until none matches, as XLA's
@@ -16,7 +17,6 @@ impl Pass for Simplify {
     }
 
     fn run(&self, graph: &mut Graph) -> Result<PassReport, PassError> {
-        let applied = GreedyEngine.apply(graph, &algebraic())?;
-        Ok(PassReport { changed: !applied.is_empty() })
+        rewrite_greedily(graph, &algebraic())
     }
 }
