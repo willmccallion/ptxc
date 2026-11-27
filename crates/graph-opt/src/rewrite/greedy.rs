@@ -3,6 +3,7 @@
 use super::engine::RewriteEngine;
 use super::pattern::Bindings;
 use super::rule::RewriteRule;
+use super::template::Replacement;
 use crate::pass::PassError;
 use ptxc_graph::{Graph, NodeId, Rewriter, ValueId};
 
@@ -29,10 +30,12 @@ impl RewriteEngine for GreedyEngine {
         let mut applied = Vec::new();
         let mut rewriter = graph.rewriter();
         for node in order {
-            let Some((rule, output, bindings)) = first_match(rewriter.graph(), node, rules) else {
+            let Some(Applicable { rule, output, bindings, replacement }) =
+                first_applicable(rewriter.graph(), node, rules)
+            else {
                 continue;
             };
-            let replacement = rule.rhs.instantiate(&mut rewriter, &bindings)?;
+            let replacement = replacement.build(&mut rewriter)?;
             let Some(replacement) = replacement.filter(|&value| value != output) else { continue };
             let matched = rule.lhs.nodes(rewriter.graph(), &bindings);
             rewriter.replace_all_uses(output, replacement)?;
@@ -46,18 +49,30 @@ impl RewriteEngine for GreedyEngine {
     }
 }
 
-/// The first of `rules` whose pattern matches `node`'s only output and
-/// whose guard holds, with that output and the match's bindings.
-fn first_match<'r>(
+/// A rule that applies to a node's output.
+struct Applicable<'r> {
+    rule: &'r RewriteRule,
+    output: ValueId,
+    bindings: Bindings,
+    replacement: Replacement,
+}
+
+/// The first of `rules` that applies to `node`'s only output: its pattern
+/// matches, its guard holds and its template resolves.
+fn first_applicable<'r>(
     graph: &Graph,
     node: NodeId,
     rules: &'r [RewriteRule],
-) -> Option<(&'r RewriteRule, ValueId, Bindings)> {
+) -> Option<Applicable<'r>> {
     let mut outputs = graph.node(node)?.outputs().iter();
     let (Some(&output), None) = (outputs.next(), outputs.next()) else { return None };
     rules.iter().find_map(|rule| {
         let bindings = rule.lhs.matches(graph, output)?;
-        rule.guard.holds(graph, &bindings).then_some((rule, output, bindings))
+        if !rule.guard.holds(graph, &bindings) {
+            return None;
+        }
+        let replacement = rule.rhs.resolve(graph, &bindings)?;
+        Some(Applicable { rule, output, bindings, replacement })
     })
 }
 
@@ -78,8 +93,14 @@ fn erase_unread(rewriter: &mut Rewriter<'_>, nodes: &[NodeId]) -> Result<(), Pas
 #[cfg(test)]
 mod tests {
     use super::GreedyEngine;
+    use crate::rewrite::pattern::{Capture, Pattern};
+    use crate::rewrite::rule::{Guard, RewriteRule};
+    use crate::rewrite::template::{OpTemplate, Template};
     use crate::rewrite::{RewriteEngine, canonical};
-    use ptxc_graph::text::parse;
+    use ptxc_core::DType;
+    use ptxc_core::float::Overflow;
+    use ptxc_graph::text::{parse, print};
+    use ptxc_graph::{BinaryOp, CastAttrs, Op, UnaryOp};
 
     #[test]
     fn the_engine_reports_each_rule_it_applies_in_order() {
@@ -98,5 +119,38 @@ graph(%x: f32[2, 3]) {
 
         assert_eq!(applied, ["cast-to-own-type", "transpose-in-place", "reshape-to-own-shape"]);
         assert_eq!(graph.nodes().count(), 1);
+    }
+
+    /// The rule `name`, replacing `neg x` with `rhs`.
+    fn from_negation(name: &'static str, rhs: Template) -> RewriteRule {
+        let lhs = Pattern::Op {
+            op: "neg",
+            operands: vec![Pattern::Any(Capture("x"))],
+            capture: Capture("y"),
+        };
+        RewriteRule { name, lhs, rhs, guard: Guard::All(Vec::new()) }
+    }
+
+    fn node(op: Op, operands: Vec<Template>) -> Template {
+        Template::Node { op: OpTemplate::Exact(op), operands }
+    }
+
+    #[test]
+    fn a_rule_building_a_node_its_type_rule_refuses_does_not_apply_and_the_next_rule_does() {
+        let text = "graph(%x: f32[3]) {\n  %0 = neg %x : f32[3]\n  return %0\n}\n";
+        let mut graph = parse(text, &[]).unwrap();
+        let x = Template::Captured(Capture("x"));
+        let to_i32 = Op::Cast(CastAttrs::new(DType::I32, Overflow::Saturate));
+        let refused =
+            node(Op::Binary(BinaryOp::Add), vec![x.clone(), node(to_i32, vec![x.clone()])]);
+        let rules = [
+            from_negation("refused", refused),
+            from_negation("absolute", node(Op::Unary(UnaryOp::Abs), vec![x])),
+        ];
+
+        let applied = GreedyEngine.apply(&mut graph, &rules).unwrap();
+
+        assert_eq!(applied, ["absolute"]);
+        assert_eq!(print(&graph), "graph(%x: f32[3]) {\n  %0 = abs %x : f32[3]\n  return %0\n}\n");
     }
 }
