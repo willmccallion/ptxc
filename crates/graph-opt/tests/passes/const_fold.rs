@@ -196,3 +196,146 @@ fn a_fold_that_would_copy_a_weight_another_node_reads_is_left() {
     assert_eq!(report, UNCHANGED);
     assert!(print(&graph).contains("transpose"), "{}", print(&graph));
 }
+
+fn vector_type(length: u64) -> TensorType {
+    TensorType::new(DType::F32, Shape::new(vec![Dim::new(length)]).unwrap(), Layout::RowMajor)
+}
+
+/// A constant vector of `length` f32s counting up from `start`.
+fn counting(builder: &mut GraphBuilder, length: u16, start: u16) -> ptxc_graph::ValueId {
+    let values: Vec<f32> = (start..start + length).map(f32::from).collect();
+    builder.add_constant(HostTensor::vector(values.into()))
+}
+
+fn binary(
+    builder: &mut GraphBuilder,
+    op: BinaryOp,
+    operands: Vec<ptxc_graph::ValueId>,
+) -> ptxc_graph::ValueId {
+    builder.add_node(Op::Binary(op), operands).unwrap()[0]
+}
+
+/// The ops of `graph`'s nodes, by mnemonic, in order.
+fn ops(graph: &Graph) -> Vec<&'static str> {
+    graph.nodes().map(|(_, node)| node.op().mnemonic()).collect()
+}
+
+#[test]
+fn constants_two_results_share_fold_together_when_together_they_free_what_they_make() {
+    // Two 8 KiB vectors each read twice: no node alone frees one, and each
+    // result passes `SMALL_RESULT`; together the two results take what the
+    // two vectors free, as a batch normalisation folded into a convolution
+    // reads its parameters for both the weights and the bias.
+    let mut builder = GraphBuilder::new();
+    let (x, y) = (builder.add_input(vector_type(2048)), builder.add_input(vector_type(2048)));
+    let (scale, variance) = (counting(&mut builder, 2048, 1), counting(&mut builder, 2048, 3));
+    let quotient = binary(&mut builder, BinaryOp::Div, vec![scale, variance]);
+    let product = binary(&mut builder, BinaryOp::Mul, vec![scale, variance]);
+    let outputs = vec![
+        binary(&mut builder, BinaryOp::Add, vec![x, quotient]),
+        binary(&mut builder, BinaryOp::Add, vec![y, product]),
+    ];
+    let mut graph = builder.finish(outputs).unwrap();
+
+    let report = ConstFold.run(&mut graph).unwrap();
+
+    assert_eq!(report, CHANGED);
+    assert_eq!(ops(&graph), ["add", "add"]);
+}
+
+#[test]
+fn a_cone_too_large_to_fold_whole_still_folds_its_small_nodes() {
+    let mut builder = GraphBuilder::new();
+    let (x, y) = (builder.add_input(vector_type(2048)), builder.add_input(vector_type(1)));
+    let half = builder.add_constant(HostTensor::vector(vec![0.5_f32].into()));
+    let shape = Shape::new(vec![Dim::new(2048)]).unwrap();
+    let broadcast = builder.add_node(Op::Expand(shape), vec![half]).unwrap()[0];
+    let negated = builder.add_node(Op::Unary(ptxc_graph::UnaryOp::Neg), vec![half]).unwrap()[0];
+    let outputs = vec![
+        binary(&mut builder, BinaryOp::Add, vec![x, broadcast]),
+        binary(&mut builder, BinaryOp::Add, vec![y, negated]),
+    ];
+    let mut graph = builder.finish(outputs).unwrap();
+
+    let report = ConstFold.run(&mut graph).unwrap();
+
+    assert_eq!(report, CHANGED);
+    assert_eq!(ops(&graph), ["expand", "add", "add"]);
+}
+
+#[test]
+fn two_folds_that_would_copy_one_weight_are_left() {
+    let mut builder = GraphBuilder::new();
+    let (x, y) = (builder.add_input(vector_type(2048)), builder.add_input(vector_type(2048)));
+    let weight = counting(&mut builder, 2048, 0);
+    let negated = builder.add_node(Op::Unary(ptxc_graph::UnaryOp::Neg), vec![weight]).unwrap()[0];
+    let absolute = builder.add_node(Op::Unary(ptxc_graph::UnaryOp::Abs), vec![weight]).unwrap()[0];
+    let outputs = vec![
+        binary(&mut builder, BinaryOp::Add, vec![x, negated]),
+        binary(&mut builder, BinaryOp::Add, vec![y, absolute]),
+    ];
+    let mut graph = builder.finish(outputs).unwrap();
+
+    let report = ConstFold.run(&mut graph).unwrap();
+
+    assert_eq!(report, UNCHANGED);
+    assert_eq!(ops(&graph), ["neg", "abs", "add", "add"]);
+}
+
+#[test]
+fn a_constant_no_larger_than_the_allowance_two_computations_share_pools_nothing() {
+    // A sum frees an 8 KiB matrix it reduces to one value; a broadcast of
+    // the 4 KiB scale both read makes 8 KiB and frees nothing, so it stays.
+    let mut builder = GraphBuilder::new();
+    let matrix_type = TensorType::new(
+        DType::F32,
+        Shape::new(vec![Dim::new(2), Dim::new(1024)]).unwrap(),
+        Layout::RowMajor,
+    );
+    let (x, y) = (builder.add_input(vector_type(1)), builder.add_input(matrix_type));
+    let scale = counting(&mut builder, 1024, 1);
+    let values: Vec<f32> = (0..2048_u16).map(f32::from).collect();
+    let matrix = builder.add_constant(
+        HostTensor::new(Shape::new(vec![Dim::new(2), Dim::new(1024)]).unwrap(), values.into())
+            .unwrap(),
+    );
+    let scaled = binary(&mut builder, BinaryOp::Mul, vec![matrix, scale]);
+    let sum = ptxc_graph::ReduceAttrs {
+        op: ptxc_graph::ReduceOp::Sum,
+        axes: vec![Axis::new(0), Axis::new(1)],
+        keep_dims: ptxc_graph::KeepDims::Drop,
+    };
+    let reduced = builder.add_node(Op::Reduce(sum), vec![scaled]).unwrap()[0];
+    let shape = Shape::new(vec![Dim::new(2), Dim::new(1024)]).unwrap();
+    let broadcast = builder.add_node(Op::Expand(shape), vec![scale]).unwrap()[0];
+    let outputs = vec![
+        binary(&mut builder, BinaryOp::Add, vec![x, reduced]),
+        binary(&mut builder, BinaryOp::Add, vec![y, broadcast]),
+    ];
+    let mut graph = builder.finish(outputs).unwrap();
+
+    let report = ConstFold.run(&mut graph).unwrap();
+
+    assert_eq!(report, CHANGED);
+    assert_eq!(ops(&graph), ["expand", "add", "add"]);
+}
+
+#[test]
+fn a_broadcast_another_fold_reads_is_still_left() {
+    // The broadcast is an intermediate of a two-node cone, never a stored
+    // constant, so folding it frees none of its 8 KiB.
+    let mut builder = GraphBuilder::new();
+    let x = builder.add_input(vector_type(2048));
+    let half = builder.add_constant(HostTensor::vector(vec![0.5_f32].into()));
+    let shape = Shape::new(vec![Dim::new(2048)]).unwrap();
+    let broadcast = builder.add_node(Op::Expand(shape), vec![half]).unwrap()[0];
+    let negated =
+        builder.add_node(Op::Unary(ptxc_graph::UnaryOp::Neg), vec![broadcast]).unwrap()[0];
+    let output = binary(&mut builder, BinaryOp::Add, vec![x, negated]);
+    let mut graph = builder.finish(vec![output]).unwrap();
+
+    let report = ConstFold.run(&mut graph).unwrap();
+
+    assert_eq!(report, UNCHANGED);
+    assert_eq!(ops(&graph), ["expand", "neg", "add"]);
+}
