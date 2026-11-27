@@ -217,10 +217,13 @@ them, lowering gives a reshape a copy stage like any other op.
 - **Constant folding** runs `ptxc-interp` on subgraphs whose inputs are all
   constant, node by node in topological order, as XLA folds with its
   HloEvaluator. Folding therefore cannot disagree with the golden model. A
-  size limit stops folding from inflating weights: a fold may produce no
-  more bytes than the constants only that node reads, which folding frees,
-  or 4 KiB, whichever is more. It never materialises a broadcast, widens a
-  weight's type or copies a weight another node still reads. The standard
+  size limit stops folding from inflating weights. The nodes computed from
+  constants are weighed in cones, joined by the values they pass and the
+  constants of more than 4 KiB they share: a cone folds whole if the
+  results it leaves take no more bytes than the constants only it reads,
+  which folding frees, or 4 KiB, whichever is more; otherwise each of its
+  nodes is weighed alone (D85). It never materialises a broadcast, widens
+  a weight's type or copies a weight another node still reads. The standard
   passes simplify, then fold what that leaves, then canonicalise, then
   eliminate common subexpressions, then dead code.
 - **QDQ folding** (`rules/qdq.rs`) turns a `Dequantize → MatMul/Conv →

@@ -1927,3 +1927,39 @@ the old one.
   model, as all folding is (D12), and checked like any other subgraph; a
   rule stays data. ResNet-50 exported without the exporter's optimiser has
   53 batch normalisations, and all fold.
+
+## D85. Constant folding weighs constant subgraphs as cones
+
+- **Context:** folding weighed each node alone: a node could leave no more
+  bytes than the constants only it reads, or 4 KiB. A batch normalisation
+  folded into a convolution (D84) reads its per-channel parameters for both
+  the new weights and the new bias, so no node computing from them reads
+  them alone, and at 2,048 channels each f32 vector is 8 KiB. ResNet-50
+  exported with its batch normalisations compiled to 75 kernels with them
+  folded, against 59 without.
+- **Options:**
+  - raise the 4 KiB allowance, which would also materialise the broadcasts
+    it exists to refuse;
+  - have the rule copy the parameters for each path, which inflates the
+    weights to game the size check;
+  - weigh the nodes computed from constants together, by what folding them
+    all leaves and frees.
+- **Choice:** cones.
+  - The nodes computed from constants alone are joined into cones by the
+    values they pass and the constants of more than 4 KiB they share. A
+    smaller shared constant joins nothing: its bytes are within the
+    allowance either way, and joining by it would let one computation's
+    freed bytes pay for an unrelated one's, such as a broadcast of a scalar
+    some other fold also reads.
+  - A cone folds whole if the results it leaves, the values something
+    outside it reads, take no more bytes than the constants only it reads,
+    or 4 KiB. A cone that does not fit is folded node by node under the old
+    rule, so nothing that folded before stops folding.
+- **Reason:** the rule exists so folding never inflates the weights, and a
+  cone's intermediates vanish with it; measuring what the cone leaves
+  against what it frees applies the rule to what actually disappears. The
+  unfolded ResNet-50 now compiles to 58 kernels with 102,121,888 bytes of
+  constants, exactly the exporter's own folded model. ResNet-50 and
+  BERT-base are unchanged. GPT-2's causal mask now folds with its position
+  lookup, one cone whose 3 MB position table outweighs the 64 KB mask: one
+  kernel fewer, 65,536 bytes less arena and 60,672 more of constants.
