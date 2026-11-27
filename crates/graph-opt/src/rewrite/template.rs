@@ -1,10 +1,13 @@
-//! `Template`: the right-hand side of a rule, instantiated from a match.
+//! `Template`: the right-hand side of a rule, resolved against a match.
+
+mod replacement;
 
 use super::pattern::{Bindings, Capture};
-use crate::pass::PassError;
 use ptxc_core::float::{Bf16, F16};
 use ptxc_core::{Axis, DType, Dim, HostTensor, Shape, TensorData};
-use ptxc_graph::{Graph, Op, Rewriter, TransposeAttrs, ValueId};
+use ptxc_graph::{Graph, Op, TensorType, TransposeAttrs};
+
+pub(crate) use replacement::Replacement;
 
 /// What a match is replaced with, as MLIR's declarative rewrites build
 /// their result ops.
@@ -49,63 +52,47 @@ pub(crate) enum OpTemplate {
 }
 
 impl Template {
-    /// The value replacing a match with `bindings`, building any nodes and
-    /// constants through `rewriter`; `None` if it reads a capture or an
-    /// attribute the match lacks.
-    pub(crate) fn instantiate(
-        &self,
-        rewriter: &mut Rewriter<'_>,
-        bindings: &Bindings,
-    ) -> Result<Option<ValueId>, PassError> {
+    /// What replaces a match with `bindings` in `graph`; `None`, so the
+    /// rule does not apply, if the template reads a capture or an attribute
+    /// the match lacks, or builds a node whose type rule refuses it.
+    pub(crate) fn resolve(&self, graph: &Graph, bindings: &Bindings) -> Option<Replacement> {
         match self {
-            Self::Captured(capture) => Ok(bindings.get(capture).copied()),
+            Self::Captured(capture) => bindings.get(capture).copied().map(Replacement::Existing),
             Self::Node { op, operands } => {
-                let mut values = Vec::with_capacity(operands.len());
-                for operand in operands {
-                    let Some(value) = operand.instantiate(rewriter, bindings)? else {
-                        return Ok(None);
-                    };
-                    values.push(value);
-                }
-                let Some(op) = op.resolve(rewriter.graph(), bindings, &values) else {
-                    return Ok(None);
-                };
-                let outputs =
-                    rewriter.add_node(op, values).map_err(ptxc_graph::RewriteError::from)?;
-                Ok(outputs.first().copied())
+                let operands: Vec<Replacement> = operands
+                    .iter()
+                    .map(|operand| operand.resolve(graph, bindings))
+                    .collect::<Option<_>>()?;
+                let types: Vec<TensorType> =
+                    operands.iter().map(|operand| operand.ty(graph)).collect();
+                let op = op.resolve(graph, bindings, &types)?;
+                Replacement::node(op, operands, &types)
             }
             Self::Epsilon { of, like } => {
-                let graph = rewriter.graph();
-                let epsilon = bindings.get(of).and_then(|&value| batch_norm_epsilon(graph, value));
-                let dtype = bindings.get(like).map(|&value| graph.value(value).ty().dtype());
-                let scalar =
-                    epsilon.zip(dtype).and_then(|(epsilon, dtype)| float_scalar(dtype, epsilon));
-                Ok(scalar.map(|tensor| rewriter.add_constant(tensor)))
+                let Op::BatchNorm(attrs) = producer_op(graph, bindings, of)? else { return None };
+                let dtype = graph.value(*bindings.get(like)?).ty().dtype();
+                float_scalar(dtype, attrs.epsilon.get()).map(Replacement::Constant)
             }
         }
     }
 }
 
 impl OpTemplate {
-    /// The op, for a node reading `operands`.
-    fn resolve(&self, graph: &Graph, bindings: &Bindings, operands: &[ValueId]) -> Option<Op> {
-        let node_op = |capture: &Capture| {
-            let node = graph.producer(*bindings.get(capture)?)?;
-            Some(graph.node(node)?.op().clone())
-        };
+    /// The op, for a node reading operands of `types`.
+    fn resolve(&self, graph: &Graph, bindings: &Bindings, types: &[TensorType]) -> Option<Op> {
         match self {
             Self::Exact(op) => Some(op.clone()),
-            Self::Of(capture) => node_op(capture),
+            Self::Of(capture) => producer_op(graph, bindings, capture).cloned(),
             Self::AlongFirstAxisOf(capture) => {
                 let rank = graph.value(*bindings.get(capture)?).ty().shape().dims().len();
-                let length = graph.value(*operands.first()?).ty().shape().element_count().get();
+                let length = types.first()?.shape().element_count().get();
                 let dims =
                     std::iter::once(length).chain(std::iter::repeat_n(1, rank.checked_sub(1)?));
                 Some(Op::Reshape(Shape::new(dims.map(Dim::new).collect()).ok()?))
             }
             Self::Composed { inner, outer } => {
                 let (Op::Transpose(first), Op::Transpose(second)) =
-                    (node_op(inner)?, node_op(outer)?)
+                    (producer_op(graph, bindings, inner)?, producer_op(graph, bindings, outer)?)
                 else {
                     return None;
                 };
@@ -121,12 +108,10 @@ impl OpTemplate {
     }
 }
 
-/// The epsilon of the batch normalisation that gives `value`.
-fn batch_norm_epsilon(graph: &Graph, value: ValueId) -> Option<f32> {
-    match graph.node(graph.producer(value)?)?.op() {
-        Op::BatchNorm(attrs) => Some(attrs.epsilon.get()),
-        _ => None,
-    }
+/// The op of the node that gives the captured value.
+fn producer_op<'g>(graph: &'g Graph, bindings: &Bindings, capture: &Capture) -> Option<&'g Op> {
+    let node = graph.producer(*bindings.get(capture)?)?;
+    Some(graph.node(node)?.op())
 }
 
 /// `value` as a scalar of the float type `dtype`.
