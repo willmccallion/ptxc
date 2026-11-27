@@ -114,3 +114,67 @@ fn an_fp8_product_whose_terms_cancel_lies_within_its_sum_s_bound() {
 
     check_fp8_product(&attrs, &[lhs, rhs]).unwrap();
 }
+
+/// Integer results within one step, float ones within their type's
+/// tolerance: folding moves a result's rounding onto the integer sum.
+const fn folded_tolerance(dtype: DType) -> Tolerance {
+    if dtype.is_float() { Tolerance::for_dtype(dtype) } else { Tolerance::QUANTIZED }
+}
+
+#[test]
+fn qdq_chains_fold_and_lower_to_what_the_unfolded_graph_gives() {
+    let product = "\
+graph(%a: u8[2, 4], %b: i8[4, 3], %bt: i8[3, 4], %c: f32[3]) {
+  %0 = dequantize<params=[u8, [0.05, 128]], output=f32> %a : f32[2, 4]
+  %1 = dequantize<params=[i8, 1, [[0.02, 0], [0.03, 0], [0.01, 0]]], output=f32> %b : f32[4, 3]
+  %2 = matmul %0, %1 : f32[2, 3]
+  %3 = quantize<params=[u8, [0.1, 120]]> %2 : u8[2, 3]
+  %4 = dequantize<params=[i8, 0, [[0.02, 0], [0.03, 0], [0.01, 0]]], output=f32> %bt : f32[3, 4]
+  %5 = gemm<a=as_is, b=transposed, alpha=1.0, beta=1.0> %0, %4, %c : f32[2, 3]
+  return %3, %5
+}
+";
+    let conv = "\
+graph(%x: u8[1, 2, 3, 3], %w: i8[2, 2, 2, 2], %b: i32[2]) {
+  %0 = dequantize<params=[u8, [0.0625, 128]], output=f32> %x : f32[1, 2, 3, 3]
+  %1 = dequantize<params=[i8, 0, [[0.03125, 0], [0.015625, 0]]], output=f32> %w : f32[2, 2, 2, 2]
+  %2 = dequantize<params=[i32, 0, [[0.001953125, 0], [0.0009765625, 0]]], output=f32> %b : f32[2]
+  %3 = conv<groups=1, axes=[[1, 1, 0, 0], [1, 1, 0, 0]]> %0, %1, %2 : f32[1, 2, 2, 2]
+  %4 = quantize<params=[u8, [0.05, 100]]> %3 : u8[1, 2, 2, 2]
+  return %4
+}
+";
+    let tensor = |dims: &[u64], data: TensorData| {
+        HostTensor::new(Shape::new(dims.iter().copied().map(Dim::new).collect()).unwrap(), data)
+            .unwrap()
+    };
+    let activations = vec![130_u8, 200, 50, 128, 255, 0, 100, 140];
+    let weights = vec![12_i8, -7, 33, -50, 18, 4, 91, -2, -64, 7, 25, -11];
+    let image =
+        vec![130_u8, 200, 50, 128, 255, 0, 100, 140, 90, 60, 170, 128, 30, 220, 110, 145, 75, 190];
+    let filters = vec![3_i8, -5, 7, 2, -4, 6, 1, -8, 5, 2, -3, 9, -6, 4, 8, -1];
+    let cases = [
+        (
+            product,
+            vec![
+                tensor(&[2, 4], activations.into()),
+                tensor(&[4, 3], weights.clone().into()),
+                tensor(&[3, 4], weights.into()),
+                tensor(&[3], vec![0.5_f32, -1.0, 0.25].into()),
+            ],
+        ),
+        (
+            conv,
+            vec![
+                tensor(&[1, 2, 3, 3], image.into()),
+                tensor(&[2, 2, 2, 2], filters.into()),
+                tensor(&[2], vec![40_i32, -25].into()),
+            ],
+        ),
+    ];
+
+    for (text, inputs) in cases {
+        let graph = ptxc_graph::text::parse(text, &[]).unwrap();
+        check_within(graph, &inputs, folded_tolerance).unwrap();
+    }
+}

@@ -1,5 +1,6 @@
 //! `Template`: the right-hand side of a rule, resolved against a match.
 
+mod quantized;
 mod replacement;
 
 use super::pattern::{Bindings, Capture};
@@ -7,6 +8,7 @@ use ptxc_core::float::{Bf16, F16};
 use ptxc_core::{Axis, DType, Dim, HostTensor, Shape, TensorData};
 use ptxc_graph::{Graph, Op, TensorType, TransposeAttrs};
 
+pub(crate) use quantized::{ProductOperand, QuantizedTemplate, dequantized_params};
 pub(crate) use replacement::Replacement;
 
 /// What a match is replaced with, as MLIR's declarative rewrites build
@@ -49,6 +51,8 @@ pub(crate) enum OpTemplate {
         /// The value the second gives.
         outer: Capture,
     },
+    /// A quantized op on the grids of captured quantization nodes.
+    Quantized(QuantizedTemplate),
 }
 
 impl Template {
@@ -104,6 +108,7 @@ impl OpTemplate {
                     permutation: permutation.collect::<Option<Vec<Axis>>>()?,
                 }))
             }
+            Self::Quantized(quantized) => quantized.resolve(graph, bindings),
         }
     }
 }

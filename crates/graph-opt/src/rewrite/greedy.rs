@@ -15,8 +15,9 @@ use ptxc_graph::{Graph, NodeId, Rewriter, ValueId};
 // matches a node by what it reads, and a rewrite only changes the readers
 // of the value it replaces, which come after it; so one sweep in
 // topological order visits each node after every rewrite that can change
-// its match. The nodes a template builds are not visited: no rule set yet
-// matches what another rule builds.
+// its match. The nodes a template builds are not visited themselves, though
+// a later node's match may read them, as a quantization reads the product
+// QDQ folding builds: no rule set yet matches at a node a rule builds.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct GreedyEngine;
 

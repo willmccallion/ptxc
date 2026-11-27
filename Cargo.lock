@@ -949,6 +949,7 @@ dependencies = [
  "ptxc-core",
  "ptxc-graph",
  "ptxc-interp",
+ "ptxc-testkit",
  "thiserror",
 ]
 

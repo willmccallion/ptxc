@@ -1963,3 +1963,52 @@ the old one.
   BERT-base are unchanged. GPT-2's causal mask now folds with its position
   lookup, one cone whose 3 MB position table outweighs the 64 KB mask: one
   kernel fewer, 65,536 bytes less arena and 60,672 more of constants.
+
+## D86. QDQ folding composes, and a rule applies only if its op type-checks
+
+- **Context:** QDQ models write quantized compute as float compute between
+  `DequantizeLinear` and `QuantizeLinear` nodes, which TensorRT's explicit
+  quantization folds into quantized kernels (#201). A matmul's chain has
+  two endings: quantized again, or left in float (D72). Whether a chain
+  folds depends on more than its shape: `QMatMul` takes no FP8 operands
+  with a requantized result, nor maps varying along the summed axis, and
+  `QConv` adds an `i32` bias to the integer sum only on that sum's grid.
+- **Options:**
+  - one rule per whole chain, `quantize(matmul(dequantize, dequantize))`
+    beside `matmul(dequantize, dequantize)`, with guards restating every
+    condition the quantized op's type rule checks;
+  - compose: fold the product first, then requantize a float-result
+    product a quantization alone reads; and let a rule whose built op its
+    type rule refuses simply not apply.
+- **Choice:** compose, with the type rule as the one judge of what a
+  quantized op can express.
+  - A `Template` resolves into a `Replacement` against the unchanged graph,
+    each node it would build checked by its op's type rule, before the
+    engine builds anything. A refusal means the rule does not apply, and
+    the engine tries the next one; it never leaves half a replacement
+    behind.
+  - `FoldQdq` runs the `qdq` rules after `Simplify` and before
+    `ConstFold`, which would otherwise dequantize constant weights into
+    float ones.
+  - `matmul(dequantize(a), dequantize(b))` is `QMatMul(a, b)` giving the
+    product's float type. An unscaled `Gemm` (alpha 1, and beta 1 if it
+    reads `C`) folds the same way: an operand it transposes is read
+    through a `Transpose`, whose per-axis map moves to the other axis, and
+    `C` is added after. The greedy partitioner takes the transposes into
+    the product's reads and the addition into its epilogue (D82).
+  - `quantize(QMatMul)` with a float result it alone reads is that product
+    requantized. The sweep visits the quantization after the product it
+    reads, so one pass folds the whole chain.
+  - `quantize(conv(dequantize(x), dequantize(w)[, dequantize(b)]))` is a
+    `QConv` if the convolution has no other reader, the grids are integer
+    ones, and the bias has zero point 0 and, per output channel, the input
+    scale times the weight scale in f32, exactly.
+  - Guards gain `IntegerElements`, `UnscaledGemm` and `BiasOnGrid`.
+- **Reason:** composing keeps each rule one step a reader can check, and
+  every chain the type rules accept folds without a guard repeating them.
+  Resolving before building makes "does not apply" leave the graph exactly
+  as it was. `QConv`'s type rule takes FP8 grids that neither the
+  interpreter nor the lowering computes yet, so its rules alone guard for
+  integer grids; a `NOTE` records that TensorRT folds FP8 convolutions too.
+  TensorRT also folds `C` into the product; `QMatMul` takes no bias, and
+  the addition fused as an epilogue does the same work.

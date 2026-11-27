@@ -6,6 +6,7 @@ mod canonicalize;
 mod const_fold;
 mod cse;
 mod dce;
+mod fold_qdq;
 mod manager;
 mod partition;
 mod simplify;
