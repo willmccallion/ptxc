@@ -19,3 +19,6 @@ ptxc-core.workspace = true
 ptxc-graph.workspace = true
 ptxc-interp.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+ptxc-testkit.workspace = true

@@ -224,12 +224,18 @@ them, lowering gives a reshape a copy stage like any other op.
   which folding frees, or 4 KiB, whichever is more; otherwise each of its
   nodes is weighed alone (D85). It never materialises a broadcast, widens
   a weight's type or copies a weight another node still reads. The standard
-  passes simplify, then fold what that leaves, then canonicalise, then
-  eliminate common subexpressions, then dead code.
-- **QDQ folding** (`rules/qdq.rs`) turns a `Dequantize → MatMul/Conv →
-  Quantize` chain into `QMatMul`/`QConv`, as TensorRT's explicit
-  quantization does, and a `Dequantize → MatMul` chain into a `QMatMul`
-  with a float result (D72).
+  passes simplify, then fold quantization, then fold constants, then
+  canonicalise, then eliminate common subexpressions, then dead code.
+- **QDQ folding** (`rules/qdq.rs`, D86) turns a `Dequantize → MatMul` chain
+  into a `QMatMul` with a float result (D72), as TensorRT's explicit
+  quantization does. An unscaled `Dequantize → Gemm` folds the same way,
+  reading an operand it transposes through a `Transpose` and adding `C`
+  after. A `Quantize` of that product, its only reader, requantizes it,
+  and a `Dequantize → Conv → Quantize` chain becomes a `QConv` where its
+  bias is on the grid of the integer sum. It runs before constant folding,
+  which would otherwise dequantize constant weights. A rule applies only
+  if the op it builds passes its type rule, so a requantized product of
+  FP8 operands, say, stays a float one.
 - **Layout** chooses NHWC or NCHW per convolution chain and pushes
   transposes to group boundaries. A layout is part of `TensorType`, never an
   implicit convention.

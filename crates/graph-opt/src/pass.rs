@@ -1,7 +1,7 @@
 //! The `Pass` trait and `PassManager`, which verifies the graph after every
 //! pass in debug builds and in tests.
 
-use crate::passes::{Canonicalize, ConstFold, Cse, Dce, Simplify};
+use crate::passes::{Canonicalize, ConstFold, Cse, Dce, FoldQdq, Simplify};
 use ptxc_core::SizeError;
 use ptxc_graph::{CycleError, Graph, RewriteError, VerifyError};
 use ptxc_interp::InterpError;
@@ -88,6 +88,7 @@ impl PassManager {
     pub fn standard() -> Self {
         Self::new(vec![
             Box::new(Simplify),
+            Box::new(FoldQdq),
             Box::new(ConstFold),
             Box::new(Canonicalize),
             Box::new(Cse),

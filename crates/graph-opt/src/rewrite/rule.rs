@@ -1,10 +1,10 @@
 //! `RewriteRule`: a named pattern, template and guard, held as data.
 
 use super::pattern::{Bindings, Capture, Pattern};
-use super::template::Template;
-use ptxc_core::TensorData;
+use super::template::{Template, dequantized_params};
 use ptxc_core::float::{Bf16, F16};
-use ptxc_graph::{Graph, Op, Use, ValueDef, ValueId};
+use ptxc_core::{Affine, DType, Granularity, QuantParams, Scale, TensorData, ZeroPoint};
+use ptxc_graph::{F32Attr, Graph, Op, Orientation, Use, ValueDef, ValueId};
 
 /// A rewrite: where `lhs` matches and `guard` holds, the matched value's
 /// readers read `rhs` instead.
@@ -36,6 +36,29 @@ pub(crate) enum Guard {
     SoleReader(Capture),
     /// The value is a constant whose every element is `Fill`'s.
     Filled(Capture, Fill),
+    /// The value's elements are integers.
+    IntegerElements(Capture),
+    /// The value is a `Gemm` reading `A` and `B` in these orientations
+    /// that scales neither its product nor `C`: alpha is 1, and so is beta
+    /// if it reads `C`.
+    UnscaledGemm {
+        /// The `Gemm`'s output.
+        gemm: Capture,
+        /// How it reads `A`.
+        a: Orientation,
+        /// How it reads `B`.
+        b: Orientation,
+    },
+    /// The dequantizations giving a convolution's bias, input and weights
+    /// put the bias on the grid `QConv` adds it to the integer sum on.
+    BiasOnGrid {
+        /// The bias's dequantization.
+        bias: Capture,
+        /// The input's dequantization.
+        input: Capture,
+        /// The weights' dequantization.
+        weights: Capture,
+    },
     /// Every guard holds.
     All(Vec<Self>),
 }
@@ -73,6 +96,24 @@ impl Guard {
                 let ValueDef::Constant(id) = graph.value(constant).def() else { return false };
                 is_filled(graph.constant(id).data(), *fill)
             }),
+            Self::IntegerElements(capture) => value(capture).is_some_and(|integers| {
+                matches!(
+                    graph.value(integers).ty().dtype(),
+                    DType::I8 | DType::U8 | DType::I32 | DType::I64
+                )
+            }),
+            Self::UnscaledGemm { gemm, a, b } => {
+                value(gemm).is_some_and(|product| is_unscaled_gemm(graph, product, [*a, *b]))
+            }
+            Self::BiasOnGrid { bias, input, weights } => {
+                let params = |capture: &Capture| dequantized_params(graph, value(capture)?);
+                match (params(bias), params(input), params(weights)) {
+                    (Some(bias), Some(input), Some(weights)) => {
+                        is_bias_on_grid(bias, input, weights)
+                    }
+                    _ => false,
+                }
+            }
             Self::All(guards) => guards.iter().all(|guard| guard.holds(graph, bindings)),
         }
     }
@@ -113,4 +154,52 @@ fn is_identity_transpose(graph: &Graph, value: ValueId) -> bool {
         }
         _ => false,
     })
+}
+
+/// Whether `value` is the output of a `Gemm` reading its operands in
+/// `orientations`, with alpha 1 and, if it reads `C`, beta 1.
+fn is_unscaled_gemm(graph: &Graph, value: ValueId, orientations: [Orientation; 2]) -> bool {
+    let Some(node) = graph.producer(value).and_then(|node| graph.node(node)) else { return false };
+    let Op::Gemm(attrs) = node.op() else { return false };
+    let one = F32Attr::new(1.0);
+    let reads_c = node.operands().len() == 3;
+    [attrs.a, attrs.b] == orientations && attrs.alpha == one && (!reads_c || attrs.beta == one)
+}
+
+/// Whether `bias` has zero point 0 and, for each output channel, the scale
+/// of `input`'s one map times that channel's weight scale: the grid of the
+/// integer sum `QConv` adds it to, as ONNX's `QLinearConv` defines its
+/// bias. Its `i32` type is the type rule's to check.
+fn is_bias_on_grid(bias: &QuantParams, input: &QuantParams, weights: &QuantParams) -> bool {
+    let Granularity::PerTensor(input) = input.granularity() else { return false };
+    let (Some(bias_maps), Some(weight_maps)) = (channel_maps(bias), channel_maps(weights)) else {
+        return false;
+    };
+    let channels = bias_maps.len().max(weight_maps.len());
+    (0..channels).all(|channel| {
+        match (map_of_channel(bias_maps, channel), map_of_channel(weight_maps, channel)) {
+            (Some(bias), Some(weights)) => {
+                bias.zero_point == ZeroPoint::new(0)
+                    && bias.scale == Scale::new(input.scale.get() * weights.scale.get())
+            }
+            _ => false,
+        }
+    })
+}
+
+/// The maps of a tensor whose first axis is the output channels: one for
+/// all of them, or one per channel.
+fn channel_maps(params: &QuantParams) -> Option<&[Affine]> {
+    match params.granularity() {
+        Granularity::PerTensor(map) => Some(std::slice::from_ref(map)),
+        Granularity::PerAxis { axis, maps } => (axis.index() == 0).then_some(maps.as_slice()),
+    }
+}
+
+/// The map of `channel`, from one map for all channels or one per channel.
+fn map_of_channel(maps: &[Affine], channel: usize) -> Option<Affine> {
+    match maps {
+        [map] => Some(*map),
+        maps => maps.get(channel).copied(),
+    }
 }

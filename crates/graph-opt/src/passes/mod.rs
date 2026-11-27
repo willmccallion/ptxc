@@ -4,6 +4,7 @@ mod canonicalize;
 mod const_fold;
 mod cse;
 mod dce;
+mod fold_qdq;
 mod layout;
 mod simplify;
 
@@ -11,6 +12,7 @@ pub use canonicalize::Canonicalize;
 pub use const_fold::ConstFold;
 pub use cse::Cse;
 pub use dce::Dce;
+pub use fold_qdq::FoldQdq;
 pub use simplify::Simplify;
 
 use crate::pass::{PassError, PassReport};

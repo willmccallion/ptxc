@@ -6,4 +6,4 @@ allow-panic-in-tests = true
 too-many-lines-threshold = 60
 
 # Product names that are spelled in mixed case; ".." keeps clippy's defaults.
-doc-valid-idents = ["..", "cuBLAS", "cuBLASLt", "cuDNN", "ImageNet", "ImageNetV2", "MetaSchedule", "NumPy", "PyPI", "PyTorch"]
+doc-valid-idents = ["..", "cuBLAS", "cuBLASLt", "cuDNN", "ImageNet", "ImageNetV2", "MetaSchedule", "NumPy", "PyPI", "PyTorch", "TensorRT"]
